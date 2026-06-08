@@ -130,7 +130,7 @@ function PaisSelector({ paisActual, onChange }: { paisActual: string; onChange: 
                 width:'100%', padding:'8px 12px', background:'transparent',
                 border:'none', cursor:'pointer', color: T.text, fontSize:'12px',
                 borderBottom:`1px solid ${T.border}`,
-                background: p.code === paisActual ? `${T.accent}12` : 'transparent',
+                
               }}
             >
               <img src={p.flag} alt={p.nombre} style={{ width:'20px', height:'14px', borderRadius:'2px', objectFit:'cover' }} />
