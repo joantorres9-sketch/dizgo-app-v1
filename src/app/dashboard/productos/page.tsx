@@ -1071,7 +1071,8 @@ export default function ProductosPage() {
   async function confirmarMasiva() {
     if (!preview) return
     const validas = preview.filter((f) => f.valido)
-    for (const [i, f] of validas.entries()) {
+    for (let i = 0; i < validas.length; i++) {
+      const f = validas[i]
       const sku = generarSKU(f.nombre, 'producto', productos.length + i + 1)
       await supabase.from('productos').insert({
         nombre: f.nombre, tipo: 'producto', estado: f.estado,
