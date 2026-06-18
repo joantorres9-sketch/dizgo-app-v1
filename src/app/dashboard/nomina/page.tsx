@@ -980,6 +980,7 @@ export default function NominaPage() {
               </div>
             </div>
 
+
             {/* Campos dinámicos según tipo */}
             {novedad.tipo && (
               <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', marginTop:'10px' }}>
@@ -1004,10 +1005,213 @@ export default function NominaPage() {
                     if (!novedad.empleado_id || !novedad.tipo) return
                     const col = colaboradores.find(c => c.id === novedad.empleado_id)
                     if (!col) return
-                    // Calcular valor si es hora extra
                     let valor = 0
                     const horas = parseFloat(String(novedad.campos.cantidad_horas || 0))
                     const valHora = col.salario_base / 240
                     const pcts: Record<string,number> = { he_diurna:1.25, he_nocturna:1.75, he_dom_diurna:2, he_dom_nocturna:2.5, recargo_noc:1.35, recargo_dom:1.75 }
                     if (horas > 0 && pcts[novedad.tipo]) valor = Math.round(horas * valHora * pcts[novedad.tipo])
-                    else valor = parseFloat(String(novedad.campos.valor || novedad.campos.valo
+                    else valor = parseFloat(String(novedad.campos.valor || novedad.campos.valor_monto || 0))
+                    await supabase.from('nomina_novedades').insert({
+                      tenant_id: tenantId,
+                      colaborador_id: novedad.empleado_id,
+                      tipo: novedad.tipo,
+                      campos: novedad.campos,
+                      valor,
+                      fecha: new Date().toISOString().slice(0,10),
+                      estado: 'pendiente',
+                    })
+                    setNovedad({ empleado_id:'', tipo:'', campos:{} })
+                    loadData()
+                  }}
+                  style={{ marginTop:'12px', padding:'9px 20px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}
+                >
+                  ✅ Registrar novedad
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Historial de novedades */}
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', overflow:'hidden' }}>
+            <div style={{ padding:'14px 16px', borderBottom:`1px solid ${T.border}`, fontSize:'13px', fontWeight:'600', color:T.yellow }}>
+              📋 Historial de novedades registradas
+            </div>
+            {(novedades as Array<Record<string,unknown>>).length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px', color:T.muted, fontSize:'13px' }}>
+                No hay novedades registradas aún
+              </div>
+            ) : (
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ background:'#060E1C' }}>
+                      {['Colaborador','Tipo','Valor','Fecha','Estado'].map(h => (
+                        <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', borderBottom:`1px solid ${T.border}` }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(novedades as Array<Record<string,unknown>>).map((n, i) => {
+                      const col = colaboradores.find(c => c.id === n.colaborador_id)
+                      return (
+                        <tr key={i} style={{ borderBottom:`1px solid ${T.border}` }}>
+                          <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text }}>{col ? `${col.nombres} ${col.apellidos}` : '—'}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'11px', color:T.yellow }}>{String(n.tipo || '—')}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'12px', color:T.accent, fontWeight:'600' }}>{fmt(Number(n.valor || 0))}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'11px', color:T.muted }}>{String(n.fecha || '—')}</td>
+                          <td style={{ padding:'8px 12px' }}>
+                            <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'4px', background:`${T.green}20`, color:T.green }}>
+                              {String(n.estado || 'pendiente')}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ LIQUIDACIÓN ══ */}
+      {tab === 'liquidacion' && (
+        <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'20px' }}>
+          <div style={{ fontSize:'13px', fontWeight:'700', color:T.green, marginBottom:'16px' }}>💵 LIQUIDACIÓN DE NÓMINA</div>
+          {colaboradores.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'40px', color:T.muted }}>No hay colaboradores para liquidar</div>
+          ) : (
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                <thead>
+                  <tr style={{ background:'#060E1C' }}>
+                    {['Colaborador','Salario Base','Aux. Transporte','Horas Extra','Deducciones','NETO A PAGAR'].map(h => (
+                      <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', borderBottom:`1px solid ${T.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {colaboradores.map((c, i) => {
+                    const salud_emp = Math.round(c.salario_base * (Number(tasas.salud_emp) || 8.5) / 100)
+                    const pension_emp = Math.round(c.salario_base * (Number(tasas.pension_emp) || 12) / 100)
+                    const salud_trab = Math.round(c.salario_base * (Number(tasas.salud) || 4) / 100)
+                    const pension_trab = Math.round(c.salario_base * (Number(tasas.pension) || 4) / 100)
+                    const heExtra = (novedades as Array<Record<string,unknown>>)
+                      .filter(n => n.colaborador_id === c.id && String(n.tipo || '').startsWith('he_'))
+                      .reduce((a, n) => a + Number(n.valor || 0), 0)
+                    const deducciones = salud_trab + pension_trab
+                    const neto = c.salario_base + (c.aux_transporte || 0) + heExtra - deducciones
+                    return (
+                      <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':'#080F1C' }}>
+                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text, fontWeight:'500' }}>{c.nombres} {c.apellidos}</td>
+                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text }}>{fmt(c.salario_base, c.pais_code)}</td>
+                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.muted }}>{fmt(c.aux_transporte || 0, c.pais_code)}</td>
+                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.yellow }}>{fmt(heExtra, c.pais_code)}</td>
+                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.red }}>-{fmt(deducciones, c.pais_code)}</td>
+                        <td style={{ padding:'8px 12px', fontSize:'13px', fontWeight:'700', color:T.green }}>{fmt(neto, c.pais_code)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ TASAS ══ */}
+      {tab === 'tasas' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent }}>⚙️ TASAS {anioFiscal} — COLOMBIA</div>
+              <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                <select style={{ ...inp, width:'90px', padding:'4px 8px' }} value={anioFiscal} onChange={e => setAnioFiscal(Number(e.target.value))}>
+                  {[2023,2024,2025,2026].map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <button onClick={() => setEditTasa(!editTasa)} style={{ padding:'6px 12px', background:editTasa?`${T.red}15`:`${T.blue}15`, border:`1px solid ${editTasa?T.red:T.blue}30`, borderRadius:'7px', color:editTasa?T.red:T.blue, cursor:'pointer', fontSize:'11px' }}>
+                  {editTasa ? '✕ Cancelar' : '✏️ Editar'}
+                </button>
+                {editTasa && (
+                  <button onClick={guardarTasas} style={{ padding:'6px 12px', background:T.accent, border:'none', borderRadius:'7px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px' }}>
+                    💾 Guardar
+                  </button>
+                )}
+              </div>
+            </div>
+            {[
+              { l:'Salud empleador %', k:'salud_emp' as keyof typeof formTasa },
+              { l:'Pensión empleador %', k:'pension_emp' as keyof typeof formTasa },
+              { l:'Salud trabajador %', k:'salud' as keyof typeof formTasa },
+              { l:'Pensión trabajador %', k:'pension' as keyof typeof formTasa },
+              { l:'SENA %', k:'sena' as keyof typeof formTasa },
+              { l:'ICBF %', k:'icbf' as keyof typeof formTasa },
+              { l:'Caja compensación %', k:'caja_comp' as keyof typeof formTasa },
+              { l:'Cesantías %', k:'cesantias' as keyof typeof formTasa },
+              { l:'Intereses cesantías %', k:'intereses_ces' as keyof typeof formTasa },
+              { l:'Prima %', k:'prima' as keyof typeof formTasa },
+              { l:'Vacaciones %', k:'vacaciones' as keyof typeof formTasa },
+            ].map(({ l, k }) => (
+              <div key={String(k)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:`1px solid ${T.border}` }}>
+                <span style={{ fontSize:'12px', color:T.muted }}>{l}</span>
+                {editTasa ? (
+                  <input
+                    type="number"
+                    step="0.01"
+                    style={{ ...inp, width:'80px', padding:'4px 8px', textAlign:'right' }}
+                    value={Number(formTasa[k] || 0)}
+                    onChange={e => setFormTasa(f => ({ ...f, [k]: parseFloat(e.target.value) }))}
+                  />
+                ) : (
+                  <span style={{ fontSize:'12px', fontWeight:'700', color:T.accent }}>{Number(tasas[k] || 0).toFixed(2)}%</span>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>📊 RESUMEN CARGA EMPLEADOR</div>
+            {[
+              { grupo:'Seguridad Social', items:[
+                { l:'Salud emp', v:Number(tasas.salud_emp||8.5) },
+                { l:'Pensión emp', v:Number(tasas.pension_emp||12) },
+              ], color:T.red },
+              { grupo:'Parafiscales', items:[
+                { l:'SENA', v:Number(tasas.sena||2) },
+                { l:'ICBF', v:Number(tasas.icbf||3) },
+                { l:'Caja', v:Number(tasas.caja_comp||4) },
+              ], color:T.purple },
+              { grupo:'Prestaciones', items:[
+                { l:'Cesantías', v:Number(tasas.cesantias||8.33) },
+                { l:'Int. Ces.', v:Number(tasas.intereses_ces||1) },
+                { l:'Prima', v:Number(tasas.prima||8.33) },
+                { l:'Vacaciones', v:Number(tasas.vacaciones||4.17) },
+              ], color:T.blue },
+            ].map((g, i) => (
+              <div key={i} style={{ marginBottom:'14px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:g.color, marginBottom:'6px' }}>{g.grupo}</div>
+                {g.items.map((it, j) => (
+                  <div key={j} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:`1px solid ${T.border}`, fontSize:'12px' }}>
+                    <span style={{ color:T.muted }}>{it.l}</span>
+                    <span style={{ color:g.color, fontWeight:'700' }}>{it.v.toFixed(2)}%</span>
+                  </div>
+                ))}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:'12px', fontWeight:'700' }}>
+                  <span style={{ color:T.muted }}>Subtotal</span>
+                  <span style={{ color:g.color }}>{g.items.reduce((a,it)=>a+it.v,0).toFixed(2)}%</span>
+                </div>
+              </div>
+            ))}
+            <div style={{ padding:'10px 12px', background:`${T.red}08`, borderRadius:'8px', border:`1px solid ${T.red}20`, display:'flex', justifyContent:'space-between' }}>
+              <span style={{ fontSize:'12px', fontWeight:'700' }}>CARGA TOTAL EMPLEADOR</span>
+              <span style={{ fontSize:'16px', fontWeight:'900', color:T.red }}>
+                {(Number(tasas.salud_emp||8.5)+Number(tasas.pension_emp||12)+Number(tasas.sena||2)+Number(tasas.icbf||3)+Number(tasas.caja_comp||4)+Number(tasas.cesantias||8.33)+Number(tasas.intereses_ces||1)+Number(tasas.prima||8.33)+Number(tasas.vacaciones||4.17)).toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
