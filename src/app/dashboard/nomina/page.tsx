@@ -1121,7 +1121,7 @@ export default function NominaPage() {
       {/* ══ TASAS ══ */}
       {tab === 'tasas' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-          <div style={{ ...s, padding:'20px' }}>
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'20px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent }}>⚙️ TASAS {anioFiscal} — COLOMBIA</div>
               <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
@@ -1168,7 +1168,7 @@ export default function NominaPage() {
             ))}
           </div>
 
-          <div style={{ ...s, padding:'20px' }}>
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>📊 RESUMEN CARGA EMPLEADOR</div>
             {[
               { grupo:'Seguridad Social', items:[
