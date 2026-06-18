@@ -496,7 +496,7 @@ function ModalColaborador({
                 <div key={item.key} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
                   <div>
                     <label style={lbl}>{item.label}</label>
-                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as unknown as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
+                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
                       <option value="">Seleccionar...</option>
                       {item.lista.map(v => <option key={v}>{v}</option>)}
                     </select>
@@ -1095,8 +1095,8 @@ export default function NominaPage() {
                   {colaboradores.map((c, i) => {
                     const salud_emp = Math.round(c.salario_base * (Number(tasas.salud_emp) || 8.5) / 100)
                     const pension_emp = Math.round(c.salario_base * (Number(tasas.pension_emp) || 12) / 100)
-                    const salud_trab = Math.round(c.salario_base * (Number(tasas.salud) || 4) / 100)
-                    const pension_trab = Math.round(c.salario_base * (Number(tasas.pension) || 4) / 100)
+                    const salud_trab = Math.round(c.salario_base * (Number(tasas.salud_trab) || 4) / 100)
+                    const pension_trab = Math.round(c.salario_base * (Number(tasas.pension_trab) || 4) / 100)
                     const heExtra = (novedades as Array<Record<string,unknown>>)
                       .filter(n => n.colaborador_id === c.id && String(n.tipo || '').startsWith('he_'))
                       .reduce((a, n) => a + Number(n.valor || 0), 0)
