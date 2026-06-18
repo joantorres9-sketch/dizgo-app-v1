@@ -1093,8 +1093,6 @@ export default function NominaPage() {
                 </thead>
                 <tbody>
                   {colaboradores.map((c, i) => {
-                    const salud_emp = Math.round(c.salario_base * (Number(tasas.salud_emp) || 8.5) / 100)
-                    const pension_emp = Math.round(c.salario_base * (Number(tasas.pension_emp) || 12) / 100)
                     const salud_trab = Math.round(c.salario_base * (Number(tasas.salud_trab) || 4) / 100)
                     const pension_trab = Math.round(c.salario_base * (Number(tasas.pension_trab) || 4) / 100)
                     const heExtra = (novedades as Array<Record<string,unknown>>)
