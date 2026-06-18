@@ -496,7 +496,7 @@ function ModalColaborador({
                 <div key={item.key} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
                   <div>
                     <label style={lbl}>{item.label}</label>
-                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
+                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as unknown as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
                       <option value="">Seleccionar...</option>
                       {item.lista.map(v => <option key={v}>{v}</option>)}
                     </select>
