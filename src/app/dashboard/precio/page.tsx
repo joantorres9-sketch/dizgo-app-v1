@@ -38,7 +38,7 @@ const safe = (n:number) => isNaN(n)||!isFinite(n) ? 0 : n
 type Producto = {
   id: string; nombre: string; tipo: string; estado: string
   pvp_final: number; costo_proveedor: number; costo_flete: number
-  costo_flete_dev: number; costo_fulfillment: number; cf_pedido: number
+  costo_flete_dev: number; costo_fulfillment: number; costo_full_dev: number; cf_pedido: number
   pct_devolucion: number; pct_publicidad: number; pct_desc_popup: number
   pct_com_plataforma: number; pct_pasarela: number; pct_com_pasarela: number
   pct_com_ventas: number; pct_com_admin: number
@@ -48,6 +48,7 @@ type Producto = {
   pvp_x2_desc: number; pvp_x2_final: number; pvp_x3_desc: number; pvp_x3_final: number
   estado_resultados_snap: Record<string, number>
   presupuesto_pauta_mes: number; pedidos_esperados_mes: number
+  costos_extra: Record<string, number>; pct_extra: Record<string, number>
 }
 
 type Tab = 'costeo' | 'historia' | 'volumen' | 'proyeccion' | 'resultados'
@@ -83,6 +84,10 @@ export default function PrecioPage() {
 
   const [peMetaPedidos, setPeMetaPedidos] = useState(0)
   const [cpaRealHistorico, setCpaRealHistorico] = useState(0)
+  const [cfPorPedidoReal, setCfPorPedidoReal] = useState(0)
+  const [costoNominaPorPedido, setCostoNominaPorPedido] = useState(0)
+  const [comboProdId, setComboProdId] = useState('')
+  const [comboDesc, setComboDesc] = useState(12)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -98,10 +103,13 @@ export default function PrecioPage() {
     const iniMes = `${periodo.slice(0,7)}-01`
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).toISOString().slice(0,10)
 
-    const [{ data: prods }, { data: metaData }, { data: pautaData }] = await Promise.all([
+    const [{ data: prods }, { data: metaData }, { data: pautaData }, { data: costosData }, { data: colabsData }, pedidosMesRes] = await Promise.all([
       supabase.from('productos').select('*').eq('tenant_id', tid).eq('tipo', 'producto').order('nombre'),
       supabase.from('metas').select('meta_pedidos').eq('tenant_id', tid).eq('periodo', periodo).single(),
       supabase.from('pauta').select('inversion, resultados').eq('tenant_id', tid).gte('fecha', iniMes).lte('fecha', finMes),
+      supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', periodo).eq('activo', true),
+      supabase.from('colaboradores').select('salario_base, activo').eq('tenant_id', tid).eq('activo', true),
+      supabase.from('pedidos').select('id', { count:'exact', head:true }).eq('tenant_id', tid).eq('estado','ENTREGADO').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
     ])
 
     setProductos((prods||[]) as Producto[])
@@ -112,13 +120,22 @@ export default function PrecioPage() {
     const resT = pRows.reduce((a,p)=>a+Number(p.resultados||0),0)
     setCpaRealHistorico(resT>0 ? Math.round(invT/resT) : 0)
 
+    // FIX 7 — CF en tiempo real prorrateado por pedido entregado del mes
+    const totalCF = (costosData||[]).reduce((a:number,c:{total:number})=>a+Number(c.total||0),0)
+    const pedidosDelMes = Math.max(pedidosMesRes.count || 1, 1)
+    setCfPorPedidoReal(Math.round(totalCF / pedidosDelMes))
+
+    // FIX 8 — Costo nómina prorrateado por pedido entregado del mes
+    const totalNomina = (colabsData||[]).reduce((a:number,c:{salario_base:number})=>a+Number(c.salario_base||0),0)
+    setCostoNominaPorPedido(Math.round(totalNomina / pedidosDelMes))
+
     setLoading(false)
   }, [supabase])
 
   useEffect(() => { loadData() }, [loadData])
 
   function selProducto(p: Producto) {
-    setProdSel(p)
+    setProdSel({ ...p, costos_extra: p.costos_extra || {}, pct_extra: p.pct_extra || {} })
     setPvpHumano(p.pvp_final || 0)
     setPresupuestoMes(p.presupuesto_pauta_mes || 0)
     setPedidosEsperados(p.pedidos_esperados_mes || 0)
@@ -128,10 +145,17 @@ export default function PrecioPage() {
   function sumaTodosPcts(p: Producto): number {
     return p.pct_devolucion + p.pct_publicidad + p.pct_pub_dev + p.pct_pub_cancel +
       p.pct_desc_popup + p.pct_com_plataforma + p.pct_pasarela + p.pct_com_pasarela +
-      p.pct_com_ventas + p.pct_com_admin
+      p.pct_com_ventas + p.pct_com_admin + sumaPctExtra(p)
   }
   function costosDirectosTotal(p: Producto): number {
-    return p.costo_proveedor + p.costo_flete + p.costo_flete_dev + p.costo_fulfillment + p.cf_pedido
+    return p.costo_proveedor + p.costo_flete + p.costo_flete_dev + p.costo_fulfillment + p.costo_full_dev
+      + p.cf_pedido + cfPorPedidoReal + costoNominaPorPedido + sumaExtra(p)
+  }
+  function sumaExtra(p: Producto): number {
+    return Object.values(p.costos_extra || {}).reduce((a,v)=>a+Number(v||0), 0)
+  }
+  function sumaPctExtra(p: Producto): number {
+    return Object.values(p.pct_extra || {}).reduce((a,v)=>a+Number(v||0), 0)
   }
   function calcPVS(p: Producto, margen: number): number {
     if (!p) return 0
@@ -158,6 +182,12 @@ export default function PrecioPage() {
   const margenReal  = prodSel ? calcMargenReal(prodSel, pvpHumano) : 0
   const calif        = getCalificacion(margenReal)
   const benchmarkPais = PAISES[pais]?.margenBenchmark || 22
+
+  // FIX 4 — Sugerencia IA inmediata al seleccionar producto, ANTES del PVP humano
+  const sugerenciaInicial = prodSel && !pvpHumano ? pvsSugerido : 0
+
+  // FIX 5 — Alerta de saturación: margen consistentemente bajo + alta dependencia de un solo canal
+  const productoSaturado = prodSel && margenReal > 0 && margenReal < (benchmarkPais * 0.7) && prodSel.pct_publicidad > 25
 
   const alertaBenchmark = prodSel && margenReal > 0 && margenReal < benchmarkPais
     ? `Este producto en ${PAISES[pais]?.nombre} tiene margen promedio del ${benchmarkPais}% — estás en ${margenReal.toFixed(1)}%`
@@ -233,6 +263,8 @@ export default function PrecioPage() {
       estado_resultados_snap: snap,
       presupuesto_pauta_mes: presupuestoMes,
       pedidos_esperados_mes: pedidosEsperados,
+      costos_extra: prodSel.costos_extra || {},
+      pct_extra: prodSel.pct_extra || {},
     }).eq('id', prodSel.id)
     setProdSel({ ...prodSel, pvp_final:pvpHumano, pvp_historial:historial })
     setSaving(false)
@@ -243,6 +275,38 @@ export default function PrecioPage() {
     if (!prodSel) return
     setPvpHumano(pvpAnterior)
     setMotivo('reversion')
+  }
+
+  // FIX 9 — Conexión activa hacia el módulo Alertas
+  async function enviarAlerta() {
+    if (!prodSel) return
+    const { data:{ user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user?.id).single()
+    if (!profile?.tenant_id) return
+    await supabase.from('alertas').insert({
+      tenant_id: profile.tenant_id,
+      tipo: margenReal < 15 ? 'critico' : 'atencion',
+      titulo: `Margen ${calif.label} en ${prodSel.nombre}`,
+      mensaje: `${prodSel.nombre} tiene un margen real de ${margenReal.toFixed(1)}% con PVP de ${fmt(pvpHumano, pais)}. ${calif.desc}.`,
+      modulo: 'precio',
+      icono: margenReal < 15 ? '🔴' : '⚠️',
+    })
+  }
+
+  // Conexión hacia Pauta — sugerencia de CPA máximo (vía alerta, pauta no tiene producto_id)
+  async function enviarCpaAPauta() {
+    if (!prodSel || !cpaMaximo) return
+    const { data:{ user } } = await supabase.auth.getUser()
+    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user?.id).single()
+    if (!profile?.tenant_id) return
+    await supabase.from('alertas').insert({
+      tenant_id: profile.tenant_id,
+      tipo: 'info',
+      titulo: `CPA máximo sugerido — ${prodSel.nombre}`,
+      mensaje: `Configura el CPA máximo de tus campañas para ${prodSel.nombre} en ${fmt(cpaMaximo, pais)} o menos, para mantener el margen objetivo.`,
+      modulo: 'pauta',
+      icono: '📢',
+    })
   }
 
   const costosFijosTotal = prodSel ? costosDirectosTotal(prodSel) : 0
@@ -318,9 +382,36 @@ export default function PrecioPage() {
               </div>
             </div>
 
+            {sugerenciaInicial > 0 && (
+              <div style={{ ...s2, padding:'10px 14px', marginBottom:'12px', borderLeft:`3px solid ${T.blue}`, fontSize:'12px', color:T.muted }}>
+                🤖 <strong style={{ color:T.blue }}>IA sugiere:</strong> con los costos actuales, un PVP de <strong style={{ color:T.text }}>{fmt(sugerenciaInicial, pais)}</strong> te daría un margen del {margenDeseado}%. Ajusta el campo PVP para definir el precio final.
+              </div>
+            )}
+
             {alertaBenchmark && (
               <div style={{ ...s2, padding:'10px 14px', marginBottom:'12px', borderLeft:`3px solid ${T.yellow}`, fontSize:'12px', color:T.muted }}>
                 💡 <strong style={{ color:T.yellow }}>Oportunidad:</strong> {alertaBenchmark}
+              </div>
+            )}
+
+            {productoSaturado && (
+              <div style={{ ...s2, padding:'10px 14px', marginBottom:'12px', borderLeft:`3px solid ${T.red}`, fontSize:'12px', color:T.muted }}>
+                🚨 <strong style={{ color:T.red }}>Alerta de saturación:</strong> este producto depende mucho de publicidad ({prodSel.pct_publicidad}%) y su margen está muy por debajo del benchmark. Señal de posible saturación de audiencia o producto en declive.
+              </div>
+            )}
+
+            {prodSel && pvpHumano > 0 && margenReal < 25 && (
+              <div style={{ display:'flex', gap:'8px', marginBottom:'12px' }}>
+                <button onClick={enviarAlerta}
+                  style={{ padding:'7px 12px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'7px', color:T.red, cursor:'pointer', fontSize:'11px', fontWeight:'600' }}>
+                  🔴 Enviar alerta a módulo Alertas
+                </button>
+                {cpaMaximo > 0 && (
+                  <button onClick={enviarCpaAPauta}
+                    style={{ padding:'7px 12px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'7px', color:T.blue, cursor:'pointer', fontSize:'11px', fontWeight:'600' }}>
+                    📢 Enviar CPA máximo a Pauta
+                  </button>
+                )}
               </div>
             )}
 
@@ -352,15 +443,40 @@ export default function PrecioPage() {
                     ['Proveedor', prodSel.costo_proveedor],
                     ['Flete envío', prodSel.costo_flete],
                     ['Flete devolución', prodSel.costo_flete_dev],
-                    ['Fulfillment', prodSel.costo_fulfillment],
-                    ['CF por pedido', prodSel.cf_pedido],
+                    ['Fulfillment envío', prodSel.costo_fulfillment],
+                    ['Fulfillment devolución', prodSel.costo_full_dev],
+                    ['CF por pedido (fijo producto)', prodSel.cf_pedido],
+                    ['CF tiempo real (módulo CF)', cfPorPedidoReal],
+                    ['Nómina prorrateada', costoNominaPorPedido],
                   ].map(([k,v]) => (
                     <div key={k as string} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'12px', borderBottom:`1px solid ${T.border}` }}>
                       <span style={{ color:T.muted }}>{k}</span>
                       <span style={{ color:T.text, fontWeight:'500' }}>{fmt(v as number, pais)}</span>
                     </div>
                   ))}
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px', fontWeight:'700' }}>
+
+                  {Object.entries(prodSel.costos_extra || {}).map(([k,v]) => (
+                    <div key={k} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', fontSize:'12px', borderBottom:`1px solid ${T.border}` }}>
+                      <span style={{ color:T.purple }}>{k} <em style={{ color:T.muted, fontSize:'10px' }}>(extra)</em></span>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                        <span style={{ color:T.text }}>{fmt(v, pais)}</span>
+                        <button onClick={() => {
+                          const nuevo = { ...prodSel.costos_extra }; delete nuevo[k]
+                          setProdSel({ ...prodSel, costos_extra:nuevo })
+                        }} style={{ background:'none', border:'none', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={() => {
+                    const nombre = prompt('Nombre del costo extra:')
+                    if (!nombre) return
+                    const valor = Number(prompt('Valor ($):') || 0)
+                    setProdSel({ ...prodSel, costos_extra: { ...prodSel.costos_extra, [nombre]: valor } })
+                  }} style={{ marginTop:'6px', padding:'4px 10px', background:`${T.purple}10`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>
+                    + Agregar costo extra
+                  </button>
+
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px', fontWeight:'700', marginTop:'6px' }}>
                     <span style={{ color:T.text }}>Subtotal directo</span>
                     <span style={{ color:T.red }}>{fmt(costosFijosTotal, pais)}</span>
                   </div>
@@ -385,9 +501,35 @@ export default function PrecioPage() {
                       <span style={{ color:T.text }}>{v}%</span>
                     </div>
                   ))}
-                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px', fontWeight:'700' }}>
+
+                  {Object.entries(prodSel.pct_extra || {}).map(([k,v]) => (
+                    <div key={k} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', fontSize:'12px', borderBottom:`1px solid ${T.border}` }}>
+                      <span style={{ color:T.purple }}>{k} <em style={{ color:T.muted, fontSize:'10px' }}>(extra)</em></span>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+                        <span style={{ color:T.text }}>{v}%</span>
+                        <button onClick={() => {
+                          const nuevo = { ...prodSel.pct_extra }; delete nuevo[k]
+                          setProdSel({ ...prodSel, pct_extra:nuevo })
+                        }} style={{ background:'none', border:'none', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={() => {
+                    const nombre = prompt('Nombre del % extra:')
+                    if (!nombre) return
+                    const valor = Number(prompt('Valor (%):') || 0)
+                    setProdSel({ ...prodSel, pct_extra: { ...prodSel.pct_extra, [nombre]: valor } })
+                  }} style={{ marginTop:'6px', padding:'4px 10px', background:`${T.purple}10`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>
+                    + Agregar % extra
+                  </button>
+
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px', fontWeight:'700', marginTop:'6px' }}>
                     <span style={{ color:T.text }}>Total % variable</span>
                     <span style={{ color:T.yellow }}>{sumaTodosPcts(prodSel).toFixed(1)}%</span>
+                  </div>
+
+                  <div style={{ marginTop:'10px', padding:'8px 10px', background:`${T.blue}08`, borderRadius:'7px', fontSize:'10px', color:T.muted }}>
+                    🌍 Para importadores: agrega aranceles e impuestos locales de {PAISES[pais]?.nombre} como costo extra o % extra arriba — DIZGO no asume tasas fijas porque cambian por tratado y categoría arancelaria.
                   </div>
                 </div>
 
@@ -529,6 +671,42 @@ export default function PrecioPage() {
                     </div>
                   )
                 })}
+
+                {/* FIX 3 — Combo mixto (productos diferentes) */}
+                <div style={{ gridColumn:'1 / -1', background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'16px' }}>
+                  <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'10px' }}>🎁 COMBO MIXTO (productos diferentes)</div>
+                  <div style={{ display:'flex', gap:'10px', alignItems:'flex-end', flexWrap:'wrap' }}>
+                    <div style={{ flex:1, minWidth:'180px' }}>
+                      <label style={lbl}>Producto a combinar con {prodSel.nombre}</label>
+                      <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={comboProdId} onChange={e=>setComboProdId(e.target.value)}>
+                        <option value="">Selecciona producto...</option>
+                        {productos.filter(p=>p.id!==prodSel.id).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={lbl}>% Descuento combo</label>
+                      <input type="number" style={{ ...inp, width:'80px' }} value={comboDesc} onChange={e=>setComboDesc(Number(e.target.value))} />
+                    </div>
+                  </div>
+                  {comboProdId && (() => {
+                    const otroProd = productos.find(p=>p.id===comboProdId)
+                    if (!otroProd) return null
+                    const normalCombo = pvpHumano + (otroProd.pvp_final||0)
+                    const finalCombo  = Math.round(normalCombo * (1 - comboDesc/100))
+                    const costosCombo = costosFijosTotal + costosDirectosTotal(otroProd)
+                    const pctCombo    = (sumaTodosPcts(prodSel) + sumaTodosPcts(otroProd)) / 2
+                    const margenCombo = finalCombo>0 ? safe(Math.round(((finalCombo - (costosCombo + finalCombo*pctCombo/100)) / finalCombo) * 1000) / 10) : 0
+                    return (
+                      <div style={{ marginTop:'12px', padding:'12px', ...s2 }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
+                          <span style={{ fontSize:'11px', color:T.muted, textDecoration:'line-through' }}>{fmt(normalCombo, pais)}</span>
+                          <span style={{ fontSize:'20px', fontWeight:'800', color:T.text }}>{fmt(finalCombo, pais)}</span>
+                        </div>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color: margenCombo>=25?T.green:margenCombo>=15?T.yellow:T.red }}>Margen combo: {margenCombo.toFixed(1)}%</div>
+                      </div>
+                    )
+                  })()}
+                </div>
               </div>
             )}
 
