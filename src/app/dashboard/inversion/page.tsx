@@ -273,23 +273,36 @@ export default function InversionPage() {
 
   // Simulador crédito
   const cuotaSim     = calcCuotaFija(simMonto, simTasa, simPlazo)
-  const totalPagar   = cuotaSim * simPlazo
+  // Cuota alemana mes 1 (la más alta): capital fijo + interés sobre saldo total
+  const cuotaAlemanaMes1 = Math.round((simMonto / simPlazo) + (simMonto * simTasa / 100))
+  const cuotaResumen = simTipo === 'variable' ? cuotaAlemanaMes1 : cuotaSim
+  const totalPagar   = simTipo === 'variable'
+    ? Math.round(simMonto + (simMonto * simTasa/100 * (simPlazo+1)/2)) // suma de intereses decrecientes aproximada
+    : cuotaSim * simPlazo
   const totalIntSim  = totalPagar - simMonto
-  const cfConCredito = cfMes + cuotaSim
-  const msc          = cuotaSim > 0 ? safe(utilidadProm3m / cuotaSim) : 0
-  const pedidosExtra = gananciaPedido > 0 ? Math.ceil(cuotaSim / gananciaPedido) : 0
+  const cfConCredito = cfMes + cuotaResumen
+  const msc          = cuotaResumen > 0 ? safe(utilidadProm3m / cuotaResumen) : 0
+  const pedidosExtra = gananciaPedido > 0 ? Math.ceil(cuotaResumen / gananciaPedido) : 0
   const roiEsperado  = simMonto > 0 ? safe(Math.round((utilidadProm3m * simPlazo - simMonto) / simMonto * 100)) : 0
   const wacc         = simTasa // simplificado (tasa del crédito como costo de capital)
   const roiMensual   = simMonto > 0 && simPlazo > 0 ? safe(utilidadProm3m / simMonto * 100) : 0
 
-  // Tabla amortización
+  // Tabla amortización — soporta fija (francesa) y variable (alemana)
+  const capitalFijoAleman = Math.round(simMonto / simPlazo)
   const amortizacion: { mes:number; cuota:number; interes:number; capital_pago:number; saldo:number }[] = []
   let saldoAm = simMonto
   for (let i = 1; i <= Math.min(simPlazo, 24); i++) {
-    const interes      = Math.round(saldoAm * simTasa / 100)
-    const capital_pago = cuotaSim - interes
-    saldoAm            = Math.max(saldoAm - capital_pago, 0)
-    amortizacion.push({ mes:i, cuota:cuotaSim, interes, capital_pago, saldo:Math.round(saldoAm) })
+    const interes = Math.round(saldoAm * simTasa / 100)
+    if (simTipo === 'variable') {
+      const capital_pago = Math.min(capitalFijoAleman, saldoAm)
+      const cuotaMes = capital_pago + interes
+      saldoAm = Math.max(saldoAm - capital_pago, 0)
+      amortizacion.push({ mes:i, cuota:cuotaMes, interes, capital_pago, saldo:Math.round(saldoAm) })
+    } else {
+      const capital_pago = cuotaSim - interes
+      saldoAm = Math.max(saldoAm - capital_pago, 0)
+      amortizacion.push({ mes:i, cuota:cuotaSim, interes, capital_pago, saldo:Math.round(saldoAm) })
+    }
   }
 
   // ── DICTAMEN DIZGO ────────────────────────────────────────
@@ -375,6 +388,58 @@ export default function InversionPage() {
       margen_momento: margenReal, msc_momento: Math.round(msc * 100) / 100,
       dictamen_texto: dictamenTexto,
     })
+    // FIX 3 — Conexión a Alertas: el dictamen siempre genera una alerta visible
+    await supabase.from('alertas').insert({
+      tenant_id: tenantId,
+      tipo: dictamen === 'rojo' ? 'critico' : dictamen === 'amarillo' ? 'atencion' : 'info',
+      categoria: 'operativa',
+      titulo: `Dictamen de crédito: ${simNombre} — ${dictamen.toUpperCase()}`,
+      mensaje: dictamenTexto,
+      accion: dictamen === 'rojo' ? 'Ajusta TC, TE o margen antes de solicitar este crédito' : dictamen === 'amarillo' ? 'Optimiza los indicadores en amarillo antes de firmar' : 'Puedes proceder con la solicitud del crédito',
+      modulo: 'Inversión', valor: `Cuota: ${fmt(cuotaResumen, pais)}`, icono: dictamen==='rojo'?'🔴':dictamen==='amarillo'?'🟡':'🟢',
+    })
+    await loadData()
+    setGuardando(false)
+  }
+
+  // FIX 1+2 — Activar crédito: suma la cuota a CF real y registra pedidos adicionales en Metas
+  async function activarCredito(creditoId: string) {
+    if (!tenantId) return
+    setGuardando(true)
+    const credito = creditos.find(c => c.id === creditoId)
+    if (!credito) { setGuardando(false); return }
+
+    const hoy = new Date()
+    const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
+
+    // Marca el crédito como activo
+    await supabase.from('inversiones_creditos').update({ estado: 'activo', fecha_inicio: hoy.toISOString().slice(0,10) }).eq('id', creditoId)
+
+    // FIX 1 — La cuota completa entra a CF como un concepto nuevo (cantidad=1, valor=cuota)
+    // Nota: solo el interés del mes afecta utilidad en el P&G; el capital es salida de caja.
+    // Aquí registramos la CUOTA TOTAL en CF porque es la salida de caja real que compromete el flujo.
+    await supabase.from('costos_fijos').insert({
+      tenant_id: tenantId, periodo, categoria: 'Otros',
+      concepto: `Cuota crédito — ${credito.nombre}`,
+      cantidad: 1, valor_unitario: credito.cuota_mensual,
+      activo: true, notas: `Crédito ${credito.fuente} · interés ${fmt(Math.round(credito.cuota_mensual - (credito.monto/credito.plazo_meses)), pais)}/mes va al P&G como gasto financiero`,
+    })
+
+    // FIX 2 — Pedidos adicionales requeridos se suman a la meta del mes
+    const pedidosExtraCredito = gananciaPedido > 0 ? Math.ceil(credito.cuota_mensual / gananciaPedido) : 0
+    const { data: metaActual } = await supabase.from('metas').select('meta_pedidos').eq('tenant_id', tenantId).eq('periodo', periodo).single()
+    if (metaActual) {
+      await supabase.from('metas').update({ meta_pedidos: Number(metaActual.meta_pedidos||0) + pedidosExtraCredito }).eq('tenant_id', tenantId).eq('periodo', periodo)
+    }
+
+    await supabase.from('alertas').insert({
+      tenant_id: tenantId, tipo:'info', categoria:'operativa',
+      titulo: `Crédito activado: ${credito.nombre}`,
+      mensaje: `La cuota de ${fmt(credito.cuota_mensual, pais)} ya se suma a tus Costos Fijos. Tu meta de pedidos subió en ${pedidosExtraCredito} para cubrirla.`,
+      accion: 'Revisa el módulo Metas para confirmar el nuevo objetivo del mes',
+      modulo:'Inversión', valor: fmt(credito.cuota_mensual, pais), icono:'🟢',
+    })
+
     await loadData()
     setGuardando(false)
   }
@@ -789,8 +854,13 @@ export default function InversionPage() {
             {/* Resumen crédito */}
             <div style={{ ...s, padding:'18px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>📊 RESUMEN</div>
+              {simTipo === 'variable' && (
+                <div style={{ marginBottom:'10px', padding:'8px 10px', background:`${T.purple}08`, borderRadius:'7px', fontSize:'11px', color:T.muted }}>
+                  📐 Cuota alemana: capital fijo de {fmt(capitalFijoAleman, pais)}/mes + interés decreciente. La cuota mostrada es la del mes 1 (la más alta) — disminuye cada mes.
+                </div>
+              )}
               {[
-                { l:'Cuota mensual',   v:fmt(cuotaSim, pais),     c:T.red },
+                { l: simTipo==='variable' ? 'Cuota mes 1 (decrece)' : 'Cuota mensual', v:fmt(cuotaResumen, pais), c:T.red },
                 { l:'Total a pagar',   v:fmt(totalPagar, pais),   c:T.yellow },
                 { l:'Total intereses', v:fmt(totalIntSim, pais),  c:T.red },
                 { l:'CF con crédito',  v:fmt(cfConCredito, pais), c:T.red },
@@ -803,7 +873,7 @@ export default function InversionPage() {
                 </div>
               ))}
               <div style={{ marginTop:'10px', padding:'8px 10px', background:`${T.accent}08`, borderRadius:'8px', fontSize:'11px', color:T.muted }}>
-                Para cubrir la cuota de <strong style={{ color:T.accent }}>{fmt(cuotaSim, pais)}</strong> necesitas{' '}
+                Para cubrir la cuota de <strong style={{ color:T.accent }}>{fmt(cuotaResumen, pais)}</strong> necesitas{' '}
                 <strong style={{ color:T.text }}>{pedidosExtra} pedidos más/mes</strong>
                 {' '}a <strong style={{ color:T.green }}>{fmt(gananciaPedido, pais)}</strong>/pedido
               </div>
@@ -812,6 +882,32 @@ export default function InversionPage() {
                 💾 Guardar simulación + Dictamen
               </button>
             </div>
+
+            {/* Créditos guardados — activar conecta a CF y Metas */}
+            {creditos.length > 0 && (
+              <div style={{ ...s, padding:'16px' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'10px' }}>📂 CRÉDITOS GUARDADOS</div>
+                {creditos.slice(0,5).map(c => (
+                  <div key={c.id} style={{ ...s2, padding:'10px 12px', marginBottom:'7px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <div>
+                      <div style={{ fontSize:'12px', fontWeight:'600', color:T.text }}>{c.nombre}</div>
+                      <div style={{ fontSize:'10px', color:T.muted }}>{fmt(c.cuota_mensual, pais)}/mes · {c.fuente} · {c.estado}</div>
+                    </div>
+                    {c.estado === 'simulacion' ? (
+                      <button onClick={() => activarCredito(c.id)}
+                        style={{ padding:'6px 12px', background:`${T.green}20`, border:`1px solid ${T.green}40`, borderRadius:'7px', color:T.green, cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>
+                        ✅ Activar
+                      </button>
+                    ) : (
+                      <span style={{ fontSize:'11px', fontWeight:'700', color:T.green }}>🟢 Activo</span>
+                    )}
+                  </div>
+                ))}
+                <div style={{ fontSize:'10px', color:T.muted, marginTop:'6px' }}>
+                  Al activar: la cuota se suma a Costos Fijos y los pedidos extra se suman a tu Meta del mes.
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Dictamen DIZGO + Tabla amortización */}
