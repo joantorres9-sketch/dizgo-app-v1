@@ -31,14 +31,81 @@ function timeAgo(date: string) {
   return `${Math.floor(diff/1440)}d`
 }
 
+// ── HORAS LABORALES SIN GESTIÓN (SLA real) ────────────────────
+// Cuenta horas desde fecha_pedido, asumiendo jornada 8am-8pm
+function horasLaboralesSinGestion(fechaPedido: string): number {
+  const inicio = new Date(fechaPedido)
+  const ahora = new Date()
+  let horas = 0
+  const cursor = new Date(inicio)
+  while (cursor < ahora) {
+    const h = cursor.getHours()
+    if (h >= 8 && h < 20) horas += 1
+    cursor.setHours(cursor.getHours() + 1)
+  }
+  return Math.round(horas)
+}
+function calcularSlaNivel(horas: number): string {
+  if (horas <= 2) return 'verde'
+  if (horas <= 4) return 'amarillo'
+  return 'rojo'
+}
+
+// ── SCORE DE RIESGO (heurística sobre datos propios) ──────────
+// No usa big data externo — calcula con historial propio del tenant
+function calcularRiesgo(opts: {
+  esZonaRoja: boolean; tasaDevZona: number; horaCreacion: number
+  pedidosPrevios: number; devolucionesPrevias: number
+}): string {
+  let puntos = 0
+  if (opts.esZonaRoja) puntos += 3
+  if (opts.tasaDevZona > 25) puntos += 2
+  else if (opts.tasaDevZona > 15) puntos += 1
+  if (opts.horaCreacion >= 22 || opts.horaCreacion < 6) puntos += 1
+  if (opts.pedidosPrevios > 0) {
+    const tasaDevCliente = opts.devolucionesPrevias / opts.pedidosPrevios
+    if (tasaDevCliente >= 0.5) puntos += 4
+    else if (tasaDevCliente >= 0.25) puntos += 2
+  }
+  if (puntos >= 5) return 'critical'
+  if (puntos >= 3) return 'high'
+  if (puntos >= 1) return 'medium'
+  return 'low'
+}
+
+// ── CLASIFICACIÓN DE CLIENTE (agrupando pedidos por teléfono) ──
+function clasificarCliente(totalPedidos: number): string {
+  if (totalPedidos >= 7) return 'vip'
+  if (totalPedidos >= 4) return 'frecuente'
+  if (totalPedidos >= 2) return 'recurrente'
+  return 'nuevo'
+}
+const CLIENTE_TIPO_INFO: Record<string,{l:string;c:string;icon:string}> = {
+  nuevo:      { l:'Nuevo',      c:'#3D8EF0', icon:'🆕' },
+  recurrente: { l:'Recurrente', c:'#9B6BFF', icon:'🔁' },
+  frecuente:  { l:'Frecuente',  c:'#F5A623', icon:'⭐' },
+  vip:        { l:'VIP',        c:'#2DD4A0', icon:'👑' },
+}
+
 type Pedido = {
-  id: string; numero_pedido: string; cliente_nombre: string
+  id: string; tenant_id: string; numero_pedido: string; cliente_nombre: string
   cliente_telefono: string; cliente_ciudad: string; cliente_departamento: string
-  producto_nombre: string; pvp: number; estado: string
+  producto_nombre: string; producto_id?: string; pvp: number; estado: string
   origen: string; riesgo: string; cliente_tipo: string
-  sla_nivel: string; ia_modo: boolean; requiere_anticipo: boolean
+  sla_nivel: string; horas_sin_gest: number; ia_modo: boolean; requiere_anticipo: boolean
+  anticipo_estado: string; anticipo_valor: number
+  dias_transito: number; zona_roja: boolean
+  upsell_valor: number; descuento_pct: number; descuento_aprobado: boolean
   novedad_tipo: string; fecha_pedido: string; created_at: string
   agente_nombre?: string
+}
+
+type Zona = {
+  id: string; ciudad: string; departamento: string
+  dias_transito_min: number; dias_transito_max: number
+  tasa_entrega: number; tasa_devolucion: number
+  zona_roja: boolean; motivo_zona_roja: string
+  costo_flete_referencia: number
 }
 
 type Timeline = {
@@ -59,7 +126,7 @@ const ESTADOS = [
   {v:'devolucion',  l:'Devolución',  c:T.red,     icon:'🔄'},
 ]
 
-const ORIGENES = ['Shopify','WooCommerce','Funnel','Manual','Recompra','Referido','Redes']
+const ORIGENES = ['Shopify','WooCommerce','Funnel','Manual','Recompra_Directa','Referido','Redes']
 const RIESGOS = [{v:'low',l:'Bajo',c:T.green},{v:'medium',l:'Medio',c:T.yellow},{v:'high',l:'Alto',c:T.accent},{v:'critical',l:'Crítico',c:T.red}]
 
 const inp: React.CSSProperties = {width:'100%',background:'#0A1628',border:`1.5px solid ${T.border}`,borderRadius:'7px',padding:'7px 10px',fontSize:'12px',color:T.text,outline:'none',boxSizing:'border-box'}
@@ -83,14 +150,57 @@ function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=
     if (!form.cliente_nombre||!form.producto_nombre) { setError('Nombre del cliente y producto son obligatorios'); return }
     setSaving(true)
     try {
+      // ── Cliente: historial real por teléfono ──────────────
+      const { data: historialCliente } = await supabase.from('pedidos')
+        .select('estado').eq('tenant_id', tenantId).eq('cliente_tel', form.cliente_telefono)
+      const previos = historialCliente || []
+      const totalPedidosCliente = previos.length
+      const devolucionesCliente = previos.filter((p:{estado:string}) => p.estado === 'DEVOLUCION' || p.estado === 'devolucion').length
+      const tipoCliente = clasificarCliente(totalPedidosCliente)
+
+      // ── Zona: buscar si existe, si no, queda neutral ──────
+      const { data: zonaData } = await supabase.from('zonas_logisticas')
+        .select('*').eq('tenant_id', tenantId).eq('ciudad', form.cliente_ciudad).single()
+      const zona = zonaData as Zona | null
+      const esZonaRoja = zona?.zona_roja || false
+      const tasaDevZona = zona?.tasa_devolucion || 0
+      const diasTransito = zona ? Math.round((zona.dias_transito_min + zona.dias_transito_max)/2) : 0
+
+      // ── Score de riesgo real ───────────────────────────────
+      const riesgoCalculado = calcularRiesgo({
+        esZonaRoja, tasaDevZona, horaCreacion: new Date().getHours(),
+        pedidosPrevios: totalPedidosCliente, devolucionesPrevias: devolucionesCliente,
+      })
+      const requiereAnticipo = ['high','critical'].includes(riesgoCalculado)
+
+      const esRecompra = form.origen === 'Recompra_Directa'
+
       const {error:err} = await supabase.from('pedidos').insert({
         ...form, tenant_id:tenantId, estado:'ingresado',
-        sla_nivel:'verde', ia_modo:true, riesgo:'low',
-        cliente_tipo:'nuevo', fecha_pedido:new Date().toISOString()
+        sla_nivel:'verde', horas_sin_gest:0, ia_modo:true,
+        riesgo: riesgoCalculado, cliente_tipo: tipoCliente,
+        zona_roja: esZonaRoja, dias_transito: diasTransito,
+        requiere_anticipo: requiereAnticipo,
+        anticipo_estado: requiereAnticipo ? 'pendiente' : 'no_requerido',
+        anticipo_valor: requiereAnticipo ? (zona?.costo_flete_referencia || 0) : 0,
+        // Recompra directa: CPA=$0, no requiere pauta
+        ...(esRecompra ? { notas: `${form.notas} [Recompra directa — CPA $0]`.trim() } : {}),
+        fecha_pedido:new Date().toISOString()
       })
       if (err) throw err
+
+      // Si quedó en riesgo alto, generar alerta real
+      if (['high','critical'].includes(riesgoCalculado)) {
+        await supabase.from('alertas').insert({
+          tenant_id: tenantId, tipo: riesgoCalculado==='critical' ? 'critico' : 'atencion',
+          titulo: `Pedido de alto riesgo: ${form.cliente_nombre}`,
+          mensaje: `Pedido en ${form.cliente_ciudad} con riesgo ${riesgoCalculado}. ${requiereAnticipo ? 'Se recomienda solicitar anticipo de flete.' : ''}`,
+          modulo: 'Pedidos', icono: riesgoCalculado==='critical'?'🔴':'🟡',
+        })
+      }
+
       onSave()
-    } catch(e:any) { setError(e.message) }
+    } catch(e) { setError(e instanceof Error ? e.message : 'Error al crear pedido') }
     finally { setSaving(false) }
   }
 
@@ -155,12 +265,26 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 
   async function cambiarEstado() {
     setSaving(true)
-    await supabase.from('pedidos').update({estado:nuevoEstado}).eq('id',pedido.id)
+    const horasGestion = horasLaboralesSinGestion(pedido.fecha_pedido)
+    await supabase.from('pedidos').update({
+      estado:nuevoEstado, horas_sin_gest:horasGestion, sla_nivel:calcularSlaNivel(horasGestion),
+    }).eq('id',pedido.id)
     await supabase.from('order_timeline_logs').insert({
-      pedido_id:pedido.id, tenant_id:pedido.id,
+      pedido_id:pedido.id, tenant_id:pedido.tenant_id,
       action_type:'status_change', trigger_by:'human_user',
       description:`Estado cambiado a: ${nuevoEstado}${nota?' — '+nota:''}`,
     })
+
+    // FIX — Conexión real a Wallet cuando el pedido se marca como entregado
+    if (nuevoEstado === 'entregado' && pedido.estado !== 'entregado') {
+      await supabase.from('wallet_transacciones').insert({
+        tenant_id: pedido.tenant_id, fecha: new Date().toISOString(),
+        tipo: 'ENTRADA', monto: pedido.pvp || 0,
+        descripcion: `Entrega ${pedido.numero_pedido || pedido.id.slice(0,8)} — ${pedido.cliente_nombre}`,
+        categoria: 'ganancia_dropshipper', fuente: 'dizgo_pedidos',
+      })
+    }
+
     setSaving(false); onUpdate()
     setTimeline(t=>[{id:'new',action_type:'status_change',description:`Estado: ${nuevoEstado}`,trigger_by:'human',created_at:new Date().toISOString()},...t])
   }
@@ -178,6 +302,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 
   const estadoInfo = ESTADOS.find(e=>e.v===pedido.estado)
   const riesgoInfo = RIESGOS.find(r=>r.v===pedido.riesgo)
+  const slaColorLocal = (n:string) => n==='verde'?T.green:n==='amarillo'?T.yellow:T.red
 
   const actionIcons: Record<string,string> = {
     status_change:'🔄', whatsapp_sent:'💬', whatsapp_received:'💬',
@@ -201,9 +326,17 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
             <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'4px',background:`${riesgoInfo?.c||T.muted}20`,color:riesgoInfo?.c||T.muted}}>
               Riesgo: {riesgoInfo?.l||'—'}
             </span>
-            <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'4px',background:`${T.purple}20`,color:T.purple}}>
-              {pedido.cliente_tipo}
+            <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'4px',background:`${CLIENTE_TIPO_INFO[pedido.cliente_tipo]?.c||T.purple}20`,color:CLIENTE_TIPO_INFO[pedido.cliente_tipo]?.c||T.purple,fontWeight:'600'}}>
+              {CLIENTE_TIPO_INFO[pedido.cliente_tipo]?.icon||'👤'} {CLIENTE_TIPO_INFO[pedido.cliente_tipo]?.l||pedido.cliente_tipo}
             </span>
+            <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'4px',background:`${slaColorLocal(pedido.sla_nivel)}20`,color:slaColorLocal(pedido.sla_nivel),fontWeight:'600'}}>
+              ⏱ {pedido.horas_sin_gest||0}h sin gestión
+            </span>
+            {pedido.zona_roja && (
+              <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'4px',background:`${T.red}20`,color:T.red,fontWeight:'600'}}>
+                🚩 Zona roja
+              </span>
+            )}
             {pedido.requiere_anticipo && (
               <span style={{fontSize:'10px',padding:'2px 8px',borderRadius:'4px',background:`${T.accent}20`,color:T.accent,fontWeight:'600'}}>
                 💰 Requiere anticipo
@@ -280,6 +413,64 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
           </div>
         </div>
 
+        {/* Anticipo de flete (si el riesgo lo requiere) */}
+        {pedido.requiere_anticipo && (
+          <div style={{padding:'12px 20px',borderBottom:`1px solid ${T.border}`,background:`${T.accent}06`}}>
+            <div style={{fontSize:'11px',fontWeight:'700',color:T.accent,marginBottom:'8px'}}>💰 ANTICIPO DE FLETE</div>
+            <div style={{fontSize:'12px',color:T.text,marginBottom:'6px'}}>
+              Estado: <strong>{pedido.anticipo_estado}</strong> · Valor: <strong>{fmt(pedido.anticipo_valor||0)}</strong>
+            </div>
+            <div style={{fontSize:'11px',color:T.muted,marginBottom:'8px',lineHeight:1.5}}>
+              Mensaje sugerido: &quot;Hola {pedido.cliente_nombre}, tu pedido está listo. Para asegurar la entrega en {pedido.cliente_ciudad}, solicitamos un anticipo del flete de {fmt(pedido.anticipo_valor||0)}. ¿Deseas continuar?&quot;
+            </div>
+            {pedido.anticipo_estado === 'pendiente' && (
+              <button onClick={async()=>{
+                await supabase.from('pedidos').update({anticipo_estado:'solicitado'}).eq('id',pedido.id)
+                onUpdate()
+              }} style={{padding:'6px 12px',background:`${T.accent}20`,border:`1px solid ${T.accent}40`,borderRadius:'6px',color:T.accent,cursor:'pointer',fontSize:'11px',fontWeight:'600'}}>
+                Marcar como solicitado
+              </button>
+            )}
+            {pedido.anticipo_estado === 'solicitado' && (
+              <button onClick={async()=>{
+                await supabase.from('pedidos').update({anticipo_estado:'verificado'}).eq('id',pedido.id)
+                onUpdate()
+              }} style={{padding:'6px 12px',background:`${T.green}20`,border:`1px solid ${T.green}40`,borderRadius:'6px',color:T.green,cursor:'pointer',fontSize:'11px',fontWeight:'600'}}>
+                ✅ Verificar pago recibido
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Descuento / Upsell — requiere aprobación del dueño */}
+        <div style={{padding:'12px 20px',borderBottom:`1px solid ${T.border}`}}>
+          <div style={{fontSize:'11px',fontWeight:'700',color:T.muted,marginBottom:'8px'}}>💵 MESA DE CONTROL — DESCUENTO/UPSELL</div>
+          {pedido.descuento_pct > 0 && !pedido.descuento_aprobado && (
+            <div style={{background:`${T.yellow}10`,border:`1px solid ${T.yellow}30`,borderRadius:'7px',padding:'8px 10px',marginBottom:'8px'}}>
+              <div style={{fontSize:'12px',color:T.text}}>Descuento solicitado: <strong style={{color:T.yellow}}>{pedido.descuento_pct}%</strong></div>
+              <div style={{fontSize:'10px',color:T.muted,marginBottom:'6px'}}>Pendiente de autorización del dueño</div>
+              <button onClick={async()=>{
+                await supabase.from('pedidos').update({descuento_aprobado:true}).eq('id',pedido.id)
+                onUpdate()
+              }} style={{padding:'5px 10px',background:`${T.green}20`,border:`1px solid ${T.green}40`,borderRadius:'6px',color:T.green,cursor:'pointer',fontSize:'10px',fontWeight:'600',marginRight:'6px'}}>
+                ✅ Autorizar
+              </button>
+              <button onClick={async()=>{
+                await supabase.from('pedidos').update({descuento_pct:0}).eq('id',pedido.id)
+                onUpdate()
+              }} style={{padding:'5px 10px',background:`${T.red}20`,border:`1px solid ${T.red}40`,borderRadius:'6px',color:T.red,cursor:'pointer',fontSize:'10px',fontWeight:'600'}}>
+                ✕ Rechazar
+              </button>
+            </div>
+          )}
+          {pedido.upsell_valor > 0 && (
+            <div style={{fontSize:'12px',color:T.green}}>+ Upsell agregado: {fmt(pedido.upsell_valor)}</div>
+          )}
+          {pedido.descuento_pct === 0 && pedido.upsell_valor === 0 && (
+            <div style={{fontSize:'11px',color:T.muted}}>Sin modificaciones en este pedido</div>
+          )}
+        </div>
+
         {/* Historia clínica */}
         <div style={{padding:'14px 20px',flex:1}}>
           <div style={{fontSize:'11px',fontWeight:'700',color:T.muted,marginBottom:'10px'}}>🏥 HISTORIA CLÍNICA</div>
@@ -326,7 +517,28 @@ export default function PedidosPage() {
       .eq('tenant_id',profile.tenant_id)
       .order('created_at',{ascending:false})
       .limit(200)
-    setPedidos((data||[]) as Pedido[])
+    const lista = (data||[]) as Pedido[]
+
+    // Recalcular SLA real para pedidos abiertos (no entregados/cancelados/devueltos)
+    const abiertos = lista.filter(p => !['entregado','cancelado','devolucion'].includes(p.estado))
+    const actualizaciones: { id:string; horas:number; nivel:string }[] = []
+    abiertos.forEach(p => {
+      const horas = horasLaboralesSinGestion(p.fecha_pedido || p.created_at)
+      const nivel = calcularSlaNivel(horas)
+      if (nivel !== p.sla_nivel || Math.abs(horas - (p.horas_sin_gest||0)) >= 1) {
+        p.horas_sin_gest = horas
+        p.sla_nivel = nivel
+        actualizaciones.push({ id:p.id, horas, nivel })
+      }
+    })
+    // Persistir en background, sin bloquear la UI
+    if (actualizaciones.length > 0) {
+      Promise.all(actualizaciones.map(a =>
+        supabase.from('pedidos').update({ horas_sin_gest:a.horas, sla_nivel:a.nivel }).eq('id', a.id)
+      ))
+    }
+
+    setPedidos(lista)
     setLoading(false)
   }
 
