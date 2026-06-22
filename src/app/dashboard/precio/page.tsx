@@ -265,6 +265,7 @@ export default function PrecioPage() {
       pedidos_esperados_mes: pedidosEsperados,
       costos_extra: prodSel.costos_extra || {},
       pct_extra: prodSel.pct_extra || {},
+      cpa_maximo: cpaMaximo,
     }).eq('id', prodSel.id)
     setProdSel({ ...prodSel, pvp_final:pvpHumano, pvp_historial:historial })
     setSaving(false)
