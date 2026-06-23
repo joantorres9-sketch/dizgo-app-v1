@@ -92,7 +92,7 @@ export default function LogisticaPage() {
       ? Math.round(conTiempos.reduce((a,p) => a + (new Date(p.fecha_entrega!).getTime() - new Date(p.fecha_despacho!).getTime())/86400000, 0) / conTiempos.length)
       : 0
     const info = getTransInfo(pais, nombre)
-    return { nombre, ...info, total:peds.length, entregados, devolucion, novedad, transito, cancelado, valor_entregado:valorEntregado, valor_devolucion:valorDevolucion, dias_promedio:diasProm }
+    return { ...info, total:peds.length, entregados, devolucion, novedad, transito, cancelado, valor_entregado:valorEntregado, valor_devolucion:valorDevolucion, dias_promedio:diasProm }
   }).sort((a,b) => b.total - a.total)
 
   const novedadesActivas = pedidosPais.filter(p => p.novedad_tipo && !p.novedad_solucionada)
