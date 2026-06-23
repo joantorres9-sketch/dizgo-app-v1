@@ -530,6 +530,5 @@ export default function LogisticaPage() {
         </div>
       )}
     </div>
-  </div>
   )
 }
