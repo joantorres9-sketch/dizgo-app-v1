@@ -76,7 +76,7 @@ export default function LogisticaPage() {
   useEffect(() => { loadData() }, [loadData])
 
   const pedidosPais = pedidos.filter(p => p.pais === pais)
-  const transNombres = [...new Set(pedidosPais.map(p => p.transportadora).filter(Boolean))]
+  const transNombres = Array.from(new Set(pedidosPais.map(p => p.transportadora).filter(Boolean)))
 
   const transportadoras = transNombres.map(nombre => {
     const peds = pedidosPais.filter(p => p.transportadora === nombre)
