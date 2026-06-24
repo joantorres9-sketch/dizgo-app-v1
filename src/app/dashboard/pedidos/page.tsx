@@ -283,6 +283,14 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
         descripcion: `Entrega ${pedido.numero_pedido || pedido.id.slice(0,8)} — ${pedido.cliente_nombre}`,
         categoria: 'ganancia_dropshipper', fuente: 'dizgo_pedidos',
       })
+      // Espejo en libro_caja para el módulo financiero PYG-02
+      await supabase.from('libro_caja').insert({
+        tenant_id: pedido.tenant_id, fecha: new Date().toISOString().slice(0,10),
+        concepto: `Venta entregada — ${pedido.cliente_nombre}`,
+        tipo: 'entrada', valor: pedido.pvp || 0,
+        origen: 'venta', referencia_tabla: 'pedidos', referencia_id: pedido.id,
+        categoria_flujo: 'operativo',
+      })
     }
 
     setSaving(false); onUpdate()

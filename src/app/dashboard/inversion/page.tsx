@@ -425,6 +425,16 @@ export default function InversionPage() {
       activo: true, notas: `Crédito ${credito.fuente} · interés ${fmt(Math.round(credito.cuota_mensual - (credito.monto/credito.plazo_meses)), pais)}/mes va al P&G como gasto financiero`,
     })
 
+    // Cuenta por pagar recurrente — alimenta el módulo financiero PYG-02
+    await supabase.from('cuentas_por_pagar').insert({
+      tenant_id: tenantId, tercero: credito.fuente || 'Entidad financiera',
+      tipo_tercero: 'otro', concepto: `Cuota mensual crédito — ${credito.nombre}`,
+      valor: credito.cuota_mensual, fecha_emision: hoy.toISOString().slice(0,10),
+      fecha_vencimiento: new Date(hoy.getFullYear(), hoy.getMonth()+1, 5).toISOString().slice(0,10),
+      estado: 'pendiente', categoria_flujo: 'financiacion',
+      origen_modulo: 'inversion', origen_id: credito.id,
+    })
+
     // FIX 2 — Pedidos adicionales requeridos se suman a la meta del mes
     const pedidosExtraCredito = gananciaPedido > 0 ? Math.ceil(credito.cuota_mensual / gananciaPedido) : 0
     const { data: metaActual } = await supabase.from('metas').select('meta_pedidos').eq('tenant_id', tenantId).eq('periodo', periodo).single()

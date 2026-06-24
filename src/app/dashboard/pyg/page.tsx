@@ -3,39 +3,57 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 type Producto = {
-  id: string; nombre: string; pvp_final: number
-  costo_proveedor: number; costo_flete: number; costo_flete_dev: number
-  costo_fulfillment: number; costo_full_dev: number; cf_pedido: number
-  pct_publicidad: number; pct_pub_dev: number; pct_pub_cancel: number
-  pct_devolucion: number; pct_desc_popup: number; pct_com_plataforma: number
-  pct_pasarela: number; pct_com_pasarela: number; pct_com_ventas: number; pct_com_admin: number
+  id:string; nombre:string; pvp_final:number; costo_proveedor:number; costo_flete:number
+  costo_flete_dev:number; costo_fulfillment:number; costo_full_dev:number; cf_pedido:number
+  pct_publicidad:number; pct_pub_dev:number; pct_pub_cancel:number; pct_desc_popup:number
+  pct_com_plataforma:number; pct_pasarela:number; pct_com_pasarela:number; pct_com_ventas:number; pct_com_admin:number
 }
-type Calculado = Producto & {
-  unidades: number; ventas: number; costo_prod: number; flete_env: number; flete_dev: number
-  fulfill: number; pub: number; comision: number; cf: number; total_costos: number
-  utilidad_bruta: number; utilidad_neta: number; margen_bruto: number; margen_neto: number
-  ganancia_unit: number
+type CXP = {
+  id:string; tercero:string; tipo_tercero:string; concepto:string; valor:number
+  fecha_emision:string; fecha_vencimiento:string; fecha_pago:string|null
+  estado:string; categoria_flujo:string; metodo_pago:string|null
+}
+type MovCaja = {
+  id:string; fecha:string; concepto:string; tipo:string; valor:number
+  origen:string; categoria_flujo:string
 }
 
 const MESES_ES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-
-function semG(mg: number) { return mg >= 15 ? '#2DD4A0' : mg >= 8 ? '#F5A623' : '#F05C5C' }
-function fmt(n: number) { return n >= 1000000 ? `$${(n/1000000).toFixed(1)}M` : n >= 1000 ? `$${Math.round(n/1000)}K` : `$${Math.round(n)}` }
-const s: React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
+const TIPO_TERCERO_INFO: Record<string,{l:string;c:string;icon:string}> = {
+  proveedor:{l:'Proveedor',c:'#3D8EF0',icon:'📦'}, nomina:{l:'Nómina',c:'#9B6BFF',icon:'👤'},
+  prestaciones_sociales:{l:'Prestaciones',c:'#F5A623',icon:'🛡️'}, contratista:{l:'Contratista',c:'#2DD4A0',icon:'🔧'},
+  prestador_servicios:{l:'Prestador servicio',c:'#F05C5C',icon:'💼'}, otro:{l:'Otro',c:'#8B96A8',icon:'📄'},
+}
+function semG(mg:number){ return mg>=15?'#2DD4A0':mg>=8?'#F5A623':'#F05C5C' }
+function semLiq(r:number){ return r>=1.5?'#2DD4A0':r>=1?'#F5A623':'#F05C5C' }
+function fmt(n:number){ return n>=1000000?`$${(n/1000000).toFixed(1)}M`:n>=1000?`$${Math.round(n/1000)}K`:`$${Math.round(n)}` }
+function fmtFull(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
+const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
 
 export default function PYGPage() {
   const supabase = createClient()
+  const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'total'|'producto'|'mezcla'|'proyeccion'>('total')
-  const [prodSel, setProdSel] = useState<string | null>(null)
-  const [crecimiento, setCrecimiento] = useState(8)
+  const [tab, setTab] = useState<'resultados'|'flujo_caja'|'balance'|'cxp'|'libro_caja'>('resultados')
 
   const [productos, setProductos] = useState<Producto[]>([])
-  const [pedidosPorProducto, setPedidosPorProducto] = useState<Record<string, { unidades:number; ventas:number; ganancia:number }>>({})
+  const [historicoMensual, setHistoricoMensual] = useState<{ mes:string; periodo:string; ventas:number; costos:number; utilidad:number; margen:number }[]>([])
   const [cfMes, setCfMes] = useState(0)
-  const [cuotaCreditos, setCuotaCreditos] = useState(0)
-  const [metaUtilidad, setMetaUtilidad] = useState(0)
-  const [historico3m, setHistorico3m] = useState<{ mes:string; ventas:number; utilidad:number }[]>([])
+  const [walletSaldo, setWalletSaldo] = useState(0)
+  const [cuentasPorCobrar, setCuentasPorCobrar] = useState(0)
+  const [activosFijos, setActivosFijos] = useState(0)
+  const [saldoCreditosLP, setSaldoCreditosLP] = useState(0)
+  const [cuotaCreditosCP, setCuotaCreditosCP] = useState(0)
+  const [cxp, setCxp] = useState<CXP[]>([])
+  const [movimientosCaja, setMovimientosCaja] = useState<MovCaja[]>([])
+  const [flujoOperativo, setFlujoOperativo] = useState({ entrada:0, salida:0 })
+  const [flujoInversion, setFlujoInversion] = useState({ entrada:0, salida:0 })
+  const [flujoFinanciacion, setFlujoFinanciacion] = useState({ entrada:0, salida:0 })
+
+  // Form nueva CXP
+  const [nuevaCxp, setNuevaCxp] = useState({ tercero:'', tipo_tercero:'proveedor', concepto:'', valor:0, fecha_vencimiento:'', categoria_flujo:'operativo' })
+  // Form movimiento manual caja
+  const [nuevoMov, setNuevoMov] = useState({ concepto:'', tipo:'salida', valor:0, categoria_flujo:'operativo' })
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -44,509 +62,486 @@ export default function PYGPage() {
     const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
     if (!profile?.tenant_id) { setLoading(false); return }
     const tid = profile.tenant_id
+    setTenantId(tid)
 
     const hoy = new Date()
     const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
     const iniMes = `${periodo.slice(0,7)}-01`
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).toISOString().slice(0,10)
+    const ini30 = new Date(hoy.getTime()-30*86400000).toISOString()
 
-    const [{ data: prodsData }, { data: pedidosData }, { data: costosData }, { data: creditosData }, { data: metaData }] = await Promise.all([
-      supabase.from('productos').select('id, nombre, pvp_final, costo_proveedor, costo_flete, costo_flete_dev, costo_fulfillment, costo_full_dev, cf_pedido, pct_publicidad, pct_pub_dev, pct_pub_cancel, pct_devolucion, pct_desc_popup, pct_com_plataforma, pct_pasarela, pct_com_pasarela, pct_com_ventas, pct_com_admin')
-        .eq('tenant_id', tid).eq('tipo','producto').eq('estado','activo'),
-      supabase.from('pedidos').select('producto_id, pvp, ganancia, estado').eq('tenant_id', tid)
-        .eq('estado','ENTREGADO').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
+    const [
+      { data: prodsData }, { data: costosData }, { data: walletData },
+      { data: pedidosTransito }, { data: activosData }, { data: creditosData },
+      { data: cxpData }, { data: movData },
+    ] = await Promise.all([
+      supabase.from('productos').select('id, nombre, pvp_final, costo_proveedor, costo_flete, costo_flete_dev, costo_fulfillment, costo_full_dev, cf_pedido, pct_publicidad, pct_pub_dev, pct_pub_cancel, pct_desc_popup, pct_com_plataforma, pct_pasarela, pct_com_pasarela, pct_com_ventas, pct_com_admin').eq('tenant_id', tid).eq('tipo','producto').eq('estado','activo'),
       supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', periodo).eq('activo', true),
-      supabase.from('inversiones_creditos').select('cuota_mensual').eq('tenant_id', tid).eq('estado','activo'),
-      supabase.from('metas').select('meta_utilidad').eq('tenant_id', tid).eq('periodo', periodo).single(),
+      supabase.from('wallet_transacciones').select('tipo, monto').eq('tenant_id', tid),
+      supabase.from('pedidos').select('pvp').eq('tenant_id', tid).gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59')
+        .not('estado', 'in', '(entregado,ENTREGADO,cancelado,CANCELADO,devolucion,DEVOLUCION)'),
+      supabase.from('inversiones_activos').select('valor').eq('tenant_id', tid).eq('activo', true),
+      supabase.from('inversiones_creditos').select('cuota_mensual, monto, plazo_meses').eq('tenant_id', tid).eq('estado','activo'),
+      supabase.from('cuentas_por_pagar').select('*').eq('tenant_id', tid).order('fecha_vencimiento', { ascending:true }),
+      supabase.from('libro_caja').select('*').eq('tenant_id', tid).gte('fecha', ini30.slice(0,10)).order('fecha', { ascending:false }),
     ])
 
     setProductos((prodsData||[]) as Producto[])
-
-    const porProd: Record<string, { unidades:number; ventas:number; ganancia:number }> = {}
-    ;(pedidosData||[]).forEach((p: { producto_id:string; pvp:number; ganancia:number }) => {
-      if (!p.producto_id) return
-      if (!porProd[p.producto_id]) porProd[p.producto_id] = { unidades:0, ventas:0, ganancia:0 }
-      porProd[p.producto_id].unidades++
-      porProd[p.producto_id].ventas += Number(p.pvp||0)
-      porProd[p.producto_id].ganancia += Number(p.ganancia||0)
-    })
-    setPedidosPorProducto(porProd)
-
     setCfMes(Math.round((costosData||[]).reduce((a:number,c:{total:number})=>a+Number(c.total||0),0)))
-    setCuotaCreditos(Math.round((creditosData||[]).reduce((a:number,c:{cuota_mensual:number})=>a+Number(c.cuota_mensual||0),0)))
-    setMetaUtilidad(Number((metaData as {meta_utilidad?:number}|null)?.meta_utilidad) || 0)
 
-    // Histórico 3 meses reales para proyección basada en tendencia real
-    const hist = await Promise.all([1,2,3].map(async (i) => {
+    const wRows = (walletData||[]) as { tipo:string; monto:number }[]
+    setWalletSaldo(Math.round(wRows.filter(w=>w.tipo==='ENTRADA').reduce((a,w)=>a+Number(w.monto),0) - wRows.filter(w=>w.tipo==='SALIDA').reduce((a,w)=>a+Number(w.monto),0)))
+
+    setCuentasPorCobrar(Math.round((pedidosTransito||[]).reduce((a:number,p:{pvp:number})=>a+Number(p.pvp||0),0)))
+    setActivosFijos(Math.round((activosData||[]).reduce((a:number,x:{valor:number})=>a+Number(x.valor||0),0)))
+
+    const creditosRows = (creditosData||[]) as { cuota_mensual:number; monto:number; plazo_meses:number }[]
+    setCuotaCreditosCP(Math.round(creditosRows.reduce((a,c)=>a+Number(c.cuota_mensual||0),0)))
+    setSaldoCreditosLP(Math.round(creditosRows.reduce((a,c)=>a+Number(c.monto||0),0)))
+
+    setCxp((cxpData||[]) as CXP[])
+    const movs = (movData||[]) as MovCaja[]
+    setMovimientosCaja(movs)
+
+    const sumFlujo = (cat:string, tipo:string) => movs.filter(m=>m.categoria_flujo===cat && m.tipo===tipo).reduce((a,m)=>a+Number(m.valor||0),0)
+    setFlujoOperativo({ entrada: sumFlujo('operativo','entrada'), salida: sumFlujo('operativo','salida') })
+    setFlujoInversion({ entrada: sumFlujo('inversion','entrada'), salida: sumFlujo('inversion','salida') })
+    setFlujoFinanciacion({ entrada: sumFlujo('financiacion','entrada'), salida: sumFlujo('financiacion','salida') })
+
+    // Histórico 6 meses reales para Estado de Resultados
+    const hist = await Promise.all([5,4,3,2,1,0].map(async (i) => {
       const fecha = new Date(hoy.getFullYear(), hoy.getMonth()-i, 1)
       const ini = fecha.toISOString().slice(0,10)
       const fin = new Date(fecha.getFullYear(), fecha.getMonth()+1, 0).toISOString().slice(0,10)
-      const { data } = await supabase.from('pedidos').select('pvp, ganancia').eq('tenant_id', tid)
-        .eq('estado','ENTREGADO').gte('fecha_pedido', ini).lte('fecha_pedido', fin+'T23:59:59')
-      const rows = (data||[]) as { pvp:number; ganancia:number }[]
-      return { mes: MESES_ES[fecha.getMonth()], ventas: rows.reduce((a,r)=>a+Number(r.pvp||0),0), utilidad: rows.reduce((a,r)=>a+Number(r.ganancia||0),0) }
+      const per = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-01`
+      const [{ data: pedHist }, { data: cfHist }] = await Promise.all([
+        supabase.from('pedidos').select('pvp, ganancia').eq('tenant_id', tid).eq('estado','ENTREGADO').gte('fecha_pedido', ini).lte('fecha_pedido', fin+'T23:59:59'),
+        supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', per).eq('activo', true),
+      ])
+      const rows = (pedHist||[]) as { pvp:number; ganancia:number }[]
+      const ventas = rows.reduce((a,r)=>a+Number(r.pvp||0),0)
+      const utilidad = rows.reduce((a,r)=>a+Number(r.ganancia||0),0)
+      const cfH = (cfHist||[]).reduce((a:number,c:{total:number})=>a+Number(c.total||0),0)
+      const costos = ventas - utilidad + cfH
+      return { mes: MESES_ES[fecha.getMonth()], periodo: per, ventas, costos, utilidad: ventas-costos, margen: ventas>0?Math.round((ventas-costos)/ventas*100):0 }
     }))
-    setHistorico3m(hist.reverse())
+    setHistoricoMensual(hist)
 
     setLoading(false)
   }, [supabase])
 
   useEffect(() => { loadData() }, [loadData])
 
-  // ── CÁLCULO POR PRODUCTO — usando datos reales de pedidos entregados ──
-  function calcProd(p: Producto): Calculado {
-    const real = pedidosPorProducto[p.id] || { unidades:0, ventas:0, ganancia:0 }
-    const unidades = real.unidades
-    const ventas = real.ventas
-    const costo_prod = p.costo_proveedor * unidades
-    const flete_env = p.costo_flete * unidades
-    const flete_dev = p.costo_flete_dev * unidades
-    const fulfill = (p.costo_fulfillment + p.costo_full_dev) * unidades
-    const pub = Math.round(ventas * (p.pct_publicidad + p.pct_pub_dev + p.pct_pub_cancel) / 100)
-    const comision = Math.round(ventas * (p.pct_com_plataforma + p.pct_pasarela + p.pct_com_pasarela + p.pct_com_ventas + p.pct_com_admin + p.pct_desc_popup) / 100)
-    const cf = p.cf_pedido * unidades
-    const total_costos = costo_prod + flete_env + flete_dev + fulfill + pub + comision + cf
-    const utilidad_bruta = ventas - costo_prod - flete_env - flete_dev - fulfill
-    const utilidad_neta = ventas - total_costos
-    const margen_bruto = ventas > 0 ? Math.round(utilidad_bruta/ventas*100) : 0
-    const margen_neto = ventas > 0 ? Math.round(utilidad_neta/ventas*100) : 0
-    const ganancia_unit = unidades > 0 ? Math.round(utilidad_neta/unidades) : 0
-    return { ...p, unidades, ventas, costo_prod, flete_env, flete_dev, fulfill, pub, comision, cf, total_costos, utilidad_bruta, utilidad_neta, margen_bruto, margen_neto, ganancia_unit }
+  const activoCorriente = walletSaldo + cuentasPorCobrar
+  const activoTotal = activoCorriente + activosFijos
+  const pasivoCorriente = cxp.filter(c=>c.estado==='pendiente').reduce((a,c)=>a+Number(c.valor),0) + cuotaCreditosCP
+  const pasivoTotal = pasivoCorriente + saldoCreditosLP
+  const patrimonio = activoTotal - pasivoTotal
+  const razonCorriente = pasivoCorriente>0 ? Math.round((activoCorriente/pasivoCorriente)*100)/100 : 0
+  const capitalTrabajo = activoCorriente - pasivoCorriente
+
+  const mesActual = historicoMensual[historicoMensual.length-1] || { ventas:0, costos:0, utilidad:0, margen:0, mes:'', periodo:'' }
+  const flujoNetoOperativo = flujoOperativo.entrada - flujoOperativo.salida
+  const flujoNetoInversion = flujoInversion.entrada - flujoInversion.salida
+  const flujoNetoFinanciacion = flujoFinanciacion.entrada - flujoFinanciacion.salida
+  const flujoNetoTotal = flujoNetoOperativo + flujoNetoInversion + flujoNetoFinanciacion
+
+  async function guardarCxp() {
+    if (!nuevaCxp.tercero || !nuevaCxp.concepto || !nuevaCxp.valor || !nuevaCxp.fecha_vencimiento || !tenantId) return
+    const { data } = await supabase.from('cuentas_por_pagar').insert({
+      tenant_id: tenantId, tercero: nuevaCxp.tercero, tipo_tercero: nuevaCxp.tipo_tercero,
+      concepto: nuevaCxp.concepto, valor: nuevaCxp.valor, fecha_vencimiento: nuevaCxp.fecha_vencimiento,
+      categoria_flujo: nuevaCxp.categoria_flujo, estado: 'pendiente',
+    }).select().single()
+    if (data) setCxp(prev => [data as CXP, ...prev])
+    setNuevaCxp({ tercero:'', tipo_tercero:'proveedor', concepto:'', valor:0, fecha_vencimiento:'', categoria_flujo:'operativo' })
   }
 
-  const calcTodos = productos.map(calcProd).filter(p => p.unidades > 0)
-  const totalUnidades = calcTodos.reduce((s,p) => s+p.unidades, 0)
-  const totalVentas = calcTodos.reduce((s,p) => s+p.ventas, 0)
-  const totalCostoProd = calcTodos.reduce((s,p) => s+p.costo_prod, 0)
-  const totalFleteEnv = calcTodos.reduce((s,p) => s+p.flete_env, 0)
-  const totalFleteDev = calcTodos.reduce((s,p) => s+p.flete_dev, 0)
-  const totalFulfill = calcTodos.reduce((s,p) => s+p.fulfill, 0)
-  const totalPub = calcTodos.reduce((s,p) => s+p.pub, 0)
-  const totalComision = calcTodos.reduce((s,p) => s+p.comision, 0)
-  const totalUtilBruta = totalVentas - totalCostoProd - totalFleteEnv - totalFleteDev - totalFulfill
-  // CF real del mes (no la suma de cf_pedido por producto, que es estimado) + intereses de créditos
-  const totalCostos = totalCostoProd + totalFleteEnv + totalFleteDev + totalFulfill + totalPub + totalComision + cfMes + cuotaCreditos
-  const totalUtilNeta = totalVentas - totalCostos
-  const margenBrutoTotal = totalVentas > 0 ? Math.round(totalUtilBruta/totalVentas*100) : 0
-  const margenNetoTotal = totalVentas > 0 ? Math.round(totalUtilNeta/totalVentas*100) : 0
+  async function pagarCxp(item: CXP) {
+    const hoy = new Date().toISOString().slice(0,10)
+    await supabase.from('cuentas_por_pagar').update({ estado:'pagado', fecha_pago: hoy }).eq('id', item.id)
+    setCxp(prev => prev.map(c => c.id===item.id ? { ...c, estado:'pagado', fecha_pago:hoy } : c))
+    await supabase.from('libro_caja').insert({
+      tenant_id: tenantId, fecha: hoy, concepto: `Pago a ${item.tercero} — ${item.concepto}`,
+      tipo: 'salida', valor: item.valor, origen: 'cuentas_por_pagar',
+      referencia_tabla: 'cuentas_por_pagar', referencia_id: item.id, categoria_flujo: item.categoria_flujo,
+    })
+    loadData()
+  }
 
-  // Proyección basada en tendencia real de 3 meses (no un % inventado por defecto)
-  const tendenciaReal = historico3m.length >= 2 && historico3m[0].ventas > 0
-    ? Math.round((historico3m[historico3m.length-1].ventas / historico3m[0].ventas - 1) * 100 / (historico3m.length-1))
-    : crecimiento
-  const MESES_PROYECCION = Array.from({length:6}, (_,i) => MESES_ES[(new Date().getMonth()+i+1)%12])
-  const proyecciones = MESES_PROYECCION.map((mes,i) => {
-    const factor = Math.pow(1+crecimiento/100, i+1)
-    const ventas_p = Math.round(totalVentas*factor)
-    const costos_p = Math.round(totalCostos*factor*0.97)
-    return { mes, ventas:ventas_p, utilidad_neta:ventas_p-costos_p, margen: ventas_p>0?Math.round((ventas_p-costos_p)/ventas_p*100):0, unidades:Math.round(totalUnidades*factor) }
-  })
+  async function guardarMovimientoManual() {
+    if (!nuevoMov.concepto || !nuevoMov.valor || !tenantId) return
+    const { data:{ user } } = await supabase.auth.getUser()
+    const { data } = await supabase.from('libro_caja').insert({
+      tenant_id: tenantId, fecha: new Date().toISOString().slice(0,10),
+      concepto: nuevoMov.concepto, tipo: nuevoMov.tipo, valor: nuevoMov.valor,
+      origen: 'manual', categoria_flujo: nuevoMov.categoria_flujo, registrado_por: user?.id,
+    }).select().single()
+    if (data) setMovimientosCaja(prev => [data as MovCaja, ...prev])
+    setNuevoMov({ concepto:'', tipo:'salida', valor:0, categoria_flujo:'operativo' })
+  }
 
-  const prodActual = prodSel ? calcTodos.find(p => p.id === prodSel) : null
+  function exportarExcel() {
+    const filas = [
+      ['ESTADO DE RESULTADOS — DIZGO'],
+      ['Mes','Ventas','Costos','Utilidad','Margen %'],
+      ...historicoMensual.map(h => [h.mes, h.ventas, h.costos, h.utilidad, h.margen]),
+      [], ['BALANCE GENERAL'],
+      ['Activo corriente', activoCorriente], ['Activo fijo', activosFijos], ['Activo total', activoTotal],
+      ['Pasivo corriente', pasivoCorriente], ['Pasivo largo plazo', saldoCreditosLP], ['Pasivo total', pasivoTotal],
+      ['Patrimonio', patrimonio],
+    ]
+    const csv = filas.map(r => r.join(',')).join('\n')
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = `DIZGO_PyG_${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+  }
 
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
-      Consolidando Estado de Resultados...
-    </div>
-  )
-
-  if (calcTodos.length === 0) return (
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
-      <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'8px' }}>💰 Estado de Resultados P&G</h1>
-      <div style={{ ...s, padding:'40px', textAlign:'center', borderLeft:'3px solid #F5A623' }}>
-        <div style={{ fontSize:'14px', fontWeight:'600', marginBottom:'8px' }}>Sin pedidos entregados este mes</div>
-        <div style={{ fontSize:'12px', color:'#8B96A8' }}>El P&G se construye automáticamente desde pedidos reales marcados como ENTREGADO.</div>
-      </div>
+      Consolidando información financiera...
     </div>
   )
 
   return (
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
 
-      <div style={{ marginBottom:'20px' }}>
-        <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>💰 Estado de Resultados P&G</h1>
-        <p style={{ fontSize:'13px', color:'#8B96A8' }}>Datos reales del mes · Consolida Precio + Costos + Inversión · VERIFICAR</p>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
+        <div>
+          <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🏛️ Suite Financiera P&G</h1>
+          <p style={{ fontSize:'13px', color:'#8B96A8' }}>Resultados · Flujo de Caja · Balance · Cuentas por Pagar · Libro de Caja</p>
+        </div>
+        <div style={{ display:'flex', gap:'8px' }}>
+          <button onClick={exportarExcel} style={{ padding:'8px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📊 Excel</button>
+          <button onClick={() => window.print()} style={{ padding:'8px 14px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:'#F05C5C', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📄 PDF</button>
+        </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'8px', marginBottom:'16px' }}>
         {[
-          { label:'Ventas brutas', value:fmt(totalVentas), color:'#2DD4A0', icon:'💰' },
-          { label:'Total costos', value:fmt(totalCostos), color:'#F05C5C', icon:'💸' },
-          { label:'Utilidad bruta', value:fmt(totalUtilBruta), color:semG(margenBrutoTotal), icon:'📊' },
-          { label:'Utilidad neta', value:fmt(totalUtilNeta), color:semG(margenNetoTotal), icon:'💎' },
-          { label:'Margen bruto', value:`${margenBrutoTotal}%`, color:semG(margenBrutoTotal), icon:'📈' },
-          { label:'Margen neto', value:`${margenNetoTotal}%`, color:semG(margenNetoTotal), icon:'🎯' },
+          { l:'Utilidad neta (mes)', v:fmt(mesActual.utilidad), c:semG(mesActual.margen), icon:'💎' },
+          { l:'Caja disponible', v:fmt(walletSaldo), c:'#2DD4A0', icon:'💰' },
+          { l:'Por cobrar (en tránsito)', v:fmt(cuentasPorCobrar), c:'#3D8EF0', icon:'🚚' },
+          { l:'Por pagar pendiente', v:fmt(pasivoCorriente), c:'#F5A623', icon:'📋' },
+          { l:'Liquidez (razón corriente)', v:razonCorriente.toFixed(2), c:semLiq(razonCorriente), icon:'⚖️' },
         ].map((k,i) => (
-          <div key={i} style={{ ...s, padding:'12px', borderTop:`2px solid ${k.color}` }}>
+          <div key={i} style={{ ...s, padding:'12px', borderTop:`2px solid ${k.c}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-              <span style={{ fontSize:'10px', color:'#8B96A8' }}>{k.label}</span><span>{k.icon}</span>
+              <span style={{ fontSize:'10px', color:'#8B96A8' }}>{k.l}</span><span>{k.icon}</span>
             </div>
-            <div style={{ fontSize:'18px', fontWeight:'800', color:k.color }}>{k.value}</div>
+            <div style={{ fontSize:'17px', fontWeight:'800', color:k.c }}>{k.v}</div>
           </div>
         ))}
       </div>
 
-      {metaUtilidad > 0 && (
-        <div style={{ ...s, padding:'12px 16px', marginBottom:'16px', borderLeft:`3px solid ${totalUtilNeta>=metaUtilidad?'#2DD4A0':'#F5A623'}` }}>
-          <div style={{ fontSize:'12px', color:'#8B96A8' }}>
-            Meta de utilidad del mes: <strong style={{ color:'#E8EDF5' }}>{fmt(metaUtilidad)}</strong> ·
-            Vas en <strong style={{ color: totalUtilNeta>=metaUtilidad?'#2DD4A0':'#F5A623' }}>{Math.round(totalUtilNeta/metaUtilidad*100)}%</strong> de la meta
-          </div>
-        </div>
-      )}
-
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
-          { key:'total', label:'🏪 P&G Total Tienda' },
-          { key:'producto', label:'📦 P&G por Producto' },
-          { key:'mezcla', label:'🔀 Mezcla de Productos' },
-          { key:'proyeccion', label:'🔮 Proyección 6M' },
+          { key:'resultados', label:'📈 Estado de Resultados' },
+          { key:'flujo_caja', label:'💧 Flujo de Caja' },
+          { key:'balance', label:'⚖️ Balance General' },
+          { key:'cxp', label:`📋 Cuentas por Pagar (${cxp.filter(c=>c.estado==='pendiente').length})` },
+          { key:'libro_caja', label:'📒 Libro de Caja' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
-            style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
-              background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : '#8B96A8' }}>
+            style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
+              background: tab===t.key?'#F5A623':'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':'#8B96A8' }}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'total' && (
+      {tab === 'resultados' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>💰 Cascada de Costos — Tienda completa</div>
-            {[
-              { concepto:'VENTAS BRUTAS', valor:totalVentas, tipo:'entrada', color:'#E8EDF5' },
-              { sep:true },
-              { concepto:'(-) Costo de productos', valor:totalCostoProd, tipo:'egreso', color:'#F05C5C', pct: totalVentas>0?Math.round(totalCostoProd/totalVentas*100):0 },
-              { concepto:'(-) Flete de envío', valor:totalFleteEnv, tipo:'egreso', color:'#F05C5C', pct: totalVentas>0?Math.round(totalFleteEnv/totalVentas*100):0 },
-              { concepto:'(-) Flete devolución', valor:totalFleteDev, tipo:'egreso', color:'#F05C5C', pct: totalVentas>0?Math.round(totalFleteDev/totalVentas*100):0 },
-              { concepto:'(-) Fulfillment', valor:totalFulfill, tipo:'egreso', color:'#F05C5C', pct: totalVentas>0?Math.round(totalFulfill/totalVentas*100):0 },
-              { concepto:'= UTILIDAD BRUTA', valor:totalUtilBruta, tipo:'subtotal', color:semG(margenBrutoTotal), pct:margenBrutoTotal },
-              { sep:true },
-              { concepto:'(-) Inversión en publicidad', valor:totalPub, tipo:'variable', color:'#9B6BFF', pct: totalVentas>0?Math.round(totalPub/totalVentas*100):0 },
-              { concepto:'(-) Comisiones/pasarela/popup', valor:totalComision, tipo:'variable', color:'#9B6BFF', pct: totalVentas>0?Math.round(totalComision/totalVentas*100):0 },
-              { concepto:'(-) Costos fijos del mes (real)', valor:cfMes, tipo:'fijo', color:'#3D8EF0', pct: totalVentas>0?Math.round(cfMes/totalVentas*100):0 },
-              ...(cuotaCreditos > 0 ? [{ concepto:'(-) Cuota créditos activos', valor:cuotaCreditos, tipo:'fijo' as const, color:'#F05C5C', pct: totalVentas>0?Math.round(cuotaCreditos/totalVentas*100):0 }] : []),
-              { concepto:'= UTILIDAD NETA', valor:totalUtilNeta, tipo:'resultado', color:semG(margenNetoTotal), pct:margenNetoTotal },
-            ].map((row, i) => {
-              if ('sep' in row && row.sep) return <div key={i} style={{ height:'1px', background:'rgba(255,255,255,0.05)', margin:'4px 0' }} />
-              const r = row as { concepto:string; valor:number; tipo:string; color:string; pct?:number }
-              return (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'9px 16px',
-                  background: r.tipo === 'resultado' ? `${r.color}08` : r.tipo === 'subtotal' ? `${r.color}05` : 'transparent',
-                  borderLeft: ['resultado','subtotal'].includes(r.tipo) ? `3px solid ${r.color}` : '3px solid transparent' }}>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:'12px', color: ['resultado','subtotal','entrada'].includes(r.tipo) ? '#E8EDF5' : '#8B96A8', fontWeight: ['resultado','subtotal','entrada'].includes(r.tipo) ? '700' : '400' }}>{r.concepto}</div>
-                    {r.pct !== undefined && (
-                      <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'3px' }}>
-                        <div style={{ height:'3px', width:`${Math.min(Math.abs(r.pct),100)}%`, maxWidth:'120px', background:r.color, borderRadius:'2px' }} />
-                        <span style={{ fontSize:'10px', color:r.color }}>{r.pct}%</span>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ textAlign:'right', flexShrink:0 }}>
-                    <div style={{ fontSize: ['resultado','subtotal'].includes(r.tipo) ? '16px' : '13px', fontWeight:'800', color:r.color }}>
-                      {r.tipo === 'entrada' ? '' : r.valor > 0 && !['resultado','subtotal'].includes(r.tipo) ? '-' : ''}${Math.abs(r.valor).toLocaleString('es-CO')}
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-
-          <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-            <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>📊 DISTRIBUCIÓN DE COSTOS SOBRE VENTAS</div>
-              {[
-                { label:'Costo producto', valor:totalCostoProd, color:'#F05C5C' },
-                { label:'Flete envío + dev', valor:totalFleteEnv+totalFleteDev, color:'#F5A623' },
-                { label:'Publicidad', valor:totalPub, color:'#9B6BFF' },
-                { label:'Comisiones/pasarela', valor:totalComision, color:'#9B6BFF' },
-                { label:'Costos fijos', valor:cfMes, color:'#3D8EF0' },
-                ...(cuotaCreditos>0 ? [{ label:'Cuota créditos', valor:cuotaCreditos, color:'#F05C5C' }] : []),
-                { label:'Fulfillment', valor:totalFulfill, color:'#8B96A8' },
-              ].map((c,i) => {
-                const pct = totalVentas>0 ? Math.round(c.valor/totalVentas*100) : 0
-                return (
-                  <div key={i} style={{ marginBottom:'10px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                      <span style={{ fontSize:'12px', color:'#8B96A8' }}>{c.label}</span>
-                      <div style={{ display:'flex', gap:'10px' }}>
-                        <span style={{ fontSize:'11px', color:'#5A6478' }}>{pct}%</span>
-                        <span style={{ fontSize:'12px', fontWeight:'700', color:c.color }}>{fmt(c.valor)}</span>
-                      </div>
-                    </div>
-                    <div style={{ height:'8px', background:'rgba(255,255,255,0.05)', borderRadius:'4px' }}>
-                      <div style={{ height:'8px', width:`${Math.min(pct*2.5,100)}%`, background:c.color, borderRadius:'4px' }} />
-                    </div>
-                  </div>
-                )
-              })}
-              <div style={{ marginTop:'12px', padding:'10px 12px', borderRadius:'8px', background:'rgba(255,255,255,0.02)', display:'flex', justifyContent:'space-between', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
-                <span style={{ fontSize:'12px', color:'#8B96A8' }}>Total costos / Ventas</span>
-                <span style={{ fontSize:'14px', fontWeight:'800', color:semG(margenNetoTotal) }}>{totalVentas>0?Math.round(totalCostos/totalVentas*100):0}%</span>
-              </div>
-            </div>
-
-            <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'12px' }}>📋 RESUMEN EJECUTIVO</div>
-              {[
-                { label:'Productos con ventas', value:`${calcTodos.length} de ${productos.length} activos` },
-                { label:'Unidades entregadas (mes)', value:totalUnidades.toLocaleString() },
-                { label:'Ingreso promedio/pedido', value: totalUnidades>0?fmt(totalVentas/totalUnidades):'—' },
-                { label:'Ganancia promedio/pedido', value: totalUnidades>0?fmt(totalUtilNeta/totalUnidades):'—' },
-                { label:'CF real del mes', value:fmt(cfMes) },
-                ...(cuotaCreditos>0 ? [{ label:'Cuota créditos activos', value:fmt(cuotaCreditos) }] : []),
-              ].map((k,i) => (
-                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8' }}>{k.label}</span>
-                  <span style={{ fontSize:'13px', fontWeight:'700', color:'#E8EDF5' }}>{k.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === 'producto' && (
-        <div style={{ display:'grid', gridTemplateColumns: prodActual ? '1fr 380px' : '1fr', gap:'16px' }}>
-          <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📦 P&G por producto — clic para ver detalle</div>
-            <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
-                <thead>
-                  <tr style={{ background:'#0A0D14', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                    {['Producto','Unid.','Ventas','Util.Bruta','Util.Neta','MB%','MN%','Estado'].map(h => (
-                      <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...calcTodos].sort((a,b) => b.utilidad_neta-a.utilidad_neta).map((p,i) => (
-                    <tr key={i} onClick={() => setProdSel(prodSel===p.id?null:p.id)}
-                      style={{ borderBottom:'1px solid rgba(255,255,255,0.03)', cursor:'pointer', background: prodSel===p.id?'rgba(245,166,35,0.06)':'transparent' }}>
-                      <td style={{ padding:'9px 10px', fontWeight:'600' }}>{p.nombre}</td>
-                      <td style={{ padding:'9px 10px', color:'#8B96A8' }}>{p.unidades}</td>
-                      <td style={{ padding:'9px 10px', color:'#E8EDF5', fontWeight:'600' }}>{fmt(p.ventas)}</td>
-                      <td style={{ padding:'9px 10px', color:semG(p.margen_bruto) }}>{fmt(p.utilidad_bruta)}</td>
-                      <td style={{ padding:'9px 10px', color:semG(p.margen_neto), fontWeight:'700' }}>{fmt(p.utilidad_neta)}</td>
-                      <td style={{ padding:'9px 10px', fontWeight:'700', color:semG(p.margen_bruto) }}>{p.margen_bruto}%</td>
-                      <td style={{ padding:'9px 10px', fontWeight:'800', fontSize:'13px', color:semG(p.margen_neto) }}>{p.margen_neto}%</td>
-                      <td style={{ padding:'9px 10px' }}>
-                        <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'5px', fontWeight:'700',
-                          background: p.margen_neto>=15?'rgba(45,212,160,0.1)':p.margen_neto>=8?'rgba(245,166,35,0.1)':'rgba(240,92,92,0.1)', color:semG(p.margen_neto) }}>
-                          {p.margen_neto>=15?'✓ Escalar':p.margen_neto>=8?'⚠ Revisar':'✗ Problema'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ background:'rgba(245,166,35,0.04)', borderTop:'2px solid rgba(245,166,35,0.2)' }}>
-                    <td style={{ padding:'9px 10px', fontWeight:'800', color:'#F5A623' }}>TOTAL TIENDA</td>
-                    <td style={{ padding:'9px 10px', color:'#F5A623' }}>{totalUnidades}</td>
-                    <td style={{ padding:'9px 10px', color:'#F5A623', fontWeight:'700' }}>{fmt(totalVentas)}</td>
-                    <td style={{ padding:'9px 10px', color:semG(margenBrutoTotal), fontWeight:'700' }}>{fmt(totalUtilBruta)}</td>
-                    <td style={{ padding:'9px 10px', color:semG(margenNetoTotal), fontWeight:'800' }}>{fmt(totalUtilNeta)}</td>
-                    <td style={{ padding:'9px 10px', fontWeight:'700', color:semG(margenBrutoTotal) }}>{margenBrutoTotal}%</td>
-                    <td style={{ padding:'9px 10px', fontWeight:'800', color:semG(margenNetoTotal) }}>{margenNetoTotal}%</td>
-                    <td />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          {prodActual && (
-            <div style={{ ...s, padding:'20px', position:'sticky', top:'20px', maxHeight:'80vh', overflowY:'auto' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
-                <div>
-                  <div style={{ fontSize:'14px', fontWeight:'800' }}>{prodActual.nombre}</div>
-                  <div style={{ fontSize:'11px', color:'#5A6478', marginTop:'2px' }}>{prodActual.unidades} unidades entregadas · PVP ${prodActual.pvp_final.toLocaleString('es-CO')}</div>
-                </div>
-                <button onClick={() => setProdSel(null)} style={{ background:'none', border:'none', color:'#8B96A8', cursor:'pointer', fontSize:'20px' }}>×</button>
-              </div>
-              <div style={{ fontSize:'11px', fontWeight:'700', color:'#5A6478', marginBottom:'8px' }}>P&G POR UNIDAD</div>
-              {[
-                { label:'PVP (precio venta)', valor:prodActual.pvp_final, color:'#E8EDF5', entrada:true },
-                { label:'(-) Costo producto', valor:prodActual.costo_proveedor, color:'#F05C5C' },
-                { label:'(-) Flete envío', valor:prodActual.costo_flete, color:'#F05C5C' },
-                { label:'(-) Flete devolución', valor:prodActual.costo_flete_dev, color:'#F05C5C' },
-                { label:'(-) Fulfillment', valor:prodActual.costo_fulfillment+prodActual.costo_full_dev, color:'#F05C5C' },
-                { label:`(-) Publicidad (${prodActual.pct_publicidad}%)`, valor:Math.round(prodActual.pvp_final*prodActual.pct_publicidad/100), color:'#9B6BFF' },
-                { label:'(-) CF / pedido', valor:prodActual.cf_pedido, color:'#3D8EF0' },
-                { label:'= GANANCIA NETA / UNIDAD', valor:prodActual.ganancia_unit, color:semG(prodActual.margen_neto), resultado:true },
-              ].map((row,i) => (
-                <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 10px', borderRadius:'6px', marginBottom:'3px',
-                  background: row.resultado?`${row.color}08`:'rgba(255,255,255,0.02)', borderLeft: row.resultado||row.entrada?`3px solid ${row.color}`:'3px solid transparent' }}>
-                  <span style={{ fontSize:'11px', color: row.resultado||row.entrada?'#E8EDF5':'#8B96A8', fontWeight: row.resultado?'700':'400' }}>{row.label}</span>
-                  <span style={{ fontSize:'12px', fontWeight: row.resultado?'800':'600', color:row.color }}>
-                    {row.entrada?'':row.valor>=0&&!row.resultado?'-':''}${Math.abs(row.valor).toLocaleString('es-CO')}
-                  </span>
-                </div>
-              ))}
-              <div style={{ marginTop:'12px', padding:'12px', borderRadius:'10px', background:`${semG(prodActual.margen_neto)}08`, border:`1px solid ${semG(prodActual.margen_neto)}22` }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8' }}>Margen neto</span>
-                  <span style={{ fontSize:'18px', fontWeight:'800', color:semG(prodActual.margen_neto) }}>{prodActual.margen_neto}%</span>
-                </div>
-                <div style={{ display:'flex', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8' }}>Utilidad neta total ({prodActual.unidades}u)</span>
-                  <span style={{ fontSize:'14px', fontWeight:'700', color:semG(prodActual.margen_neto) }}>{fmt(prodActual.utilidad_neta)}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {tab === 'mezcla' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-          <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🔀 MEZCLA DE PRODUCTOS — Contribución a utilidad</div>
-            {[...calcTodos].sort((a,b) => b.utilidad_neta-a.utilidad_neta).map((p,i) => {
-              const pctUtil = totalUtilNeta>0 ? Math.round(p.utilidad_neta/totalUtilNeta*100) : 0
-              const pctVentas = totalVentas>0 ? Math.round(p.ventas/totalVentas*100) : 0
-              return (
-                <div key={i} style={{ marginBottom:'14px' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'5px' }}>
-                    <span style={{ fontSize:'12px', fontWeight:'600' }}>{p.nombre}</span>
-                    <div style={{ display:'flex', gap:'12px' }}>
-                      <span style={{ fontSize:'11px', color:'#5A6478' }}>{p.unidades}u</span>
-                      <span style={{ fontSize:'12px', fontWeight:'700', color:semG(p.margen_neto) }}>{fmt(p.utilidad_neta)}</span>
-                    </div>
-                  </div>
-                  <div style={{ height:'6px', background:'rgba(255,255,255,0.05)', borderRadius:'3px', marginBottom:'3px' }}>
-                    <div style={{ height:'6px', width:`${pctVentas}%`, background:semG(p.margen_neto), borderRadius:'3px', opacity:0.4 }} />
-                  </div>
-                  <div style={{ height:'8px', background:'rgba(255,255,255,0.05)', borderRadius:'3px' }}>
-                    <div style={{ height:'8px', width:`${Math.max(pctUtil,2)}%`, background:semG(p.margen_neto), borderRadius:'3px' }} />
-                  </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'3px', fontSize:'10px', color:'#5A6478' }}>
-                    <span>{pctVentas}% de ventas</span><span style={{ fontWeight:'700' }}>{pctUtil}% de utilidad</span>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-            <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'12px' }}>🏆 RANKING POR UTILIDAD NETA</div>
-              {[...calcTodos].sort((a,b) => b.utilidad_neta-a.utilidad_neta).map((p,i) => (
-                <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-                  <div style={{ width:'22px', height:'22px', borderRadius:'6px', background: i<3?'#F5A623':'rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'800', color: i<3?'#0A0D14':'#5A6478', flexShrink:0 }}>{i+1}</div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:'12px', fontWeight:'600' }}>{p.nombre}</div>
-                    <div style={{ fontSize:'10px', color:'#5A6478' }}>Margen: {p.margen_neto}%</div>
-                  </div>
-                  <div style={{ textAlign:'right' }}>
-                    <div style={{ fontSize:'13px', fontWeight:'800', color:semG(p.margen_neto) }}>{fmt(p.utilidad_neta)}</div>
-                    <div style={{ fontSize:'10px', color:'#5A6478' }}>{p.unidades}u</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'10px' }}>🚨 ALERTAS DE MEZCLA</div>
-              {calcTodos.filter(p => p.margen_neto < 8).length === 0 ? (
-                <div style={{ fontSize:'12px', color:'#5A6478', padding:'8px 0' }}>✅ Ningún producto en zona de riesgo</div>
-              ) : calcTodos.filter(p => p.margen_neto < 8).map((p,i) => (
-                <div key={i} style={{ padding:'10px 12px', background:'rgba(240,92,92,0.06)', borderRadius:'8px', marginBottom:'6px', borderLeft:'3px solid #F05C5C' }}>
-                  <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'3px' }}>⚠️ {p.nombre}</div>
-                  <div style={{ fontSize:'11px', color:'#8B96A8' }}>Margen neto: {p.margen_neto}% — Revisar precio en módulo Precio</div>
-                </div>
-              ))}
-              {calcTodos.filter(p => p.margen_neto >= 15).length > 0 && (
-                <div style={{ padding:'10px 12px', background:'rgba(45,212,160,0.06)', borderRadius:'8px', borderLeft:'3px solid #2DD4A0', marginTop:'6px' }}>
-                  <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'3px' }}>✅ Productos para escalar</div>
-                  <div style={{ fontSize:'11px', color:'#8B96A8' }}>{calcTodos.filter(p=>p.margen_neto>=15).map(p=>p.nombre).join(', ')}</div>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {tab === 'proyeccion' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-          <div style={{ ...s, padding:'20px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF' }}>🔮 PROYECCIÓN 6 MESES</div>
-              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                <span style={{ fontSize:'11px', color:'#8B96A8' }}>Crecimiento mensual:</span>
-                <input type="range" min={-10} max={30} value={crecimiento} onChange={e => setCrecimiento(Number(e.target.value))} style={{ width:'80px', accentColor:'#9B6BFF' }} />
-                <span style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', width:'34px' }}>{crecimiento}%</span>
-              </div>
-            </div>
-            {historico3m.length > 0 && (
-              <div style={{ marginBottom:'14px', padding:'8px 12px', background:'rgba(155,107,255,0.06)', borderRadius:'8px', fontSize:'11px', color:'#8B96A8' }}>
-                📊 Tendencia real últimos 3 meses: <strong style={{ color:'#9B6BFF' }}>{tendenciaReal >= 0 ? '+' : ''}{tendenciaReal}%/mes</strong> — ajusta el slider si quieres simular otro escenario
-              </div>
-            )}
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
+            <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📈 Histórico 6 meses — Estado de Resultados</div>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
               <thead>
-                <tr style={{ borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-                  {['Mes','Unidades','Ventas','Utilidad Neta','Margen'].map(h => (
-                    <th key={h} style={{ padding:'6px 8px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700' }}>{h}</th>
+                <tr style={{ background:'#0A0D14', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  {['Mes','Ventas','Costos','Utilidad','Margen'].map(h => (
+                    <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                <tr style={{ borderBottom:'1px solid rgba(245,166,35,0.15)', background:'rgba(245,166,35,0.04)' }}>
-                  <td style={{ padding:'7px 8px', fontWeight:'700', color:'#F5A623' }}>{MESES_ES[new Date().getMonth()]} (actual)</td>
-                  <td style={{ padding:'7px 8px', color:'#8B96A8' }}>{totalUnidades}</td>
-                  <td style={{ padding:'7px 8px', color:'#8B96A8' }}>{fmt(totalVentas)}</td>
-                  <td style={{ padding:'7px 8px', fontWeight:'700', color:semG(margenNetoTotal) }}>{fmt(totalUtilNeta)}</td>
-                  <td style={{ padding:'7px 8px', fontWeight:'700', color:semG(margenNetoTotal) }}>{margenNetoTotal}%</td>
-                </tr>
-                {proyecciones.map((m,i) => (
-                  <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
-                    <td style={{ padding:'7px 8px', color:'#9B6BFF', fontWeight:'600' }}>{m.mes}</td>
-                    <td style={{ padding:'7px 8px', color:'#8B96A8' }}>{m.unidades}</td>
-                    <td style={{ padding:'7px 8px', color:'#8B96A8' }}>{fmt(m.ventas)}</td>
-                    <td style={{ padding:'7px 8px', fontWeight:'700', color:semG(m.margen) }}>{fmt(m.utilidad_neta)}</td>
-                    <td style={{ padding:'7px 8px', fontWeight:'700', color:semG(m.margen) }}>{m.margen}%</td>
+                {historicoMensual.map((h,i) => (
+                  <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)', background: i===historicoMensual.length-1?'rgba(245,166,35,0.04)':'transparent' }}>
+                    <td style={{ padding:'8px 10px', fontWeight: i===historicoMensual.length-1?'700':'400', color: i===historicoMensual.length-1?'#F5A623':'#E8EDF5' }}>{h.mes}</td>
+                    <td style={{ padding:'8px 10px', color:'#8B96A8' }}>{fmt(h.ventas)}</td>
+                    <td style={{ padding:'8px 10px', color:'#F05C5C' }}>{fmt(h.costos)}</td>
+                    <td style={{ padding:'8px 10px', fontWeight:'700', color:semG(h.margen) }}>{fmt(h.utilidad)}</td>
+                    <td style={{ padding:'8px 10px', fontWeight:'700', color:semG(h.margen) }}>{h.margen}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
 
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>💰 CASCADA DEL MES ACTUAL ({mesActual.mes})</div>
+            {[
+              { c:'VENTAS BRUTAS', v:mesActual.ventas, color:'#E8EDF5', bold:true },
+              { c:'(-) Costos totales del mes', v:-mesActual.costos, color:'#F05C5C' },
+              { c:'= UTILIDAD NETA', v:mesActual.utilidad, color:semG(mesActual.margen), bold:true },
+            ].map((row,i) => (
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom: row.bold?'2px solid rgba(255,255,255,0.08)':'1px solid rgba(255,255,255,0.03)' }}>
+                <span style={{ fontSize: row.bold?'13px':'12px', fontWeight: row.bold?'700':'400', color: row.bold?'#E8EDF5':'#8B96A8' }}>{row.c}</span>
+                <span style={{ fontSize: row.bold?'16px':'13px', fontWeight: row.bold?'800':'600', color:row.color }}>{fmtFull(Math.abs(row.v))}</span>
+              </div>
+            ))}
+            <div style={{ marginTop:'14px', padding:'12px', background:`${semG(mesActual.margen)}08`, borderRadius:'10px', border:`1px solid ${semG(mesActual.margen)}22` }}>
+              <div style={{ display:'flex', justifyContent:'space-between' }}>
+                <span style={{ fontSize:'12px', color:'#8B96A8' }}>Margen neto del mes</span>
+                <span style={{ fontSize:'20px', fontWeight:'800', color:semG(mesActual.margen) }}>{mesActual.margen}%</span>
+              </div>
+            </div>
+            <div style={{ marginTop:'10px', fontSize:'11px', color:'#5A6478' }}>{productos.length} productos activos en catálogo</div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'flujo_caja' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>💧 ESTADO DE FLUJO DE EFECTIVO — Método directo NIIF (30 días)</div>
+            {[
+              { titulo:'ACTIVIDADES DE OPERACIÓN', entrada:flujoOperativo.entrada, salida:flujoOperativo.salida, neto:flujoNetoOperativo, color:'#2DD4A0' },
+              { titulo:'ACTIVIDADES DE INVERSIÓN', entrada:flujoInversion.entrada, salida:flujoInversion.salida, neto:flujoNetoInversion, color:'#9B6BFF' },
+              { titulo:'ACTIVIDADES DE FINANCIACIÓN', entrada:flujoFinanciacion.entrada, salida:flujoFinanciacion.salida, neto:flujoNetoFinanciacion, color:'#F5A623' },
+            ].map((f,i) => (
+              <div key={i} style={{ marginBottom:'14px', padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'10px', borderLeft:`3px solid ${f.color}` }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:f.color, marginBottom:'8px' }}>{f.titulo}</div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
+                  <span style={{ color:'#8B96A8' }}>Entradas</span><span style={{ color:'#2DD4A0' }}>{fmtFull(f.entrada)}</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'6px' }}>
+                  <span style={{ color:'#8B96A8' }}>Salidas</span><span style={{ color:'#F05C5C' }}>-{fmtFull(f.salida)}</span>
+                </div>
+                <div style={{ display:'flex', justifyContent:'space-between', paddingTop:'6px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+                  <span style={{ fontSize:'12px', fontWeight:'700' }}>Flujo neto</span>
+                  <span style={{ fontSize:'14px', fontWeight:'800', color: f.neto>=0?'#2DD4A0':'#F05C5C' }}>{fmtFull(f.neto)}</span>
+                </div>
+              </div>
+            ))}
+            <div style={{ marginTop:'10px', padding:'14px', background:'rgba(245,166,35,0.06)', borderRadius:'10px', border:'1px solid rgba(245,166,35,0.2)' }}>
+              <div style={{ display:'flex', justifyContent:'space-between' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700' }}>VARIACIÓN NETA DE EFECTIVO</span>
+                <span style={{ fontSize:'18px', fontWeight:'800', color: flujoNetoTotal>=0?'#2DD4A0':'#F05C5C' }}>{fmtFull(flujoNetoTotal)}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'14px' }}>🔮 FLUJO PROYECTADO — dinero que viene en camino</div>
+            <div style={{ padding:'14px', background:'rgba(155,107,255,0.06)', borderRadius:'10px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>Cuentas por cobrar — pedidos en tránsito sin entregar</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#9B6BFF' }}>{fmtFull(cuentasPorCobrar)}</div>
+              <div style={{ fontSize:'10px', color:'#5A6478', marginTop:'4px' }}>Este dinero entra a caja entre 5-11 días después de cada entrega (recaudo transportadora)</div>
+            </div>
+            <div style={{ padding:'14px', background:'rgba(245,166,35,0.06)', borderRadius:'10px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>Compromisos de salida — cuentas por pagar pendientes</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#F5A623' }}>{fmtFull(pasivoCorriente)}</div>
+              <div style={{ fontSize:'10px', color:'#5A6478', marginTop:'4px' }}>Incluye proveedores, nómina, contratistas y cuotas de crédito del mes</div>
+            </div>
+            <div style={{ padding:'14px', borderRadius:'10px', background: (cuentasPorCobrar-pasivoCorriente)>=0?'rgba(45,212,160,0.06)':'rgba(240,92,92,0.06)', border:`1px solid ${(cuentasPorCobrar-pasivoCorriente)>=0?'rgba(45,212,160,0.2)':'rgba(240,92,92,0.2)'}` }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color: (cuentasPorCobrar-pasivoCorriente)>=0?'#2DD4A0':'#F05C5C', marginBottom:'6px' }}>
+                {(cuentasPorCobrar-pasivoCorriente)>=0 ? '✅ Cobertura suficiente' : '⚠️ Brecha de caja proyectada'}
+              </div>
+              <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.6' }}>
+                Lo que viene ({fmt(cuentasPorCobrar)}) {(cuentasPorCobrar-pasivoCorriente)>=0?'cubre':'no cubre'} lo que debes pagar pronto ({fmt(pasivoCorriente)}).
+                Diferencia: <strong style={{ color: (cuentasPorCobrar-pasivoCorriente)>=0?'#2DD4A0':'#F05C5C' }}>{fmt(Math.abs(cuentasPorCobrar-pasivoCorriente))}</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'balance' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, overflow:'hidden' }}>
+            <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>⚖️ Estado de Situación Financiera (Balance — parcial)</div>
+            <div style={{ padding:'16px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#2DD4A0', marginBottom:'8px' }}>ACTIVO</div>
+              {[
+                { l:'Caja (Wallet)', v:walletSaldo },
+                { l:'Cuentas por cobrar', v:cuentasPorCobrar },
+                { l:'Activos fijos (Inversión)', v:activosFijos },
+              ].map((r,i) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px' }}>
+                  <span style={{ color:'#8B96A8' }}>{r.l}</span><span style={{ color:'#E8EDF5' }}>{fmtFull(r.v)}</span>
+                </div>
+              ))}
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:'1px solid rgba(255,255,255,0.08)', marginTop:'6px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700' }}>TOTAL ACTIVO</span><span style={{ fontSize:'15px', fontWeight:'800', color:'#2DD4A0' }}>{fmtFull(activoTotal)}</span>
+              </div>
+
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#F05C5C', marginTop:'18px', marginBottom:'8px' }}>PASIVO</div>
+              {[
+                { l:'Cuentas por pagar', v: cxp.filter(c=>c.estado==='pendiente').reduce((a,c)=>a+Number(c.valor),0) },
+                { l:'Cuota créditos (mes)', v:cuotaCreditosCP },
+                { l:'Saldo créditos (largo plazo)', v:saldoCreditosLP },
+              ].map((r,i) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px' }}>
+                  <span style={{ color:'#8B96A8' }}>{r.l}</span><span style={{ color:'#E8EDF5' }}>{fmtFull(r.v)}</span>
+                </div>
+              ))}
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:'1px solid rgba(255,255,255,0.08)', marginTop:'6px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700' }}>TOTAL PASIVO</span><span style={{ fontSize:'15px', fontWeight:'800', color:'#F05C5C' }}>{fmtFull(pasivoTotal)}</span>
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 0', marginTop:'12px', background:'rgba(245,166,35,0.06)', borderRadius:'8px', paddingLeft:'10px', paddingRight:'10px' }}>
+                <span style={{ fontSize:'14px', fontWeight:'800', color:'#F5A623' }}>PATRIMONIO</span><span style={{ fontSize:'18px', fontWeight:'900', color:'#F5A623' }}>{fmtFull(patrimonio)}</span>
+              </div>
+            </div>
+          </div>
+
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'12px' }}>📊 RESUMEN PROYECCIÓN 6M</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🚦 SEMÁFOROS DE SALUD FINANCIERA</div>
               {[
-                { label:'Utilidad acumulada 6M', valor:fmt(proyecciones.reduce((s,p)=>s+p.utilidad_neta,0)), color:'#2DD4A0' },
-                { label:'Ventas acumuladas 6M', valor:fmt(proyecciones.reduce((s,p)=>s+p.ventas,0)), color:'#3D8EF0' },
-                { label:'Mejor mes proyectado', valor:`${proyecciones[5].mes}: ${fmt(proyecciones[5].utilidad_neta)}`, color:'#9B6BFF' },
-                { label:'Crecimiento total 6M', valor: totalUtilNeta>0?`${Math.round((proyecciones[5].utilidad_neta/totalUtilNeta-1)*100)}%`:'—', color:'#F5A623' },
+                { l:'Razón corriente', v:razonCorriente.toFixed(2), color:semLiq(razonCorriente), desc: razonCorriente>=1.5?'Liquidez sólida':razonCorriente>=1?'Liquidez ajustada':'Riesgo de iliquidez' },
+                { l:'Capital de trabajo', v:fmtFull(capitalTrabajo), color: capitalTrabajo>=0?'#2DD4A0':'#F05C5C', desc: capitalTrabajo>=0?'Activo corriente cubre el pasivo':'Pasivo corriente supera el activo' },
+                { l:'Patrimonio', v:fmtFull(patrimonio), color: patrimonio>=0?'#2DD4A0':'#F05C5C', desc: patrimonio>=0?'Empresa solvente':'Patrimonio negativo — alerta'},
               ].map((k,i) => (
-                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'9px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8' }}>{k.label}</span>
-                  <span style={{ fontSize:'14px', fontWeight:'800', color:k.color }}>{k.valor}</span>
+                <div key={i} style={{ ...s, padding:'12px', marginBottom:'8px', borderLeft:`3px solid ${k.color}`, background:'#0A0D14' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                    <span style={{ fontSize:'12px', color:'#8B96A8' }}>{k.l}</span>
+                    <span style={{ fontSize:'15px', fontWeight:'800', color:k.color }}>{k.v}</span>
+                  </div>
+                  <div style={{ fontSize:'10px', color:k.color }}>{k.desc}</div>
                 </div>
               ))}
             </div>
-            <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'12px' }}>🎯 ESCENARIOS PRÓXIMO MES</div>
-              {[
-                { nombre:'Pesimista', cr:-5, color:'#F05C5C' },
-                { nombre:'Conservador', cr:5, color:'#F5A623' },
-                { nombre:'Realista', cr:crecimiento, color:'#3D8EF0' },
-                { nombre:'Optimista', cr:15, color:'#2DD4A0' },
-              ].map((e,i) => {
-                const utilidad_e = Math.round(totalUtilNeta*(1+e.cr/100))
-                const ventas_e = Math.round(totalVentas*(1+e.cr/100))
-                return (
-                  <div key={i} style={{ padding:'10px 12px', borderRadius:'8px', marginBottom:'6px', background:`${e.color}08`, borderLeft:`3px solid ${e.color}` }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                      <span style={{ fontSize:'12px', fontWeight:'700', color:e.color }}>{e.nombre} ({e.cr>0?'+':''}{e.cr}%)</span>
-                      <span style={{ fontSize:'13px', fontWeight:'800', color:e.color }}>{fmt(utilidad_e)}</span>
-                    </div>
-                    <div style={{ fontSize:'11px', color:'#5A6478' }}>Ventas: {fmt(ventas_e)}</div>
+            <div style={{ ...s, padding:'16px', fontSize:'11px', color:'#5A6478', lineHeight:'1.6' }}>
+              📌 Balance parcial bajo NIIF para PYMES. No incluye patrimonio detallado por aportes societarios ni conciliación tributaria — DIZGO es herramienta de gestión operativa, no software contable certificado.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'cxp' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:'16px' }}>
+          <div style={{ ...s, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📋 Cuentas por Pagar — Terceros</div>
+            {cxp.length === 0 ? (
+              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin cuentas por pagar registradas</div>
+            ) : cxp.map(c => {
+              const info = TIPO_TERCERO_INFO[c.tipo_tercero] || TIPO_TERCERO_INFO.otro
+              const vencida = c.estado==='pendiente' && new Date(c.fecha_vencimiento) < new Date()
+              return (
+                <div key={c.id} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px' }}>
+                  <span style={{ fontSize:'18px' }}>{info.icon}</span>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:'12px', fontWeight:'600' }}>{c.tercero} <span style={{ fontSize:'10px', color:info.c }}>· {info.l}</span></div>
+                    <div style={{ fontSize:'11px', color:'#5A6478' }}>{c.concepto} · vence {c.fecha_vencimiento}</div>
                   </div>
-                )
-              })}
+                  <div style={{ fontSize:'13px', fontWeight:'700' }}>{fmtFull(c.valor)}</div>
+                  {c.estado==='pendiente' ? (
+                    <button onClick={() => pagarCxp(c)} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?'#F05C5C':'#F5A623', cursor:'pointer', fontSize:'10px', fontWeight:'700' }}>
+                      {vencida?'⚠ Vencida — Pagar':'Pagar'}
+                    </button>
+                  ) : (
+                    <span style={{ fontSize:'10px', padding:'3px 8px', borderRadius:'5px', background:'rgba(45,212,160,0.15)', color:'#2DD4A0', fontWeight:'700' }}>✓ Pagado</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          <div style={{ ...s, padding:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>+ Nueva cuenta por pagar</div>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Tercero</label>
+              <input value={nuevaCxp.tercero} onChange={e=>setNuevaCxp(p=>({...p,tercero:e.target.value}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Tipo</label>
+              <select value={nuevaCxp.tipo_tercero} onChange={e=>setNuevaCxp(p=>({...p,tipo_tercero:e.target.value}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none' }}>
+                {Object.entries(TIPO_TERCERO_INFO).map(([k,v]) => <option key={k} value={k}>{v.icon} {v.l}</option>)}
+              </select>
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Concepto</label>
+              <input value={nuevaCxp.concepto} onChange={e=>setNuevaCxp(p=>({...p,concepto:e.target.value}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Valor</label>
+              <input type="number" value={nuevaCxp.valor||''} onChange={e=>setNuevaCxp(p=>({...p,valor:Number(e.target.value)}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ marginBottom:'14px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Fecha vencimiento</label>
+              <input type="date" value={nuevaCxp.fecha_vencimiento} onChange={e=>setNuevaCxp(p=>({...p,fecha_vencimiento:e.target.value}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <button onClick={guardarCxp} style={{ width:'100%', padding:'10px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              + Registrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {tab === 'libro_caja' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:'16px' }}>
+          <div style={{ ...s, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📒 Libro de Caja — últimos 30 días</div>
+            {movimientosCaja.length === 0 ? (
+              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin movimientos registrados</div>
+            ) : movimientosCaja.map(m => (
+              <div key={m.id} style={{ padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px' }}>
+                <span style={{ fontSize:'10px', color:'#5A6478', width:'70px', flexShrink:0 }}>{m.fecha}</span>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'12px' }}>{m.concepto}</div>
+                  <div style={{ fontSize:'10px', color:'#5A6478' }}>{m.origen} · {m.categoria_flujo}</div>
+                </div>
+                <span style={{ fontSize:'13px', fontWeight:'700', color: m.tipo==='entrada'?'#2DD4A0':'#F05C5C' }}>
+                  {m.tipo==='entrada'?'+':'-'}{fmtFull(m.valor)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ ...s, padding:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>+ Movimiento manual</div>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Concepto</label>
+              <input value={nuevoMov.concepto} onChange={e=>setNuevoMov(p=>({...p,concepto:e.target.value}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+              {(['entrada','salida'] as const).map(t => (
+                <button key={t} onClick={()=>setNuevoMov(p=>({...p,tipo:t}))}
+                  style={{ flex:1, padding:'7px', borderRadius:'7px', cursor:'pointer', fontSize:'11px', fontWeight:'600',
+                    border:`1px solid ${nuevoMov.tipo===t?(t==='entrada'?'#2DD4A0':'#F05C5C'):'rgba(255,255,255,0.1)'}`,
+                    background: nuevoMov.tipo===t?(t==='entrada'?'rgba(45,212,160,0.1)':'rgba(240,92,92,0.1)'):'transparent',
+                    color: nuevoMov.tipo===t?(t==='entrada'?'#2DD4A0':'#F05C5C'):'#8B96A8' }}>
+                  {t==='entrada'?'+ Entrada':'- Salida'}
+                </button>
+              ))}
+            </div>
+            <div style={{ marginBottom:'10px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Valor</label>
+              <input type="number" value={nuevoMov.valor||''} onChange={e=>setNuevoMov(p=>({...p,valor:Number(e.target.value)}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ marginBottom:'14px' }}>
+              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Categoría de flujo</label>
+              <select value={nuevoMov.categoria_flujo} onChange={e=>setNuevoMov(p=>({...p,categoria_flujo:e.target.value}))}
+                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none' }}>
+                <option value="operativo">Operativo</option>
+                <option value="inversion">Inversión</option>
+                <option value="financiacion">Financiación</option>
+              </select>
+            </div>
+            <button onClick={guardarMovimientoManual} style={{ width:'100%', padding:'10px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+              + Registrar movimiento
+            </button>
+            <div style={{ marginTop:'12px', fontSize:'10px', color:'#5A6478', lineHeight:'1.5' }}>
+              Usa esto para registrar movimientos que el sistema no detecta automáticamente (ej. gastos en efectivo, retiros personales).
             </div>
           </div>
         </div>
