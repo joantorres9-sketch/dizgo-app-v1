@@ -116,14 +116,19 @@ export default function EmbudoPage() {
   const cpaEntregado = entregados.length>0 ? Math.round(totalInversion/entregados.length) : 0
   const conversionGlobal = totalImpresiones>0 ? Math.round(entregados.length/totalImpresiones*100000)/1000 : 0
 
+  // PVP ponderado real de la mezcla — para valorar etapas pre-entrega en $
+  const pvpPonderado = totalUnidadesEntregadas>0
+    ? Math.round(entregados.reduce((a,p)=>a+Number(p.pvp||0),0) / totalUnidadesEntregadas)
+    : (mezcla.length>0 ? Math.round(mezcla.reduce((a,m)=>a+m.pvp,0)/Math.max(mezcla.reduce((a,m)=>a+m.unidades,0),1)) : 0)
+
   const ETAPAS = [
-    { label:'Impresiones', valor:totalImpresiones, color:'#5A6478', icon:'👁️' },
-    { label:'Clics (CTR)', valor:totalClics, color:'#3D8EF0', icon:'🖱️' },
-    { label:'Pedidos generados', valor:pedidos.length, color:'#9B6BFF', icon:'🛒' },
-    { label:'Confirmados', valor:confirmados.length, color:'#F5A623', icon:'📞' },
-    { label:'Despachados', valor:despachados.length, color:'#3D8EF0', icon:'📦' },
-    { label:'Entregados', valor:entregados.length, color:'#2DD4A0', icon:'✅' },
-    { label:'Devueltos', valor:devueltos.length, color:'#F05C5C', icon:'🔄' },
+    { label:'Impresiones', valor:totalImpresiones, color:'#5A6478', icon:'👁️', dinero:totalInversion, esInversion:true },
+    { label:'Clics (CTR)', valor:totalClics, color:'#3D8EF0', icon:'🖱️', dinero:totalInversion, esInversion:true },
+    { label:'Pedidos generados', valor:pedidos.length, color:'#9B6BFF', icon:'🛒', dinero:pedidos.length*pvpPonderado, esInversion:false },
+    { label:'Confirmados', valor:confirmados.length, color:'#F5A623', icon:'📞', dinero:confirmados.length*pvpPonderado, esInversion:false },
+    { label:'Despachados', valor:despachados.length, color:'#3D8EF0', icon:'📦', dinero:despachados.length*pvpPonderado, esInversion:false },
+    { label:'Entregados', valor:entregados.length, color:'#2DD4A0', icon:'✅', dinero:entregados.length*gananciaPonderada, esInversion:false, esGanancia:true },
+    { label:'Devueltos', valor:devueltos.length, color:'#F05C5C', icon:'🔄', dinero:devueltos.length*pvpPonderado, esInversion:false },
   ]
 
   // Inicializar sliders del simulador con valores reales (solo una vez al cargar)
@@ -211,6 +216,7 @@ export default function EmbudoPage() {
             {ETAPAS.map((e,i) => {
               const anchoPct = totalImpresiones>0 ? Math.max((e.valor/totalImpresiones)*100,3) : 3
               const perdida = i>0 ? ETAPAS[i-1].valor-e.valor : 0
+              const perdidaDinero = i>0 && !e.esInversion ? perdida*pvpPonderado : 0
               const pctEtapa = i>0 && ETAPAS[i-1].valor>0 ? Math.round(e.valor/ETAPAS[i-1].valor*100) : 100
               return (
                 <div key={i} style={{ marginBottom:'6px' }}>
@@ -221,8 +227,11 @@ export default function EmbudoPage() {
                       {i>0 && <span style={{ fontSize:'10px', color:e.color, fontWeight:'700' }}>{pctEtapa}%</span>}
                     </div>
                     <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                      {i>0 && perdida>0 && <span style={{ fontSize:'10px', color:'#F05C5C' }}>-{perdida.toLocaleString('es-CO')}</span>}
+                      {i>0 && perdidaDinero>0 && <span style={{ fontSize:'10px', color:'#F05C5C' }}>-{perdida.toLocaleString('es-CO')} ({fmt(perdidaDinero)})</span>}
                       <span style={{ fontSize:'13px', fontWeight:'800', color:e.color }}>{e.valor.toLocaleString('es-CO')}</span>
+                      <span style={{ fontSize:'11px', fontWeight:'700', color: e.esGanancia?'#2DD4A0':e.esInversion?'#F05C5C':'#5A6478', minWidth:'52px', textAlign:'right' }}>
+                        {e.esInversion?'-':''}{fmt(e.dinero)}
+                      </span>
                     </div>
                   </div>
                   <div style={{ height:'24px', background:'rgba(255,255,255,0.04)', borderRadius:'4px', overflow:'hidden' }}>
@@ -262,7 +271,7 @@ export default function EmbudoPage() {
             </div>
 
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'12px' }}>📉 PEDIDOS PERDIDOS POR ETAPA</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'12px' }}>📉 PEDIDOS PERDIDOS POR ETAPA — impacto real en $</div>
               {[
                 { etapa:'Generado → Confirmación', perdidos:pedidos.length-confirmados.length, pct:100-tasaConfirmacion, color:'#F5A623' },
                 { etapa:'Confirmación → Despacho', perdidos:confirmados.length-despachados.length, pct:100-tasaDespacho, color:'#9B6BFF' },
@@ -272,10 +281,17 @@ export default function EmbudoPage() {
                 <div key={i} style={{ padding:'8px 10px', borderRadius:'7px', marginBottom:'6px', background:`${p.color}06` }}>
                   <div style={{ display:'flex', justifyContent:'space-between' }}>
                     <span style={{ fontSize:'11px', fontWeight:'700', color:p.color }}>{p.etapa}</span>
-                    <span style={{ fontSize:'12px', fontWeight:'800', color:p.color }}>-{p.perdidos.toLocaleString()} ({p.pct}%)</span>
+                    <div style={{ display:'flex', gap:'8px', alignItems:'baseline' }}>
+                      <span style={{ fontSize:'12px', fontWeight:'800', color:p.color }}>-{p.perdidos.toLocaleString()} ({p.pct}%)</span>
+                      <span style={{ fontSize:'12px', fontWeight:'800', color:'#F05C5C' }}>{fmt(p.perdidos*pvpPonderado)}</span>
+                    </div>
                   </div>
                 </div>
               ))}
+              <div style={{ marginTop:'10px', padding:'10px 12px', background:'rgba(240,92,92,0.08)', borderRadius:'8px', display:'flex', justifyContent:'space-between' }}>
+                <span style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C' }}>TOTAL DINERO PERDIDO EN EL EMBUDO</span>
+                <span style={{ fontSize:'15px', fontWeight:'900', color:'#F05C5C' }}>{fmt((pedidos.length-entregados.length)*pvpPonderado)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -284,13 +300,17 @@ export default function EmbudoPage() {
       {tab === 'diagnostico' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>🔍 DIAGNÓSTICO POR INDICADOR REAL</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>🔍 DIAGNÓSTICO POR INDICADOR — con impacto en $</div>
             {[
-              { metrica:'CTR', valor:ctrReal, bm:BENCHMARKS.ctr, unidad:'%', buena:'Creativos funcionando bien', mala:'Cambiar creative, hook o copy' },
-              { metrica:'% Confirmación', valor:tasaConfirmacion, bm:BENCHMARKS.tasa_confirmacion, unidad:'%', buena:'Buen proceso de ventas', mala:'Activar WhatsApp inmediato — máximo 2h' },
-              { metrica:'% Despacho', valor:tasaDespacho, bm:BENCHMARKS.tasa_despacho, unidad:'%', buena:'Despacho eficiente', mala:'Revisar inventario antes de despachar' },
-              { metrica:'% Entrega', valor:tasaEntrega, bm:BENCHMARKS.tasa_entrega, unidad:'%', buena:'Transportadora eficiente', mala:'Gestionar novedades en primeras 24h' },
-              { metrica:'% Devolución', valor:tasaDevolucion, bm:BENCHMARKS.tasa_devolucion, unidad:'%', buena:'Cliente satisfecho', mala:'Revisar calidad de producto y descripción' },
+              { metrica:'CTR', valor:ctrReal, bm:BENCHMARKS.ctr, unidad:'%', buena:'Creativos funcionando bien', mala:'Cambiar creative, hook o copy', impacto:0 },
+              { metrica:'% Confirmación', valor:tasaConfirmacion, bm:BENCHMARKS.tasa_confirmacion, unidad:'%', buena:'Buen proceso de ventas', mala:'Activar WhatsApp inmediato — máximo 2h',
+                impacto: Math.max(BENCHMARKS.tasa_confirmacion.bueno-tasaConfirmacion,0)/100*pedidos.length*tasaDespacho/100*tasaEntrega/100*gananciaPonderada },
+              { metrica:'% Despacho', valor:tasaDespacho, bm:BENCHMARKS.tasa_despacho, unidad:'%', buena:'Despacho eficiente', mala:'Revisar inventario antes de despachar',
+                impacto: Math.max(BENCHMARKS.tasa_despacho.bueno-tasaDespacho,0)/100*confirmados.length*tasaEntrega/100*gananciaPonderada },
+              { metrica:'% Entrega', valor:tasaEntrega, bm:BENCHMARKS.tasa_entrega, unidad:'%', buena:'Transportadora eficiente', mala:'Gestionar novedades en primeras 24h',
+                impacto: Math.max(BENCHMARKS.tasa_entrega.bueno-tasaEntrega,0)/100*despachados.length*gananciaPonderada },
+              { metrica:'% Devolución', valor:tasaDevolucion, bm:BENCHMARKS.tasa_devolucion, unidad:'%', buena:'Cliente satisfecho', mala:'Revisar calidad de producto y descripción',
+                impacto: Math.max(tasaDevolucion-BENCHMARKS.tasa_devolucion.bueno,0)/100*entregados.length*gananciaPonderada },
             ].map((d,i) => {
               const dg = diag(d.valor, d.bm)
               return (
@@ -303,7 +323,10 @@ export default function EmbudoPage() {
                     </div>
                     <span style={{ fontSize:'16px', fontWeight:'800', color:dg.color }}>{d.valor}{d.unidad}</span>
                   </div>
-                  <div style={{ fontSize:'11px', color:dg.color }}>→ {dg.color==='#2DD4A0'?d.buena:d.mala}</div>
+                  <div style={{ fontSize:'11px', color:dg.color, marginBottom: d.impacto>0?'4px':'0' }}>→ {dg.color==='#2DD4A0'?d.buena:d.mala}</div>
+                  {d.impacto>0 && (
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#2DD4A0' }}>💰 Si llega a &quot;Bueno&quot;: +{fmt(d.impacto)}/mes</div>
+                  )}
                 </div>
               )
             })}
@@ -318,13 +341,18 @@ export default function EmbudoPage() {
               const rojos = scores.filter(x=>x.color==='#F05C5C').length
               const score = Math.round((verdes*100+amarillos*60+rojos*20)/scores.length)
               const scoreColor = score>=75?'#2DD4A0':score>=50?'#F5A623':'#F05C5C'
+              const oportunidadTotal =
+                Math.max(BENCHMARKS.tasa_confirmacion.bueno-tasaConfirmacion,0)/100*pedidos.length*tasaDespacho/100*tasaEntrega/100*gananciaPonderada +
+                Math.max(BENCHMARKS.tasa_despacho.bueno-tasaDespacho,0)/100*confirmados.length*tasaEntrega/100*gananciaPonderada +
+                Math.max(BENCHMARKS.tasa_entrega.bueno-tasaEntrega,0)/100*despachados.length*gananciaPonderada +
+                Math.max(tasaDevolucion-BENCHMARKS.tasa_devolucion.bueno,0)/100*entregados.length*gananciaPonderada
               return (
                 <>
                   <div style={{ textAlign:'center', marginBottom:'16px' }}>
                     <div style={{ fontSize:'52px', fontWeight:'900', color:scoreColor }}>{score}</div>
                     <div style={{ fontSize:'13px', color:'#8B96A8' }}>Score del embudo /100</div>
                   </div>
-                  <div style={{ display:'flex', gap:'10px', justifyContent:'center' }}>
+                  <div style={{ display:'flex', gap:'10px', justifyContent:'center', marginBottom:'14px' }}>
                     {[{n:verdes,l:'Bueno',c:'#2DD4A0'},{n:amarillos,l:'Aceptable',c:'#F5A623'},{n:rojos,l:'Crítico',c:'#F05C5C'}].map((x,i) => (
                       <div key={i} style={{ textAlign:'center', padding:'8px 12px', background:`${x.c}10`, borderRadius:'8px' }}>
                         <div style={{ fontSize:'20px', fontWeight:'800', color:x.c }}>{x.n}</div>
@@ -332,6 +360,12 @@ export default function EmbudoPage() {
                       </div>
                     ))}
                   </div>
+                  {oportunidadTotal>0 && (
+                    <div style={{ padding:'14px', background:'rgba(45,212,160,0.08)', borderRadius:'10px', border:'1px solid rgba(45,212,160,0.2)', textAlign:'center' }}>
+                      <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>Oportunidad total si optimizas todo a &quot;Bueno&quot;</div>
+                      <div style={{ fontSize:'22px', fontWeight:'900', color:'#2DD4A0' }}>+{fmt(oportunidadTotal)}/mes</div>
+                    </div>
+                  )}
                 </>
               )
             })()}
@@ -366,16 +400,17 @@ export default function EmbudoPage() {
               <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'14px' }}>📊 RESULTADO SIMULACIÓN</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'14px' }}>
                 {[
-                  { label:'Clics', actual:totalClics, sim:sim_clics },
-                  { label:'Confirmados', actual:confirmados.length, sim:sim_confirmados },
-                  { label:'Despachados', actual:despachados.length, sim:sim_despachados },
-                  { label:'Entregados netos', actual:entregados.length-devueltos.length, sim:sim_entregados_netos },
+                  { label:'Clics', actual:totalClics, sim:sim_clics, dinero:0 },
+                  { label:'Confirmados', actual:confirmados.length, sim:sim_confirmados, dinero:sim_confirmados*pvpPonderado },
+                  { label:'Despachados', actual:despachados.length, sim:sim_despachados, dinero:sim_despachados*pvpPonderado },
+                  { label:'Entregados netos', actual:entregados.length-devueltos.length, sim:sim_entregados_netos, dinero:sim_entregados_netos*gananciaPonderada },
                 ].map((k,i) => {
                   const d = k.sim-k.actual
                   return (
                     <div key={i} style={{ background:'rgba(255,255,255,0.02)', borderRadius:'8px', padding:'10px 12px' }}>
                       <div style={{ fontSize:'10px', color:'#5A6478' }}>{k.label}</div>
                       <div style={{ fontSize:'16px', fontWeight:'800', color:'#E8EDF5' }}>{k.sim.toLocaleString()} <span style={{ fontSize:'11px', color: d>=0?'#2DD4A0':'#F05C5C' }}>{d>=0?'+':''}{d}</span></div>
+                      {k.dinero>0 && <div style={{ fontSize:'11px', fontWeight:'700', color:'#9B6BFF', marginTop:'2px' }}>{fmt(k.dinero)}</div>}
                     </div>
                   )
                 })}
