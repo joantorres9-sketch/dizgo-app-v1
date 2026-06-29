@@ -25,6 +25,7 @@ function semCPA(cpa: number, max: number) {
 function semROAS(roas: number) { return roas >= 3 ? T.green : roas >= 2 ? T.yellow : T.red }
 function semCTR(ctr: number) { return ctr >= 2 ? T.green : ctr >= 1 ? T.yellow : T.red }
 function fmt(n: number) { return `$${Math.round(n).toLocaleString('es-CO')}` }
+const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
 function parsearCSVMeta(texto: string): Partial<Registro>[] {
   const lineas = texto.split('\n').filter(l => l.trim())
@@ -180,6 +181,20 @@ export default function PautaPage() {
   async function guardarCpaMaximo(prodId: string, valor: number) {
     await supabase.from('productos').update({ cpa_maximo: valor }).eq('id', prodId)
     setProductos(prev => prev.map(p => p.id===prodId ? { ...p, cpa_maximo:valor } : p))
+  }
+
+  // Conexión real → Cuentas por Pagar (módulo P&G) — gasto pendiente con la plataforma de ads
+  async function registrarPagoPendientePauta(plataforma: string, monto: number) {
+    if (!tenantId || !monto) return
+    const hoy = new Date()
+    await supabase.from('cuentas_por_pagar').insert({
+      tenant_id: tenantId, tercero: plataforma, tipo_tercero: 'proveedor',
+      concepto: `Inversión en pauta — ${plataforma} (${MESES_ES?.[hoy.getMonth()] || ''})`,
+      valor: monto, fecha_emision: hoy.toISOString().slice(0,10),
+      fecha_vencimiento: new Date(hoy.getFullYear(), hoy.getMonth()+1, 5).toISOString().slice(0,10),
+      estado: 'pendiente', categoria_flujo: 'operativo',
+    })
+    alert(`Registrado: ${fmt(monto)} pendiente de pago a ${plataforma} en módulo P&G → Cuentas por Pagar`)
   }
 
   if (loading) return (
@@ -412,6 +427,25 @@ export default function PautaPage() {
 
       {tab === 'carga' && (
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, padding:'20px', gridColumn:'1 / -1' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'10px' }}>💳 REGISTRAR GASTO PENDIENTE DE PAUTA</div>
+            <div style={{ fontSize:'11px', color:T.muted, marginBottom:'12px' }}>
+              Si la inversión de este mes ({fmt(totalInversion)}) aún no se ha pagado a la plataforma, regístrala como cuenta por pagar en el módulo P&G.
+            </div>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {['META','TIKTOK'].map(p => {
+                const montoP = filtrados.filter(r=>r.plataforma===p).reduce((a,r)=>a+Number(r.inversion||0),0)
+                if (montoP === 0) return null
+                return (
+                  <button key={p} onClick={() => registrarPagoPendientePauta(p === 'META' ? 'Meta Ads' : 'TikTok Ads', montoP)}
+                    style={{ padding:'8px 16px', background:`${T.purple}15`, border:`1px solid ${T.purple}30`, borderRadius:'8px', color:T.purple, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                    Registrar {p === 'META' ? 'Meta' : 'TikTok'} — {fmt(montoP)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'14px' }}>📤 CARGAR CSV REAL</div>
             <div style={{ fontSize:'12px', color:T.muted, marginBottom:'14px', lineHeight:'1.6' }}>

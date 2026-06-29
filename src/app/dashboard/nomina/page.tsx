@@ -693,6 +693,7 @@ export default function NominaPage() {
 
   // Tasas edición
   const [editTasa, setEditTasa] = useState(false)
+  const [pagandoNomina, setPagandoNomina] = useState(false)
   const [formTasa, setFormTasa] = useState<Partial<TasaHistorico>>(TASAS_COL_2025)
 
   async function loadData() {
@@ -737,6 +738,30 @@ export default function NominaPage() {
       { onConflict: 'tenant_id,pais_code,anio_fiscal' }
     )
     setEditTasa(false); loadData()
+  }
+
+  // Conexión real → Libro de Caja (módulo P&G) — registro agregado de la nómina pagada
+  async function pagarNominaDelMes() {
+    if (!tenantId || colaboradores.length === 0) return
+    setPagandoNomina(true)
+    const totalNeto = colaboradores.reduce((acc, c) => {
+      const salud_trab = Math.round(c.salario_base * (Number(tasas.salud_trab) || 4) / 100)
+      const pension_trab = Math.round(c.salario_base * (Number(tasas.pension_trab) || 4) / 100)
+      const heExtra = (novedades as Array<Record<string,unknown>>)
+        .filter(n => n.colaborador_id === c.id && String(n.tipo || '').startsWith('he_'))
+        .reduce((a, n) => a + Number(n.valor || 0), 0)
+      const deducciones = salud_trab + pension_trab
+      return acc + c.salario_base + (c.aux_transporte || 0) + heExtra - deducciones
+    }, 0)
+    const hoy = new Date().toISOString().slice(0,10)
+    await supabase.from('libro_caja').insert({
+      tenant_id: tenantId, fecha: hoy,
+      concepto: `Nómina del mes — ${colaboradores.length} colaborador(es)`,
+      tipo: 'salida', valor: Math.round(totalNeto), origen: 'nomina',
+      categoria_flujo: 'operativo',
+    })
+    setPagandoNomina(false)
+    alert(`Nómina registrada: ${fmt(Math.round(totalNeto))} en Libro de Caja (módulo P&G)`)
   }
 
   const colsFiltrados = colaboradores.filter(c =>
@@ -1078,7 +1103,15 @@ export default function NominaPage() {
       {/* ══ LIQUIDACIÓN ══ */}
       {tab === 'liquidacion' && (
         <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'20px' }}>
-          <div style={{ fontSize:'13px', fontWeight:'700', color:T.green, marginBottom:'16px' }}>💵 LIQUIDACIÓN DE NÓMINA</div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:T.green }}>💵 LIQUIDACIÓN DE NÓMINA</div>
+            {colaboradores.length > 0 && (
+              <button onClick={pagarNominaDelMes} disabled={pagandoNomina}
+                style={{ padding:'8px 16px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: pagandoNomina?'not-allowed':'pointer', fontSize:'12px', opacity: pagandoNomina?0.6:1 }}>
+                {pagandoNomina ? 'Registrando...' : '💰 Pagar nómina del mes'}
+              </button>
+            )}
+          </div>
           {colaboradores.length === 0 ? (
             <div style={{ textAlign:'center', padding:'40px', color:T.muted }}>No hay colaboradores para liquidar</div>
           ) : (
@@ -1113,6 +1146,9 @@ export default function NominaPage() {
                   })}
                 </tbody>
               </table>
+              <div style={{ marginTop:'10px', fontSize:'11px', color:T.muted }}>
+                Al pagar, se registra como salida en el Libro de Caja (módulo P&G) — categoría operativo.
+              </div>
             </div>
           )}
         </div>

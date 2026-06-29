@@ -34,9 +34,10 @@ export default function PYGPage() {
   const supabase = createClient()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'resultados'|'flujo_caja'|'balance'|'cxp'|'libro_caja'>('resultados')
+  const [tab, setTab] = useState<'resultados'|'producto'|'mezcla'|'flujo_caja'|'balance'|'cxp'|'libro_caja'>('resultados')
 
   const [productos, setProductos] = useState<Producto[]>([])
+  const [pedidosPorProducto, setPedidosPorProducto] = useState<Record<string,{unidades:number;ventas:number;ganancia:number}>>({})
   const [historicoMensual, setHistoricoMensual] = useState<{ mes:string; periodo:string; ventas:number; costos:number; utilidad:number; margen:number }[]>([])
   const [cfMes, setCfMes] = useState(0)
   const [walletSaldo, setWalletSaldo] = useState(0)
@@ -73,7 +74,7 @@ export default function PYGPage() {
     const [
       { data: prodsData }, { data: costosData }, { data: walletData },
       { data: pedidosTransito }, { data: activosData }, { data: creditosData },
-      { data: cxpData }, { data: movData },
+      { data: cxpData }, { data: movData }, { data: pedidosMesProducto },
     ] = await Promise.all([
       supabase.from('productos').select('id, nombre, pvp_final, costo_proveedor, costo_flete, costo_flete_dev, costo_fulfillment, costo_full_dev, cf_pedido, pct_publicidad, pct_pub_dev, pct_pub_cancel, pct_desc_popup, pct_com_plataforma, pct_pasarela, pct_com_pasarela, pct_com_ventas, pct_com_admin').eq('tenant_id', tid).eq('tipo','producto').eq('estado','activo'),
       supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', periodo).eq('activo', true),
@@ -84,9 +85,22 @@ export default function PYGPage() {
       supabase.from('inversiones_creditos').select('cuota_mensual, monto, plazo_meses').eq('tenant_id', tid).eq('estado','activo'),
       supabase.from('cuentas_por_pagar').select('*').eq('tenant_id', tid).order('fecha_vencimiento', { ascending:true }),
       supabase.from('libro_caja').select('*').eq('tenant_id', tid).gte('fecha', ini30.slice(0,10)).order('fecha', { ascending:false }),
+      supabase.from('pedidos').select('producto_id, pvp, ganancia, estado').eq('tenant_id', tid)
+        .eq('estado','ENTREGADO').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
     ])
 
     setProductos((prodsData||[]) as Producto[])
+
+    const porProd: Record<string,{unidades:number;ventas:number;ganancia:number}> = {}
+    ;(pedidosMesProducto||[]).forEach((p:{producto_id:string;pvp:number;ganancia:number}) => {
+      if (!p.producto_id) return
+      if (!porProd[p.producto_id]) porProd[p.producto_id] = { unidades:0, ventas:0, ganancia:0 }
+      porProd[p.producto_id].unidades++
+      porProd[p.producto_id].ventas += Number(p.pvp||0)
+      porProd[p.producto_id].ganancia += Number(p.ganancia||0)
+    })
+    setPedidosPorProducto(porProd)
+
     setCfMes(Math.round((costosData||[]).reduce((a:number,c:{total:number})=>a+Number(c.total||0),0)))
 
     const wRows = (walletData||[]) as { tipo:string; monto:number }[]
@@ -141,6 +155,31 @@ export default function PYGPage() {
   const capitalTrabajo = activoCorriente - pasivoCorriente
 
   const mesActual = historicoMensual[historicoMensual.length-1] || { ventas:0, costos:0, utilidad:0, margen:0, mes:'', periodo:'' }
+
+  // ── P&G POR PRODUCTO — usando datos reales de pedidos entregados del mes ──
+  function calcProd(p: Producto) {
+    const real = pedidosPorProducto[p.id] || { unidades:0, ventas:0, ganancia:0 }
+    const unidades = real.unidades
+    const ventas = real.ventas
+    const costo_prod = p.costo_proveedor * unidades
+    const flete_env = p.costo_flete * unidades
+    const flete_dev = p.costo_flete_dev * unidades
+    const fulfill = (p.costo_fulfillment + p.costo_full_dev) * unidades
+    const pub = Math.round(ventas * (p.pct_publicidad + p.pct_pub_dev + p.pct_pub_cancel) / 100)
+    const comision = Math.round(ventas * (p.pct_com_plataforma + p.pct_pasarela + p.pct_com_pasarela + p.pct_com_ventas + p.pct_com_admin + p.pct_desc_popup) / 100)
+    const cf = p.cf_pedido * unidades
+    const total_costos = costo_prod + flete_env + flete_dev + fulfill + pub + comision + cf
+    const utilidad_bruta = ventas - costo_prod - flete_env - flete_dev - fulfill
+    const utilidad_neta = ventas - total_costos
+    const margen_bruto = ventas>0 ? Math.round(utilidad_bruta/ventas*100) : 0
+    const margen_neto = ventas>0 ? Math.round(utilidad_neta/ventas*100) : 0
+    return { ...p, unidades, ventas, costo_prod, flete_env, flete_dev, fulfill, pub, comision, cf, total_costos, utilidad_bruta, utilidad_neta, margen_bruto, margen_neto }
+  }
+  const calcTodos = productos.map(calcProd).filter(p => p.unidades > 0).sort((a,b) => b.utilidad_neta-a.utilidad_neta)
+  const totalUnidadesProd = calcTodos.reduce((a,p)=>a+p.unidades,0)
+  const totalVentasProd = calcTodos.reduce((a,p)=>a+p.ventas,0)
+  const totalUtilNetaProd = calcTodos.reduce((a,p)=>a+p.utilidad_neta,0)
+
   const flujoNetoOperativo = flujoOperativo.entrada - flujoOperativo.salida
   const flujoNetoInversion = flujoInversion.entrada - flujoInversion.salida
   const flujoNetoFinanciacion = flujoFinanciacion.entrada - flujoFinanciacion.salida
@@ -239,6 +278,8 @@ export default function PYGPage() {
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
           { key:'resultados', label:'📈 Estado de Resultados' },
+          { key:'producto', label:'📦 P&G por Producto' },
+          { key:'mezcla', label:'🔀 Mezcla de Productos' },
           { key:'flujo_caja', label:'💧 Flujo de Caja' },
           { key:'balance', label:'⚖️ Balance General' },
           { key:'cxp', label:`📋 Cuentas por Pagar (${cxp.filter(c=>c.estado==='pendiente').length})` },
@@ -297,6 +338,98 @@ export default function PYGPage() {
               </div>
             </div>
             <div style={{ marginTop:'10px', fontSize:'11px', color:'#5A6478' }}>{productos.length} productos activos en catálogo</div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'producto' && (
+        <div style={{ ...s, overflow:'hidden' }}>
+          <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📦 P&G por producto — pedidos entregados este mes</div>
+          {calcTodos.length === 0 ? (
+            <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin pedidos entregados este mes por producto</div>
+          ) : (
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+              <thead>
+                <tr style={{ background:'#0A0D14', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                  {['Producto','Unid.','Ventas','Util.Bruta','Util.Neta','MB%','MN%'].map(h => (
+                    <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {calcTodos.map((p,i) => (
+                  <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                    <td style={{ padding:'9px 10px', fontWeight:'600' }}>{p.nombre}</td>
+                    <td style={{ padding:'9px 10px', color:'#8B96A8' }}>{p.unidades}</td>
+                    <td style={{ padding:'9px 10px', color:'#E8EDF5' }}>{fmt(p.ventas)}</td>
+                    <td style={{ padding:'9px 10px', color:semG(p.margen_bruto) }}>{fmt(p.utilidad_bruta)}</td>
+                    <td style={{ padding:'9px 10px', fontWeight:'700', color:semG(p.margen_neto) }}>{fmt(p.utilidad_neta)}</td>
+                    <td style={{ padding:'9px 10px', fontWeight:'700', color:semG(p.margen_bruto) }}>{p.margen_bruto}%</td>
+                    <td style={{ padding:'9px 10px', fontWeight:'800', color:semG(p.margen_neto) }}>{p.margen_neto}%</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background:'rgba(245,166,35,0.04)', borderTop:'2px solid rgba(245,166,35,0.2)' }}>
+                  <td style={{ padding:'9px 10px', fontWeight:'800', color:'#F5A623' }}>TOTAL</td>
+                  <td style={{ padding:'9px 10px', color:'#F5A623' }}>{totalUnidadesProd}</td>
+                  <td style={{ padding:'9px 10px', color:'#F5A623', fontWeight:'700' }}>{fmt(totalVentasProd)}</td>
+                  <td colSpan={2} style={{ padding:'9px 10px', color:semG(totalVentasProd>0?Math.round(totalUtilNetaProd/totalVentasProd*100):0), fontWeight:'800' }}>{fmt(totalUtilNetaProd)}</td>
+                  <td colSpan={2} style={{ padding:'9px 10px', fontWeight:'800', color:semG(totalVentasProd>0?Math.round(totalUtilNetaProd/totalVentasProd*100):0) }}>{totalVentasProd>0?Math.round(totalUtilNetaProd/totalVentasProd*100):0}%</td>
+                </tr>
+              </tfoot>
+            </table>
+          )}
+        </div>
+      )}
+
+      {tab === 'mezcla' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🔀 MEZCLA — Contribución a utilidad</div>
+            {calcTodos.length === 0 ? (
+              <div style={{ fontSize:'12px', color:'#5A6478', textAlign:'center', padding:'20px' }}>Sin datos este mes</div>
+            ) : calcTodos.map((p,i) => {
+              const pctUtil = totalUtilNetaProd>0 ? Math.round(p.utilidad_neta/totalUtilNetaProd*100) : 0
+              const pctVentas = totalVentasProd>0 ? Math.round(p.ventas/totalVentasProd*100) : 0
+              return (
+                <div key={i} style={{ marginBottom:'14px' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'5px' }}>
+                    <span style={{ fontSize:'12px', fontWeight:'600' }}>{p.nombre}</span>
+                    <div style={{ display:'flex', gap:'12px' }}>
+                      <span style={{ fontSize:'11px', color:'#5A6478' }}>{p.unidades}u</span>
+                      <span style={{ fontSize:'12px', fontWeight:'700', color:semG(p.margen_neto) }}>{fmt(p.utilidad_neta)}</span>
+                    </div>
+                  </div>
+                  <div style={{ height:'6px', background:'rgba(255,255,255,0.05)', borderRadius:'3px', marginBottom:'3px' }}>
+                    <div style={{ height:'6px', width:`${pctVentas}%`, background:semG(p.margen_neto), borderRadius:'3px', opacity:0.4 }} />
+                  </div>
+                  <div style={{ height:'8px', background:'rgba(255,255,255,0.05)', borderRadius:'3px' }}>
+                    <div style={{ height:'8px', width:`${Math.max(pctUtil,2)}%`, background:semG(p.margen_neto), borderRadius:'3px' }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'3px', fontSize:'10px', color:'#5A6478' }}>
+                    <span>{pctVentas}% de ventas</span><span style={{ fontWeight:'700' }}>{pctUtil}% de utilidad</span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ ...s, padding:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'12px' }}>🚨 ALERTAS DE MEZCLA</div>
+            {calcTodos.filter(p => p.margen_neto < 8).length === 0 ? (
+              <div style={{ fontSize:'12px', color:'#5A6478', padding:'8px 0' }}>✅ Ningún producto en zona de riesgo</div>
+            ) : calcTodos.filter(p => p.margen_neto < 8).map((p,i) => (
+              <div key={i} style={{ padding:'10px 12px', background:'rgba(240,92,92,0.06)', borderRadius:'8px', marginBottom:'6px', borderLeft:'3px solid #F05C5C' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'3px' }}>⚠️ {p.nombre}</div>
+                <div style={{ fontSize:'11px', color:'#8B96A8' }}>Margen neto: {p.margen_neto}% — Revisar precio en módulo Precio</div>
+              </div>
+            ))}
+            {calcTodos.filter(p => p.margen_neto >= 15).length > 0 && (
+              <div style={{ padding:'10px 12px', background:'rgba(45,212,160,0.06)', borderRadius:'8px', borderLeft:'3px solid #2DD4A0', marginTop:'6px' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'3px' }}>✅ Productos para escalar</div>
+                <div style={{ fontSize:'11px', color:'#8B96A8' }}>{calcTodos.filter(p=>p.margen_neto>=15).map(p=>p.nombre).join(', ')}</div>
+              </div>
+            )}
           </div>
         </div>
       )}
