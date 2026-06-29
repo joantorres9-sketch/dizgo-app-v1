@@ -293,6 +293,99 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
       })
     }
 
+    // ETAPA B BODEGA — mover inventario según estado, ciudad y modelo de negocio
+    if (pedido.producto_id) {
+      const { data: prod } = await supabase.from('productos').select('modelo_negocio').eq('id', pedido.producto_id).single()
+      const esBodegaPropia = prod?.modelo_negocio === 'bodega_propia' || prod?.modelo_negocio === 'hibrido'
+      const esDropshipping = !esBodegaPropia
+
+      if (esBodegaPropia) {
+        // Buscar bodega más cercana a la ciudad del pedido (primero ciudad exacta, luego general)
+        const { data: bodegaCiudad } = await supabase.from('bodegas').select('id')
+          .eq('tenant_id', pedido.tenant_id).eq('ciudad', pedido.cliente_ciudad).eq('activa', true).limit(1).single()
+        const { data: bodegaGeneral } = await supabase.from('bodegas').select('id')
+          .eq('tenant_id', pedido.tenant_id).eq('tipo', 'general').eq('activa', true).limit(1).single()
+        const bodegaId = bodegaCiudad?.id || bodegaGeneral?.id
+
+        if (bodegaId) {
+          const { data: inv } = await supabase.from('inventario').select('*')
+            .eq('tenant_id', pedido.tenant_id).eq('producto_id', pedido.producto_id).eq('bodega_id', bodegaId).single()
+
+          if (inv) {
+            if (nuevoEstado === 'confirmado' && pedido.estado !== 'confirmado') {
+              // CONFIRMAR → reservar 1 unidad
+              await supabase.from('inventario').update({
+                cantidad_disponible: Math.max(0, inv.cantidad_disponible-1),
+                cantidad_reservada: inv.cantidad_reservada+1,
+              }).eq('id', inv.id)
+              await supabase.from('movimientos_inventario').insert({
+                tenant_id: pedido.tenant_id, producto_id: pedido.producto_id, bodega_id_origen: bodegaId,
+                tipo: 'reserva', cantidad: 1, pedido_id: pedido.id, motivo: `Reserva confirmación — ${pedido.cliente_ciudad}`,
+              })
+              // Alerta si queda bajo el mínimo
+              if (inv.cantidad_disponible-1 <= inv.stock_minimo) {
+                await supabase.from('alertas').insert({
+                  tenant_id: pedido.tenant_id, tipo: 'atencion', categoria: 'operativa',
+                  titulo: `Stock bajo en ${pedido.cliente_ciudad}`,
+                  mensaje: `Quedan ${inv.cantidad_disponible-1} unidades disponibles. Considera traslado desde otra bodega o nueva compra.`,
+                  modulo: 'BODEGA', icono: '🚨',
+                })
+              }
+            } else if (nuevoEstado === 'despachado' && pedido.estado === 'confirmado') {
+              // DESPACHAR → descuento definitivo de reservado
+              await supabase.from('inventario').update({
+                cantidad_reservada: Math.max(0, inv.cantidad_reservada-1),
+              }).eq('id', inv.id)
+              await supabase.from('movimientos_inventario').insert({
+                tenant_id: pedido.tenant_id, producto_id: pedido.producto_id, bodega_id_origen: bodegaId,
+                tipo: 'venta', cantidad: 1, pedido_id: pedido.id, motivo: `Despacho a ${pedido.cliente_ciudad}`,
+              })
+            } else if (
+              (nuevoEstado === 'cancelado' || nuevoEstado === 'CANCELADO') &&
+              (pedido.estado === 'confirmado' || pedido.estado === 'CONFIRMADO')
+            ) {
+              // CANCELAR desde confirmado → liberar reserva
+              await supabase.from('inventario').update({
+                cantidad_disponible: inv.cantidad_disponible+1,
+                cantidad_reservada: Math.max(0, inv.cantidad_reservada-1),
+              }).eq('id', inv.id)
+              await supabase.from('movimientos_inventario').insert({
+                tenant_id: pedido.tenant_id, producto_id: pedido.producto_id, bodega_id_origen: bodegaId,
+                tipo: 'liberacion', cantidad: 1, pedido_id: pedido.id, motivo: 'Cancelación — reserva liberada',
+              })
+            } else if (nuevoEstado === 'devolucion' || nuevoEstado === 'DEVOLUCION') {
+              // DEVOLUCIÓN → ingresa a dañado/pendiente inspección (no vuelve directo a disponible)
+              await supabase.from('inventario').update({
+                cantidad_dañada: inv.cantidad_dañada+1,
+              }).eq('id', inv.id)
+              await supabase.from('movimientos_inventario').insert({
+                tenant_id: pedido.tenant_id, producto_id: pedido.producto_id, bodega_id_origen: bodegaId,
+                tipo: 'devolucion', cantidad: 1, pedido_id: pedido.id, motivo: 'Devolución — pendiente inspección',
+              })
+            }
+          }
+        }
+      }
+
+      // Dropshipping → mover piscina virtual
+      if (esDropshipping) {
+        const piscinaMap: Record<string, string> = {
+          confirmado: 'confirmado', CONFIRMADO: 'confirmado',
+          despachado: 'recolectado', DESPACHADO: 'recolectado',
+          en_transito: 'en_transito', EN_TRANSITO: 'en_transito',
+          entregado: 'entregado', ENTREGADO: 'entregado',
+          devolucion: 'devuelto', DEVOLUCION: 'devuelto',
+        }
+        const nuevaPiscina = piscinaMap[nuevoEstado]
+        if (nuevaPiscina) {
+          await supabase.from('pedido_piscinas').upsert({
+            tenant_id: pedido.tenant_id, pedido_id: pedido.id, piscina: nuevaPiscina,
+            fecha_entrada_piscina: new Date().toISOString(),
+          }, { onConflict: 'pedido_id,piscina' })
+        }
+      }
+    }
+
     setSaving(false); onUpdate()
     setTimeline(t=>[{id:'new',action_type:'status_change',description:`Estado: ${nuevoEstado}`,trigger_by:'human',created_at:new Date().toISOString()},...t])
   }

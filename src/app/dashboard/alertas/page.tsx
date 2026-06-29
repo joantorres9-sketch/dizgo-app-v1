@@ -157,6 +157,31 @@ export default function AlertasPage() {
       })
     }
 
+    // BODEGA — stock bajo e inventario en riesgo
+    const { data: stockBajo } = await supabase.from('inventario').select('producto_id, bodega_id, cantidad_disponible, stock_minimo')
+      .eq('tenant_id', tid).lt('cantidad_disponible', 5)
+    if ((stockBajo||[]).length > 0) {
+      const titulo = `${stockBajo!.length} producto(s) con stock crítico en bodega`
+      if (!yaExiste(titulo)) nuevasAutomaticas.push({
+        tipo:'critico', categoria:'operativa', titulo,
+        mensaje:`Hay ${stockBajo!.length} producto(s) con menos de 5 unidades disponibles. Revisa el módulo Bodega para sugerencias de traslado o compra.`,
+        accion:'Ir a Bodega → Stock por bodega → gestionar quiebre',
+        modulo:'BODEGA', valor:`${stockBajo!.length} productos`, icono:'🚨',
+      })
+    }
+
+    const { data: riesgosProd } = await supabase.from('alertas_riesgo_producto')
+      .select('tipo_riesgo, recomendacion, producto_id').eq('tenant_id', tid).eq('resuelta', false).limit(5)
+    if ((riesgosProd||[]).length > 0) {
+      const titulo = `${riesgosProd!.length} producto(s) en riesgo de pérdida de valor`
+      if (!yaExiste(titulo)) nuevasAutomaticas.push({
+        tipo:'atencion', categoria:'operativa', titulo,
+        mensaje:`La IA detectó productos con riesgo: ${Array.from(new Set(riesgosProd!.map((r:{tipo_riesgo:string}) => r.tipo_riesgo))).join(', ')}. Toma acción antes de perder valor.`,
+        accion:'Ir a Bodega → Riesgo IA → revisar recomendaciones',
+        modulo:'BODEGA', valor:`${riesgosProd!.length} en riesgo`, icono:'⚠️',
+      })
+    }
+
     if (nuevasAutomaticas.length > 0) {
       const { data: inserted } = await supabase.from('alertas').insert(
         nuevasAutomaticas.map(a => ({ ...a, tenant_id: tid, activa: true, leida: false, publicada_por: null }))
