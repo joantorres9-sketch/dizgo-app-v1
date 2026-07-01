@@ -31,7 +31,7 @@ const NAV = [
     { group:'ACTUAR', color:'#9B6BFF', items:[
     { href:'/dashboard/formacion', icon:'🎓', label:'Formación' },
     { href:'/dashboard/agentes',   icon:'🤖', label:'Agentes IA' },
-    ]},
+  ]},
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
