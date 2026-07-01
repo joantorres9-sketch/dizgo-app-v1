@@ -4,21 +4,27 @@ import { usePathname } from 'next/navigation'
 
 const NAV = [
   { group:'PLANEAR', color:'#3D8EF0', items:[
-    { href:'/dashboard', icon:'⊞', label:'Inicio' },
-    { href:'/dashboard/costos', icon:'📊', label:'Costos Fijos' },
+    { href:'/dashboard',           icon:'⊞',  label:'Inicio' },
+    { href:'/dashboard/nomina',    icon:'👥', label:'Nómina' },
+    { href:'/dashboard/costos',    icon:'📊', label:'Costos Fijos' },
     { href:'/dashboard/productos', icon:'🛍️', label:'Catálogo' },
-    { href:'/dashboard/precio', icon:'💡', label:'Precio & Costeo' },
+    { href:'/dashboard/precio',    icon:'💡', label:'Precio & Costeo' },
     { href:'/dashboard/inversion', icon:'💰', label:'Inversión' },
-    { href:'/dashboard/equilibrio', icon:'⚖️', label:'Punto Equilibrio' },
-    { href:'/dashboard/metas', icon:'🎯', label:'Metas' },
+    { href:'/dashboard/equilibrio',icon:'⚖️', label:'Punto Equilibrio' },
+    { href:'/dashboard/metas',     icon:'🎯', label:'Metas' },
   ]},
   { group:'HACER', color:'#2DD4A0', items:[
-    { href:'/dashboard/pedidos', icon:'📦', label:'Pedidos' },
-    { href:'/dashboard/wallet', icon:'💳', label:'Wallet Dropi' },
+    { href:'/dashboard/pedidos',   icon:'📦', label:'Pedidos' },
+    { href:'/dashboard/whatsapp',  icon:'💬', label:'Centro Contacto' },
+    { href:'/dashboard/logistica', icon:'🚚', label:'Logística' },
+    { href:'/dashboard/pauta',     icon:'📡', label:'Pauta Meta/TikTok' },
+    { href:'/dashboard/wallet',    icon:'💳', label:'Wallet Dropi' },
+    { href:'/dashboard/pqrsf',     icon:'📬', label:'PQRSF' },
+    { href:'/dashboard/bodega',    icon:'🏭', label:'Bodega' },
   ]},
   { group:'VERIFICAR', color:'#F5A623', items:[
-    { href:'/dashboard/pyg', icon:'🏛️', label:'P&G Dashboard' },
-    { href:'/dashboard/embudo', icon:'🌀', label:'Embudo' },
+    { href:'/dashboard/pyg',     icon:'🏛️', label:'P&G Dashboard' },
+    { href:'/dashboard/embudo',  icon:'🌀', label:'Embudo' },
     { href:'/dashboard/alertas', icon:'🚨', label:'Alertas' },
   ]},
   { group:'ACTUAR', color:'#9B6BFF', items:[
@@ -57,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           ))}
         </nav>
         <div style={{ padding:'12px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'8px', textAlign:'center' }}>DIZGO v1.0 · Beta</div>
+          <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'8px', textAlign:'center' }}>DIZGO v2.0 · COP</div>
           <Link href="/auth/login" style={{ display:'block', textAlign:'center', padding:'7px', background:'rgba(255,255,255,0.04)', borderRadius:'8px', color:'#5A6478', textDecoration:'none', fontSize:'12px' }}>Cerrar sesión</Link>
         </div>
       </aside>
