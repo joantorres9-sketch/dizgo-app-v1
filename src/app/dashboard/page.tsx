@@ -424,4 +424,3 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
     </div>
   )
 }
-    </div>
