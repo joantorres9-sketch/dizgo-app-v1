@@ -71,7 +71,7 @@ export default function CazadorProductosPage() {
     const ventas = entregados.reduce((a,p)=>a+Number(p.pvp||0),0)
     const ganancia = entregados.reduce((a,p)=>a+Number(p.ganancia||0),0)
 
-    const inv_pauta = (pauta||[]).reduce((a:{inversion:number},r)=>a+Number(r?.inversion||0),0)
+    const inv_pauta = (pauta||[]).reduce((a:number,r:{inversion:number})=>a+Number(r?.inversion||0),0)
     const resultados = (pauta||[]).reduce((a:number,r:{resultados:number})=>a+Number(r?.resultados||0),0)
     const cf = (costos||[]).reduce((a:number,c:{total:number})=>a+Number(c?.total||0),0)
 
