@@ -166,11 +166,10 @@ export default function AdminPage() {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id, pais_codigo').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
     if (!profile?.tenant_id) { setLoading(false); return }
     const tid = profile.tenant_id
     setTenantId(tid)
-    if (profile.pais_codigo) setPaisCodigo(profile.pais_codigo)
 
     const [{ count: c1 }, { count: c2 }, { count: c3 }, { count: c4 }] = await Promise.all([
       supabase.from('productos').select('id', { count: 'exact', head: true }).eq('tenant_id', tid),
@@ -206,7 +205,11 @@ export default function AdminPage() {
   }
 
   async function ejecutarSeed() {
-    if (!tenantId) return
+    if (!tenantId) {
+      addLog('❌ Error: no se pudo obtener el tenant. Recarga la página e intenta de nuevo.')
+      return
+    }
+    addLog(`🚀 Iniciando seed para ${CONFIG_PAIS[paisCodigo]?.nombre || paisCodigo}... tenant: ${tenantId.slice(0,8)}`)
     setSeedActivo(true)
     const cfg = CONFIG_PAIS[paisCodigo] || CONFIG_PAIS.COL
     const hoy = new Date()
