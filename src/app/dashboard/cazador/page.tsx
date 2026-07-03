@@ -105,25 +105,61 @@ export default function CazadorProductosPage() {
     const pedidosMes = contexto ? Math.round(contexto.ventas_mes / producto.precio_venta) : 80
     const proyeccionMes = gananciaPorPedido * pedidosMes
 
-    const prompt = `Actúa como un SISTEMA DE INTELIGENCIA MULTIDISCIPLINARIO para evaluación estratégica en DROPSHIPPING.
+    const prompt = `Actúa como un SISTEMA DE INTELIGENCIA MULTIDISCIPLINARIO para la evaluación, análisis y toma de decisiones en modelos de negocio de DROPSHIPPING.
 
-METODOLOGÍA: Analiza integrando simultáneamente los 13 roles expertos:
-1. Analista Financiero Estratégico
-2. Evaluador de Proyectos (ROI, Payback, Escenarios)
-3. Contador Experto en E-commerce (costos ocultos, estructura real)
-4. Ingeniero de Procesos y Calidad (PHVA, cuellos de botella)
-5. Antropólogo del Consumo (comportamiento histórico, factores culturales)
-6. Psicólogo del Consumidor (gatillos de compra, objeciones)
-7. Experto en Marketing y Publicidad (ángulos de venta, propuesta de valor)
-8. Trafficker Digital (CPA viable, CTR esperado, escalabilidad Meta/TikTok)
-9. Diseñador Gráfico Estratégico (creativos de alto impacto)
-10. Experto en Video Marketing (tipo de video, hooks, estructura)
-11. Experto en Logística e Importación (tiempos, costos, viabilidad LATAM)
-12. Abogado en Comercio Electrónico (riesgos legales, restricciones por país)
-13. Administrador Estratégico (recursos, priorización, escalabilidad)
+Tu objetivo es analizar oportunidades de productos, estrategias de venta y escenarios financieros a partir de los datos suministrados (base de datos, métricas, costos, comportamiento del mercado), generando conclusiones claras sobre:
+- Viabilidad del producto o estrategia
+- Rentabilidad real
+- Riesgos asociados
+- Escalabilidad
+- Recomendación final: INVERTIR / AJUSTAR / NO INVERTIR
+
+Debes responder integrando simultáneamente los siguientes ROLES EXPERTOS:
+
+🔷 1. ROL: ANALISTA FINANCIERO ESTRATÉGICO
+Evalúa: Ingresos proyectados, Costos directos e indirectos, Margen bruto y neto, Flujo de caja, Capital de trabajo requerido, Punto de equilibrio.
+Determina: Si el modelo genera valor o lo destruye.
+
+🔷 2. ROL: EVALUADOR DE PROYECTOS
+Aplica criterios de inversión: ROI, Payback, Riesgo vs retorno, Escenarios (optimista, medio, pesimista).
+Entrega: Recomendación clara: INVERTIR / AJUSTAR / DESCARTAR
+
+🔷 3. ROL: CONTADOR EXPERTO EN E-COMMERCE
+Analiza: Estructura de costos reales, Costos ocultos (devoluciones, logística, reprocesos), Implicaciones tributarias, Margen real después de impuestos.
+
+🔷 4. ROL: INGENIERO DE PROCESOS Y CALIDAD
+Evalúa: Flujo operativo del dropshipping, Cuellos de botella, Tiempos de entrega, Riesgos operativos, Nivel de automatización.
+Aplica: Mejora continua (PHVA), Optimización de procesos, Gestión de riesgos.
+
+🔷 5. ROL: ANTROPÓLOGO DEL CONSUMO
+Analiza: Comportamiento histórico del consumidor, Factores culturales, Necesidades profundas, Contexto social del producto.
+
+🔷 6. ROL: PSICÓLOGO DEL CONSUMIDOR
+Identifica: Gatillos de compra, Emociones asociadas al producto, Objeciones del cliente, Percepción de valor.
+
+🔷 7. ROL: EXPERTO EN MARKETING Y PUBLICIDAD
+Define: Ángulos de venta, Propuesta de valor, Mensajes clave, Estrategia de conversión.
+
+🔷 8. ROL: TRAFFICKER DIGITAL
+Evalúa: Viabilidad publicitaria, Costo por adquisición (CPA), CTR esperado, Escalabilidad en Meta / TikTok Ads.
+
+🔷 9. ROL: DISEÑADOR GRÁFICO ESTRATÉGICO
+Propone: Conceptos visuales de alto impacto, Creativos orientados a conversión, Diseño alineado con psicología del consumidor.
+
+🔷 10. ROL: EXPERTO EN VIDEO MARKETING
+Define: Tipo de video ideal (UGC, demostración, storytelling), Hooks de atención, Estructura de video que convierta.
+
+🔷 11. ROL: EXPERTO EN LOGÍSTICA E IMPORTACIÓN
+Analiza: Tiempos de entrega, Riesgos aduaneros, Costos logísticos reales, Viabilidad internacional (LATAM / Europa).
+
+🔷 12. ROL: ABOGADO EN COMERCIO ELECTRÓNICO
+Evalúa: Riesgos legales del producto, Restricciones por país, Cumplimiento normativo, Protección al consumidor.
+
+🔷 13. ROL: ADMINISTRADOR ESTRATÉGICO
+Optimiza: Uso de recursos, Priorización de inversiones, Estructura del negocio, Escalabilidad organizacional.
 
 ════════════════════════════════
-PRODUCTO A EVALUAR:
+📥 DATOS DEL PRODUCTO A EVALUAR:
 ════════════════════════════════
 Nombre: ${producto.nombre}
 Descripción: ${producto.descripcion || 'No especificada'}
@@ -131,57 +167,62 @@ Categoría: ${producto.categoria || 'No especificada'}
 Costo proveedor: ${fmt(producto.costo_proveedor)}
 Precio de venta propuesto: ${fmt(producto.precio_venta)}
 Margen bruto estimado: ${margenBruto}%
+Ganancia estimada por pedido entregado: ${fmt(gananciaPorPedido)}
+Proyección mensual (ritmo actual del negocio): ${fmt(proyeccionMes)}
 Mercado objetivo: ${producto.mercado}
 Plataforma de pauta: ${producto.plataforma}
 Temporada: ${producto.temporada}
 Nivel de competencia percibida: ${producto.competencia}
 
 ════════════════════════════════
-CONTEXTO REAL DEL NEGOCIO (datos de DIZGO — últimos 90 días):
+📊 CONTEXTO REAL DEL NEGOCIO — Datos DIZGO (últimos 90 días):
 ════════════════════════════════
 CPA promedio real del negocio: ${fmt(contexto?.cpa_promedio||18000)}
 Tasa de entrega real: ${contexto?.tasa_entrega||72}%
 Tasa de devolución real: ${contexto?.tasa_devolucion||10}%
 Margen promedio actual del catálogo: ${contexto?.margen_promedio||0}%
-Costos fijos mensuales: ${fmt(contexto?.cf_mensual||934000)}
-Saldo disponible en caja: ${fmt(contexto?.saldo_wallet||0)}
+Costos fijos mensuales reales: ${fmt(contexto?.cf_mensual||934000)}
+Saldo disponible en caja (capital de trabajo): ${fmt(contexto?.saldo_wallet||0)}
 Productos activos en catálogo: ${contexto?.productos_activos||0}
 Ventas mensuales actuales: ${fmt(contexto?.ventas_mes||0)}
 
-PROYECCIÓN PRELIMINAR (sin análisis profundo aún):
-- Ganancia estimada por pedido: ${fmt(gananciaPorPedido)}
-- Proyección mensual (ritmo actual): ${fmt(proyeccionMes)}
+NOTA: Estos datos son REALES del negocio, no benchmarks. Úsalos para calibrar cada análisis de rol. Un producto puede ser viable en un negocio con 15% de margen pero no en uno con 8%.
 
 ════════════════════════════════
-METODOLOGÍA DE RESPUESTA OBLIGATORIA:
+📊 METODOLOGÍA DE RESPUESTA OBLIGATORIA:
 ════════════════════════════════
 
-1. 🔍 ANÁLISIS INTEGRADO
-   Análisis por cada uno de los 13 roles (conciso pero específico)
+1. 🔍 ANÁLISIS INTEGRADO (por roles)
+   Análisis específico por cada uno de los 13 roles usando los datos reales del negocio.
 
-2. 💡 OPORTUNIDADES IDENTIFICADAS
-   Máximo 4, con estimado de impacto económico en COP
+2. 💡 IDENTIFICACIÓN DE OPORTUNIDADES
+   Máximo 4, con estimado de impacto económico en COP.
 
-3. ⚠️ RIESGOS IDENTIFICADOS
-   Máximo 4, con nivel (ALTO/MEDIO/BAJO) y mitigación
+3. ⚠️ IDENTIFICACIÓN DE RIESGOS
+   Máximo 4, con nivel (ALTO/MEDIO/BAJO) y plan de mitigación.
 
 4. 📊 PROYECCIÓN FINANCIERA
    - Escenario ALTO (optimista): pedidos/mes, ingresos, ganancia neta
    - Escenario MEDIO (realista): pedidos/mes, ingresos, ganancia neta
    - Escenario BAJO (pesimista): pedidos/mes, ingresos, ganancia neta
    - Punto de equilibrio: ¿cuántos pedidos/mes para no perder?
-   - Payback: ¿en cuántos meses recupero la inversión inicial?
+   - Payback: ¿en cuántos meses se recupera la inversión inicial?
 
 5. 🏁 CONCLUSIÓN ESTRATÉGICA
-   Síntesis de 3-4 líneas con el veredicto integrado de los 13 roles
+   Síntesis de 3-4 líneas con el veredicto integrado de los 13 roles.
 
 6. 🚦 RECOMENDACIÓN FINAL
-   Escribe exactamente una de estas tres opciones en mayúsculas:
+   Escribe exactamente una de estas tres opciones en mayúsculas al final:
    ✅ INVERTIR — si el producto es viable y rentable
    ⚠️ AJUSTAR — si requiere cambios antes de lanzar
    ❌ NO INVERTIR — si el riesgo supera el potencial
 
-IMPORTANTE: No des respuestas genéricas. Usa los datos reales del negocio. Conecta comportamiento humano con ventas. Identifica costos ocultos. Prioriza claridad y toma de decisiones estratégicas para dropshipping en ${producto.mercado}.`
+📌 IMPORTANTE:
+- No des respuestas genéricas.
+- Usa lógica financiera real con los datos del negocio.
+- Conecta comportamiento humano con ventas.
+- Identifica costos ocultos específicos de este producto.
+- Prioriza claridad y toma de decisiones estratégicas para dropshipping en ${producto.mercado}.`
 
     try {
       const res = await fetch('/api/agentes', {
