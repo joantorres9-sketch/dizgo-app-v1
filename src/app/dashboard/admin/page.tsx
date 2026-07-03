@@ -221,7 +221,7 @@ export default function AdminPage() {
     setProgreso(p => ({ ...p, productos: 'cargando' }))
     addLog(`🛍️ Cargando ${cfg.productos.length} productos para ${cfg.nombre}...`)
     try {
-      const { data: prodsInserted } = await supabase.from('productos').insert(
+      const { data: prodsInserted, error: prodsError } = await supabase.from('productos').insert(
         cfg.productos.map(p => ({
           tenant_id: tenantId, nombre: p.nombre, tipo: 'producto', estado: 'activo',
           modelo_negocio: 'dropshipping', descripcion: p.descripcion,
@@ -236,8 +236,28 @@ export default function AdminPage() {
           cpa_maximo: Math.round(p.pvp * 0.22),
           disponible_dropshippers: true, categoria: p.categoria,
         }))
-      ).select()
-      const prodIds = (prodsInserted || []).map((p: {id:string;nombre:string}) => ({ id: p.id, nombre: p.nombre, pvp: cfg.productos.find(x => x.nombre === p.nombre)?.pvp || 0, costo: cfg.productos.find(x => x.nombre === p.nombre)?.costo || 0 }))
+      ).select('id, nombre, pvp_final, costo_proveedor')
+
+      if (prodsError) {
+        addLog(`❌ Error insertando productos: ${prodsError.message}`)
+        setProgreso(p => ({ ...p, productos: 'error' }))
+        setSeedActivo(false)
+        return
+      }
+
+      const prodIds = (prodsInserted || []).map((p: {id:string;nombre:string;pvp_final:number;costo_proveedor:number}) => ({
+        id: p.id,
+        nombre: p.nombre,
+        pvp: p.pvp_final,
+        costo: p.costo_proveedor
+      }))
+
+      if (prodIds.length === 0) {
+        addLog('❌ No se crearon productos. Verifica que no existan duplicados o que RLS lo permita.')
+        setProgreso(p => ({ ...p, productos: 'error' }))
+        setSeedActivo(false)
+        return
+      }
       setProgreso(p => ({ ...p, productos: 'ok' }))
       addLog(`✅ ${prodIds.length} productos creados`)
 
