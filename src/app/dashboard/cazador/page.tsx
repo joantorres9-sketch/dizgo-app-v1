@@ -105,67 +105,142 @@ export default function CazadorProductosPage() {
     const pedidosMes = contexto ? Math.round(contexto.ventas_mes / producto.precio_venta) : 80
     const proyeccionMes = gananciaPorPedido * pedidosMes
 
-    const prompt = `Actúa como un SISTEMA DE INTELIGENCIA MULTIDISCIPLINARIO para la evaluación, análisis y toma de decisiones en modelos de negocio de DROPSHIPPING.
+    const prompt = `🧠 PROMPT MAESTRO — PROYECTO "FINANZAS EN EL DROPSHIPPING – MODELO DE DECISIÓN ESTRATÉGICA"
 
-Tu objetivo es analizar oportunidades de productos, estrategias de venta y escenarios financieros a partir de los datos suministrados (base de datos, métricas, costos, comportamiento del mercado), generando conclusiones claras sobre:
+Actúa como un SISTEMA DE INTELIGENCIA MULTIDISCIPLINARIO para la evaluación, análisis y toma de decisiones en modelos de negocio de DROPSHIPPING.
+
+Tu objetivo es analizar oportunidades de productos, estrategias de venta y escenarios financieros a partir de datos suministrados (base de datos, métricas, costos, comportamiento del mercado), generando conclusiones claras sobre:
+
 - Viabilidad del producto o estrategia
 - Rentabilidad real
 - Riesgos asociados
 - Escalabilidad
-- Recomendación final: INVERTIR / AJUSTAR / NO INVERTIR
+- Recomendación final: INVERTIR o NO INVERTIR
 
 Debes responder integrando simultáneamente los siguientes ROLES EXPERTOS:
 
 🔷 1. ROL: ANALISTA FINANCIERO ESTRATÉGICO
-Evalúa: Ingresos proyectados, Costos directos e indirectos, Margen bruto y neto, Flujo de caja, Capital de trabajo requerido, Punto de equilibrio.
-Determina: Si el modelo genera valor o lo destruye.
+Evalúa:
+- Ingresos proyectados
+- Costos directos e indirectos
+- Margen bruto y neto
+- Flujo de caja
+- Capital de trabajo requerido
+- Punto de equilibrio
+Determina:
+👉 Si el modelo genera valor o lo destruye.
 
 🔷 2. ROL: EVALUADOR DE PROYECTOS
-Aplica criterios de inversión: ROI, Payback, Riesgo vs retorno, Escenarios (optimista, medio, pesimista).
-Entrega: Recomendación clara: INVERTIR / AJUSTAR / DESCARTAR
+Aplica criterios de inversión:
+- ROI
+- Payback
+- Riesgo vs retorno
+- Escenarios (optimista, medio, pesimista)
+Entrega:
+👉 Recomendación clara: INVERTIR / AJUSTAR / DESCARTAR
 
 🔷 3. ROL: CONTADOR EXPERTO EN E-COMMERCE
-Analiza: Estructura de costos reales, Costos ocultos (devoluciones, logística, reprocesos), Implicaciones tributarias, Margen real después de impuestos.
+Analiza:
+- Estructura de costos reales
+- Costos ocultos (devoluciones, logística, reprocesos)
+- Implicaciones tributarias
+- Margen real después de impuestos
 
 🔷 4. ROL: INGENIERO DE PROCESOS Y CALIDAD
-Evalúa: Flujo operativo del dropshipping, Cuellos de botella, Tiempos de entrega, Riesgos operativos, Nivel de automatización.
-Aplica: Mejora continua (PHVA), Optimización de procesos, Gestión de riesgos.
+Evalúa:
+- Flujo operativo del dropshipping
+- Cuellos de botella
+- Tiempos de entrega
+- Riesgos operativos
+- Nivel de automatización
+Aplica:
+- Mejora continua (PHVA)
+- Optimización de procesos
+- Gestión de riesgos
 
 🔷 5. ROL: ANTROPÓLOGO DEL CONSUMO
-Analiza: Comportamiento histórico del consumidor, Factores culturales, Necesidades profundas, Contexto social del producto.
+Analiza:
+- Comportamiento histórico del consumidor
+- Factores culturales
+- Necesidades profundas
+- Contexto social del producto
 
 🔷 6. ROL: PSICÓLOGO DEL CONSUMIDOR
-Identifica: Gatillos de compra, Emociones asociadas al producto, Objeciones del cliente, Percepción de valor.
+Identifica:
+- Gatillos de compra
+- Emociones asociadas al producto
+- Objeciones del cliente
+- Percepción de valor
 
 🔷 7. ROL: EXPERTO EN MARKETING Y PUBLICIDAD
-Define: Ángulos de venta, Propuesta de valor, Mensajes clave, Estrategia de conversión.
+Define:
+- Ángulos de venta
+- Propuesta de valor
+- Mensajes clave
+- Estrategia de conversión
 
 🔷 8. ROL: TRAFFICKER DIGITAL
-Evalúa: Viabilidad publicitaria, Costo por adquisición (CPA), CTR esperado, Escalabilidad en Meta / TikTok Ads.
+Evalúa:
+- Viabilidad publicitaria
+- Costo por adquisición (CPA)
+- CTR esperado
+- Escalabilidad en Meta / TikTok Ads
 
 🔷 9. ROL: DISEÑADOR GRÁFICO ESTRATÉGICO
-Propone: Conceptos visuales de alto impacto, Creativos orientados a conversión, Diseño alineado con psicología del consumidor.
+Propone:
+- Conceptos visuales de alto impacto
+- Creativos orientados a conversión
+- Diseño alineado con psicología del consumidor
 
 🔷 10. ROL: EXPERTO EN VIDEO MARKETING
-Define: Tipo de video ideal (UGC, demostración, storytelling), Hooks de atención, Estructura de video que convierta.
+Define:
+- Tipo de video ideal (UGC, demostración, storytelling)
+- Hooks de atención
+- Estructura de video que convierta
 
 🔷 11. ROL: EXPERTO EN LOGÍSTICA E IMPORTACIÓN
-Analiza: Tiempos de entrega, Riesgos aduaneros, Costos logísticos reales, Viabilidad internacional (LATAM / Europa).
+Analiza:
+- Tiempos de entrega
+- Riesgos aduaneros
+- Costos logísticos reales
+- Viabilidad internacional (LATAM / Europa)
 
 🔷 12. ROL: ABOGADO EN COMERCIO ELECTRÓNICO
-Evalúa: Riesgos legales del producto, Restricciones por país, Cumplimiento normativo, Protección al consumidor.
+Evalúa:
+- Riesgos legales del producto
+- Restricciones por país
+- Cumplimiento normativo
+- Protección al consumidor
 
 🔷 13. ROL: ADMINISTRADOR ESTRATÉGICO
-Optimiza: Uso de recursos, Priorización de inversiones, Estructura del negocio, Escalabilidad organizacional.
+Optimiza:
+- Uso de recursos
+- Priorización de inversiones
+- Estructura del negocio
+- Escalabilidad organizacional
 
-════════════════════════════════
-📥 DATOS DEL PRODUCTO A EVALUAR:
-════════════════════════════════
-Nombre: ${producto.nombre}
+📊 METODOLOGÍA DE RESPUESTA (OBLIGATORIA):
+1. ANÁLISIS INTEGRADO (por roles)
+2. IDENTIFICACIÓN DE OPORTUNIDADES
+3. IDENTIFICACIÓN DE RIESGOS
+4. PROYECCIÓN FINANCIERA
+5. ESCENARIOS (alto, medio, bajo)
+6. CONCLUSIÓN ESTRATÉGICA
+7. RECOMENDACIÓN FINAL: 👉 INVERTIR / AJUSTAR / NO INVERTIR
+
+📌 IMPORTANTE:
+- No des respuestas genéricas.
+- Usa lógica financiera real.
+- Conecta comportamiento humano con ventas.
+- Identifica costos ocultos.
+- Prioriza claridad y toma de decisiones.
+
+📥 INPUT SUMINISTRADO POR DIZGO:
+Nombre del producto: ${producto.nombre}
 Descripción: ${producto.descripcion || 'No especificada'}
 Categoría: ${producto.categoria || 'No especificada'}
 Costo proveedor: ${fmt(producto.costo_proveedor)}
-Precio de venta propuesto: ${fmt(producto.precio_venta)}
+Precio de venta: ${fmt(producto.precio_venta)}
 Margen bruto estimado: ${margenBruto}%
 Ganancia estimada por pedido entregado: ${fmt(gananciaPorPedido)}
 Proyección mensual (ritmo actual del negocio): ${fmt(proyeccionMes)}
@@ -174,55 +249,23 @@ Plataforma de pauta: ${producto.plataforma}
 Temporada: ${producto.temporada}
 Nivel de competencia percibida: ${producto.competencia}
 
-════════════════════════════════
 📊 CONTEXTO REAL DEL NEGOCIO — Datos DIZGO (últimos 90 días):
-════════════════════════════════
-CPA promedio real del negocio: ${fmt(contexto?.cpa_promedio||18000)}
+CPA promedio real: ${fmt(contexto?.cpa_promedio||18000)}
 Tasa de entrega real: ${contexto?.tasa_entrega||72}%
 Tasa de devolución real: ${contexto?.tasa_devolucion||10}%
 Margen promedio actual del catálogo: ${contexto?.margen_promedio||0}%
 Costos fijos mensuales reales: ${fmt(contexto?.cf_mensual||934000)}
-Saldo disponible en caja (capital de trabajo): ${fmt(contexto?.saldo_wallet||0)}
+Capital de trabajo disponible (caja): ${fmt(contexto?.saldo_wallet||0)}
 Productos activos en catálogo: ${contexto?.productos_activos||0}
 Ventas mensuales actuales: ${fmt(contexto?.ventas_mes||0)}
 
-NOTA: Estos datos son REALES del negocio, no benchmarks. Úsalos para calibrar cada análisis de rol. Un producto puede ser viable en un negocio con 15% de margen pero no en uno con 8%.
+⚠️ NOTA CRÍTICA: Estos datos son REALES del negocio, no benchmarks del mercado.
+Calibra cada análisis de rol con estos números. Un producto viable para un negocio
+con 15% de margen puede destruir valor en uno con 8%.
 
-════════════════════════════════
-📊 METODOLOGÍA DE RESPUESTA OBLIGATORIA:
-════════════════════════════════
-
-1. 🔍 ANÁLISIS INTEGRADO (por roles)
-   Análisis específico por cada uno de los 13 roles usando los datos reales del negocio.
-
-2. 💡 IDENTIFICACIÓN DE OPORTUNIDADES
-   Máximo 4, con estimado de impacto económico en COP.
-
-3. ⚠️ IDENTIFICACIÓN DE RIESGOS
-   Máximo 4, con nivel (ALTO/MEDIO/BAJO) y plan de mitigación.
-
-4. 📊 PROYECCIÓN FINANCIERA
-   - Escenario ALTO (optimista): pedidos/mes, ingresos, ganancia neta
-   - Escenario MEDIO (realista): pedidos/mes, ingresos, ganancia neta
-   - Escenario BAJO (pesimista): pedidos/mes, ingresos, ganancia neta
-   - Punto de equilibrio: ¿cuántos pedidos/mes para no perder?
-   - Payback: ¿en cuántos meses se recupera la inversión inicial?
-
-5. 🏁 CONCLUSIÓN ESTRATÉGICA
-   Síntesis de 3-4 líneas con el veredicto integrado de los 13 roles.
-
-6. 🚦 RECOMENDACIÓN FINAL
-   Escribe exactamente una de estas tres opciones en mayúsculas al final:
-   ✅ INVERTIR — si el producto es viable y rentable
-   ⚠️ AJUSTAR — si requiere cambios antes de lanzar
-   ❌ NO INVERTIR — si el riesgo supera el potencial
-
-📌 IMPORTANTE:
-- No des respuestas genéricas.
-- Usa lógica financiera real con los datos del negocio.
-- Conecta comportamiento humano con ventas.
-- Identifica costos ocultos específicos de este producto.
-- Prioriza claridad y toma de decisiones estratégicas para dropshipping en ${producto.mercado}.`
+📤 OUTPUT ESPERADO:
+Un informe estructurado, claro y accionable que permita tomar decisiones estratégicas
+en el negocio de dropshipping para ${producto.mercado}.`
 
     try {
       const res = await fetch('/api/agentes', {
@@ -235,9 +278,9 @@ NOTA: Estos datos son REALES del negocio, no benchmarks. Úsalos para calibrar c
       setInforme(texto)
 
       // Detectar recomendación final
-      if (texto.includes('✅ INVERTIR') || texto.includes('INVERTIR')) setRecomendacion('INVERTIR')
+      if (texto.includes('✅ INVERTIR') || (texto.includes('INVERTIR') && !texto.includes('NO INVERTIR'))) setRecomendacion('INVERTIR')
       else if (texto.includes('⚠️ AJUSTAR') || texto.includes('AJUSTAR')) setRecomendacion('AJUSTAR')
-      else if (texto.includes('❌ NO INVERTIR') || texto.includes('NO INVERTIR')) setRecomendacion('NO INVERTIR')
+      else if (texto.includes('❌ NO INVERTIR') || texto.includes('NO INVERTIR') || texto.includes('DESCARTAR')) setRecomendacion('NO INVERTIR')
 
       // Guardar log
       if (tenantId) {
