@@ -367,7 +367,12 @@ const PASOS_SEED = [
   { key: 'nomina', label: '👥 Nómina', desc: '2 colaboradores + tasas por país' },
   { key: 'inversion', label: '💰 Inversión', desc: '3 activos fijos + 1 crédito capital trabajo' },
   { key: 'cxp', label: '📋 Cuentas por Pagar', desc: '5 CXP (1 vencida para demo)' },
-  { key: 'metas_diarias', label: '📅 Seguimiento Diario', desc: '30 días de avance diario real' },
+  { key: 'metas_diarias',     label: '📅 Seguimiento Diario', desc: '30 días de avance diario real' },
+  { key: 'nomina_procesos',   label: '🏢 Procesos Nómina',   desc: '3 procesos organizacionales' },
+  { key: 'inversion_capital', label: '💼 Capital & Socios',  desc: 'Capital propio + socio fundador' },
+  { key: 'equilibrio',        label: '⚖️ Punto Equilibrio',  desc: 'PE configurado por mes y país' },
+  { key: 'whatsapp',          label: '💬 Centro Contacto',   desc: '5 templates WhatsApp + contexto tienda' },
+  { key: 'logistica',         label: '🚚 Logística',         desc: 'Transportadoras + 7 scripts novedades IA' },
 ]
 
 function rnd(arr: unknown[]) { return arr[Math.floor(Math.random() * arr.length)] }
@@ -868,6 +873,166 @@ export default function AdminPage() {
       await supabase.from('metas_seguimiento_diario').insert(metasDiarias)
       setProgreso(p => ({ ...p, metas_diarias: 'ok' }))
       addLog(`✅ 30 días de seguimiento diario cargados`)
+
+      // ── NÓMINA — procesos organizacionales ───────────────────
+      setProgreso(p => ({ ...p, nomina_procesos: 'cargando' }))
+      addLog('🏢 Cargando procesos organizacionales...')
+      await supabase.from('nomina_procesos').insert([
+        { tenant_id: tenantId, nombre: 'Operaciones', descripcion: 'Confirmación, despacho y seguimiento de pedidos', orden: 1, activo: true },
+        { tenant_id: tenantId, nombre: 'Administración', descripcion: 'Gestión financiera, contable y administrativa', orden: 2, activo: true },
+        { tenant_id: tenantId, nombre: 'Marketing', descripcion: 'Pauta, creativos y estrategia digital', orden: 3, activo: true },
+      ])
+      setProgreso(p => ({ ...p, nomina_procesos: 'ok' }))
+      addLog('✅ 3 procesos organizacionales creados')
+
+      // ── INVERSIÓN — capital propio + socios ──────────────────
+      setProgreso(p => ({ ...p, inversion_capital: 'cargando' }))
+      addLog('💼 Cargando capital propio e inversión de socios...')
+      const capitalInicial = Math.round(cfg.productos[0].pvp * 20)
+      await supabase.from('inversiones_capital').insert([
+        { tenant_id: tenantId, concepto: 'Capital inicial de trabajo', categoria: 'capital_trabajo', valor: capitalInicial, tipo: 'propio', activo: true, notas: 'Aporte inicial para arranque de operaciones' },
+        { tenant_id: tenantId, concepto: 'Inversión en infraestructura tecnológica', categoria: 'activo_fijo', valor: Math.round(capitalInicial * 0.3), tipo: 'propio', activo: true, notas: 'Computador, celular, router y software' },
+      ])
+      await supabase.from('inversiones_socios').insert({
+        tenant_id: tenantId, nombre: 'Socio Fundador', tipo_aporte: 'dinero',
+        valor_aporte: capitalInicial, pct_participacion: 100,
+        fecha_aporte: new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10),
+        activo: true,
+      })
+      setProgreso(p => ({ ...p, inversion_capital: 'ok' }))
+      addLog('✅ Capital propio + socio fundador registrados')
+
+      // ── PUNTO DE EQUILIBRIO — configuración ──────────────────
+      setProgreso(p => ({ ...p, equilibrio: 'cargando' }))
+      addLog('⚖️ Configurando punto de equilibrio...')
+      const cfTotalMes = cfg.cf_conceptos.reduce((a, c) => a + c.valor, 0)
+      const margenProd = Math.round((cfg.productos[0].pvp - cfg.productos[0].costo) / cfg.productos[0].pvp * 55)
+      const peMinimo = Math.ceil(cfTotalMes / (cfg.productos[0].pvp * margenProd / 100))
+      for (let i = 5; i >= 0; i--) {
+        const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1)
+        const periodo = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-01`
+        await supabase.from('pe_configuraciones').upsert({
+          tenant_id: tenantId, periodo,
+          modo_activo: 'rentabilidad',
+          pe_minimo: peMinimo,
+          pe_rentabilidad: Math.ceil(peMinimo * 1.3),
+          pe_tiburon: Math.ceil(peMinimo * 2),
+          tc_meta: 75, td_meta: 90, te_meta: 78, tdev_meta: 12,
+          margen_ponderado: margenProd,
+        }, { onConflict: 'tenant_id,periodo' })
+      }
+      setProgreso(p => ({ ...p, equilibrio: 'ok' }))
+      addLog(`✅ PE configurado: mínimo ${peMinimo} pedidos/mes para ${cfg.nombre}`)
+
+      // ── WHATSAPP / CENTRO CONTACTO ────────────────────────────
+      setProgreso(p => ({ ...p, whatsapp: 'cargando' }))
+      addLog('💬 Configurando Centro de Contacto WhatsApp...')
+
+      await supabase.from('whatsapp_store_context').upsert({
+        tenant_id: tenantId,
+        nombre_tienda: `Tienda Demo DIZGO ${cfg.nombre}`,
+        url_tienda: `https://demo-${paisCodigo.toLowerCase()}.dizgo.app`,
+        politica_envio: `Envíos a todo ${cfg.nombre}. Tiempo de entrega 3-7 días hábiles según ciudad.`,
+        tiempo_entrega: '3-7 días hábiles',
+        telefono_soporte: `${cfg.nombres[0].toLowerCase()}@demo-dizgo.com`,
+        numero_contacto: `+${rndInt(10, 99)}${rndInt(1000000000, 9999999999)}`,
+      }, { onConflict: 'tenant_id' })
+
+      await supabase.from('whatsapp_templates_config').insert([
+        {
+          tenant_id: tenantId, tipo: 'confirmacion', nombre: 'Confirmar pedido',
+          contenido: `Hola {{nombre}}, somos {{tienda}} 👋 Te confirmamos que recibimos tu pedido de {{producto}} por {{valor}}. ¿Confirmamos la dirección de entrega: {{direccion}}? Responde SÍ para procesar tu pedido 🚀`,
+          variables: ['nombre', 'tienda', 'producto', 'valor', 'direccion'], activa: true,
+        },
+        {
+          tenant_id: tenantId, tipo: 'novedad', nombre: 'Gestionar novedad',
+          contenido: `Hola {{nombre}}, te contactamos de {{tienda}} sobre tu pedido de {{producto}}. La transportadora reporta: {{novedad}}. ¿Podemos ayudarte a resolverlo? Escríbenos 📦`,
+          variables: ['nombre', 'tienda', 'producto', 'novedad'], activa: true,
+        },
+        {
+          tenant_id: tenantId, tipo: 'entrega', nombre: 'Confirmar entrega',
+          contenido: `¡Hola {{nombre}}! 🎉 Tu pedido de {{producto}} fue entregado hoy. Esperamos que lo disfrutes. Si tienes alguna pregunta, estamos aquí. ¡Gracias por confiar en {{tienda}}! ⭐`,
+          variables: ['nombre', 'producto', 'tienda'], activa: true,
+        },
+        {
+          tenant_id: tenantId, tipo: 'devolucion', nombre: 'Gestionar devolución',
+          contenido: `Hola {{nombre}}, lamentamos los inconvenientes con tu pedido de {{producto}}. Queremos resolverlo. ¿Cuál es el motivo de la devolución? Estamos aquí para ayudarte 🤝`,
+          variables: ['nombre', 'producto'], activa: true,
+        },
+        {
+          tenant_id: tenantId, tipo: 'upsell', nombre: 'Oferta especial post-entrega',
+          contenido: `¡Hola {{nombre}}! 🌟 Vimos que te encantó {{producto}}. Tenemos una oferta especial para ti: 15% de descuento en tu próxima compra. ¿Te interesa? Responde SÍ y te enviamos los detalles 🎁`,
+          variables: ['nombre', 'producto'], activa: true,
+        },
+      ])
+      setProgreso(p => ({ ...p, whatsapp: 'ok' }))
+      addLog('✅ 5 templates WhatsApp + contexto de tienda configurados')
+
+      // ── LOGÍSTICA — transportadoras + novedades IA ────────────
+      setProgreso(p => ({ ...p, logistica: 'cargando' }))
+      addLog('🚚 Cargando transportadoras y scripts de novedades...')
+
+      const TRANSPORTADORAS_CONFIG: Record<string, { tarMin: number; tarMax: number; recMin: number; recMax: number; cob: number }[]> = {
+        COL: [
+          { tarMin: 8500, tarMax: 14000, recMin: 8, recMax: 15, cob: 98 },
+          { tarMin: 7500, tarMax: 13000, recMin: 10, recMax: 18, cob: 92 },
+          { tarMin: 8000, tarMax: 13500, recMin: 8, recMax: 15, cob: 88 },
+          { tarMin: 9000, tarMax: 15000, recMin: 7, recMax: 12, cob: 85 },
+        ],
+        ECU: [
+          { tarMin: 3, tarMax: 6, recMin: 5, recMax: 10, cob: 90 },
+          { tarMin: 2.5, tarMax: 5.5, recMin: 5, recMax: 12, cob: 85 },
+          { tarMin: 3.5, tarMax: 7, recMin: 4, recMax: 9, cob: 80 },
+          { tarMin: 2, tarMax: 5, recMin: 6, recMax: 12, cob: 75 },
+        ],
+        DEFAULT: [
+          { tarMin: 5, tarMax: 12, recMin: 7, recMax: 15, cob: 88 },
+          { tarMin: 4, tarMax: 10, recMin: 8, recMax: 18, cob: 82 },
+          { tarMin: 6, tarMax: 14, recMin: 6, recMax: 12, cob: 78 },
+          { tarMin: 3.5, tarMax: 9, recMin: 9, recMax: 20, cob: 72 },
+        ],
+      }
+
+      const tConf = TRANSPORTADORAS_CONFIG[paisCodigo] || TRANSPORTADORAS_CONFIG.DEFAULT
+      const transportadorasRows = cfg.transportadoras.map((t, i) => ({
+        pais_codigo: paisCodigo, nombre: t,
+        tarifa_min: tConf[i]?.tarMin || 5,
+        tarifa_max: tConf[i]?.tarMax || 12,
+        dias_recaudo_min: tConf[i]?.recMin || 7,
+        dias_recaudo_max: tConf[i]?.recMax || 15,
+        cobertura_pct: tConf[i]?.cob || 80,
+        activo: true,
+      }))
+
+      // Solo insertar si no existen ya para este país
+      const { count: transExist } = await supabase.from('transportadoras_pais')
+        .select('id', { count: 'exact', head: true }).eq('pais_codigo', paisCodigo)
+      if (!transExist || transExist === 0) {
+        await supabase.from('transportadoras_pais').insert(transportadorasRows)
+        addLog(`✅ ${transportadorasRows.length} transportadoras de ${cfg.nombre}`)
+      } else {
+        addLog(`ℹ️ Transportadoras de ${cfg.nombre} ya existían — omitidas`)
+      }
+
+      // Novedades categorías IA — globales (sin tenant_id, solo una vez)
+      const { count: novExist } = await supabase.from('novedades_categorias_ia')
+        .select('id', { count: 'exact', head: true })
+      if (!novExist || novExist === 0) {
+        await supabase.from('novedades_categorias_ia').insert([
+          { categoria: 'direccion_incorrecta', nombre_visible: 'Dirección incorrecta', script_sugerido: 'Hola {{nombre}}, la transportadora reporta una novedad con tu dirección. ¿Puedes confirmarnos la dirección exacta de entrega? Necesitamos: calle, número, barrio y ciudad 📍', tono: 'empatico', tasa_exito_historica: 78, activo: true },
+          { categoria: 'cliente_no_contesta', nombre_visible: 'Cliente no contesta', script_sugerido: 'Hola {{nombre}}, intentamos contactarte para tu pedido de {{producto}} pero no hemos podido comunicarnos. ¿Cuál es el mejor horario para llamarte? ⏰', tono: 'empatico', tasa_exito_historica: 65, activo: true },
+          { categoria: 'coordinar_entrega', nombre_visible: 'Coordinar entrega', script_sugerido: 'Hola {{nombre}}, tu pedido de {{producto}} está listo para entrega. ¿En qué horario te encontramos en {{direccion}}? La transportadora puede ir en la mañana (8-12) o tarde (2-6) 📦', tono: 'profesional', tasa_exito_historica: 85, activo: true },
+          { categoria: 'vecino_no_recibe', nombre_visible: 'Vecino no recibe', script_sugerido: 'Hola {{nombre}}, la transportadora intentó entregar tu pedido pero no había nadie. ¿Puedes indicarnos si hay alguien de confianza que pueda recibirlo? 🏠', tono: 'empatico', tasa_exito_historica: 72, activo: true },
+          { categoria: 'direccion_no_existe', nombre_visible: 'Dirección no existe', script_sugerido: 'Hola {{nombre}}, la transportadora no encontró la dirección registrada. Necesitamos que nos confirmes la dirección completa para reprogramar la entrega. ¿Nos ayudas? 📍', tono: 'urgente', tasa_exito_historica: 58, activo: true },
+          { categoria: 'devolucion_cliente', nombre_visible: 'Devolución por cliente', script_sugerido: 'Hola {{nombre}}, recibimos tu solicitud de devolución. ¿Puedes contarnos el motivo? Queremos mejorar y encontrar la mejor solución para ti 🤝', tono: 'empatico', tasa_exito_historica: 90, activo: true },
+          { categoria: 'producto_dañado', nombre_visible: 'Producto dañado en tránsito', script_sugerido: 'Hola {{nombre}}, lamentamos que tu pedido llegó en mal estado. Vamos a gestionar el reenvío inmediatamente. ¿Puedes enviarnos una foto del producto recibido? 📸', tono: 'urgente', tasa_exito_historica: 95, activo: true },
+        ])
+        addLog('✅ 7 scripts de novedades IA configurados')
+      } else {
+        addLog('ℹ️ Scripts de novedades IA ya existían — omitidos')
+      }
+
+      setProgreso(p => ({ ...p, logistica: 'ok' }))
 
       addLog(`🎉 ¡Seed completo para ${cfg.nombre}! Todos los módulos tienen datos reales.`)
     } catch (err) {
