@@ -15,6 +15,9 @@ const AGENTES = [
   { key:'confirmador', label:'📞 Confirmador', color:'#3D8EF0', desc:'Genera mensajes de confirmación para pedidos nuevos sin respuesta en +2h' },
   { key:'novedades',   label:'⚠️ Novedades',   color:'#F5A623', desc:'Gestiona pedidos con novedad activa +24h sin resolverse' },
   { key:'contable',    label:'📊 Contable',    color:'#2DD4A0', desc:'Diagnóstico financiero diario: CXP vencidas, liquidez, semáforos' },
+  { key:'campanas',    label:'📡 Campañas',    color:'#9B6BFF', desc:'Analiza rendimiento de pauta y sugiere optimizaciones por campaña' },
+  { key:'inventario',  label:'🏭 Inventario',  color:'#F05C5C', desc:'Detecta quiebres de stock y sugiere traslados o compras urgentes' },
+  { key:'logistico',   label:'🚚 Logístico',   color:'#2DD4A0', desc:'Evalúa transportadoras, zonas de riesgo y novedades por ciudad' },
 ]
 
 const s: React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
@@ -25,7 +28,7 @@ export default function AgentesPage() {
   const supabase = createClient()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'confirmador'|'novedades'|'contable'>('confirmador')
+  const [tab, setTab] = useState<'confirmador'|'novedades'|'contable'|'campanas'|'inventario'|'logistico'>('confirmador')
 
   const [pedidosSinConfirmar, setPedidosSinConfirmar] = useState<PedidoPendiente[]>([])
   const [pedidosNovedad, setPedidosNovedad] = useState<PedidoPendiente[]>([])
@@ -36,6 +39,11 @@ export default function AgentesPage() {
 
   const [corriendo, setCorriendo] = useState<string|null>(null)
   const [resultado, setResultado] = useState<{agente:string; texto:string; pedido_id?:string}|null>(null)
+
+  // Estados Fase 2
+  const [pautaRows, setPautaRows] = useState<{id:string;campana:string;plataforma:string;inversion:number;resultados:number;ctr:number;cpa:number;roas:number;fecha:string}[]>([])
+  const [stockBajoItems, setStockBajoItems] = useState<{producto_id:string;bodega_id:string;cantidad_disponible:number;stock_minimo:number}[]>([])
+  const [transportadorasMetrica, setTransportadorasMetrica] = useState<{transportadora:string;total:number;entregados:number;tasa:number}[]>([])
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -79,6 +87,35 @@ export default function AgentesPage() {
       - wRows.filter(w=>w.tipo==='SALIDA').reduce((a,w)=>a+Number(w.monto),0))
 
     setLogs((logsData||[]) as LogAgente[])
+
+    // Datos Fase 2 — Campañas, Inventario, Logístico
+    const ini30 = new Date(Date.now()-30*86400000).toISOString().slice(0,10)
+    const [{ data: pautaData }, { data: invBajoData }, { data: pedsLogData }] = await Promise.all([
+      supabase.from('pauta').select('id,campana,plataforma,inversion,resultados,ctr,cpa,fecha').eq('tenant_id',tid).gte('fecha',ini30).order('fecha',{ascending:false}),
+      supabase.from('inventario').select('producto_id,bodega_id,cantidad_disponible,stock_minimo').eq('tenant_id',tid).filter('cantidad_disponible','lte','stock_minimo'),
+      supabase.from('pedidos').select('estado,transportadora').eq('tenant_id',tid).gte('fecha_pedido',ini30+'T00:00:00').not('transportadora','is','null'),
+    ])
+
+    const pRows = (pautaData||[]) as {id:string;campana:string;plataforma:string;inversion:number;resultados:number;ctr:number;cpa:number;fecha:string}[]
+    setPautaRows(pRows.map(r => ({
+      ...r,
+      roas: r.inversion>0 && r.resultados>0 ? Math.round(r.resultados/r.inversion*100)/100 : 0
+    })))
+
+    setStockBajoItems((invBajoData||[]) as {producto_id:string;bodega_id:string;cantidad_disponible:number;stock_minimo:number}[])
+
+    const tMap: Record<string,{total:number;entregados:number}> = {}
+    ;(pedsLogData||[]).forEach((p:{estado:string;transportadora:string}) => {
+      if (!p.transportadora) return
+      if (!tMap[p.transportadora]) tMap[p.transportadora] = { total:0, entregados:0 }
+      tMap[p.transportadora].total++
+      if (['ENTREGADO','entregado'].includes(p.estado)) tMap[p.transportadora].entregados++
+    })
+    setTransportadorasMetrica(Object.entries(tMap).map(([t,d]) => ({
+      transportadora: t, total: d.total, entregados: d.entregados,
+      tasa: d.total>0 ? Math.round(d.entregados/d.total*100) : 0
+    })).sort((a,b) => b.total-a.total))
+
     setLoading(false)
   }, [supabase])
 
@@ -400,6 +437,156 @@ Sé directo, usa números reales, sin rodeos.`
                 Presiona &quot;Ejecutar diagnóstico financiero&quot; para que el agente analice tu situación real y genere un informe ejecutivo
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB CAMPAÑAS ── */}
+      {tab === 'campanas' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontWeight:'700', marginBottom:'2px' }}>📡 Campañas activas — últimos 30 días</div>
+              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente detecta campañas con ROAS bajo o CPA fuera de rango</div>
+            </div>
+            {pautaRows.length === 0 ? (
+              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin datos de pauta en los últimos 30 días</div>
+            ) : pautaRows.map(p => {
+              const alerta = p.roas < 1.5 || p.cpa > 22000
+              return (
+                <div key={p.id} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${alerta?'#F05C5C':'#2DD4A0'}` }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:'12px', fontWeight:'600' }}>{p.campana}</div>
+                    <div style={{ fontSize:'10px', color:'#8B96A8' }}>{p.plataforma} · {p.fecha} · Inv: ${Math.round(p.inversion/1000)}K</div>
+                    <div style={{ display:'flex', gap:'10px', marginTop:'3px' }}>
+                      <span style={{ fontSize:'10px', color: p.roas>=1.5?'#2DD4A0':'#F05C5C', fontWeight:'700' }}>ROAS {p.roas}x</span>
+                      <span style={{ fontSize:'10px', color: p.cpa<=22000?'#2DD4A0':'#F05C5C', fontWeight:'700' }}>CPA ${Math.round(p.cpa/1000)}K</span>
+                      <span style={{ fontSize:'10px', color:'#8B96A8' }}>CTR {p.ctr}%</span>
+                    </div>
+                  </div>
+                  <button onClick={async () => {
+                    setCorriendo('campanas'); setResultado(null)
+                    const prompt = `Eres el Agente de Campañas de DIZGO. Analiza esta campaña y da una recomendación concreta.\n\nCAMPAÑA: ${p.campana}\nPlataforma: ${p.plataforma}\nInversión: $${Math.round(p.inversion/1000)}K\nResultados: ${p.resultados}\nROAS: ${p.roas}x\nCPA: $${Math.round(p.cpa)}\nCTR: ${p.ctr}%\nCPA máximo del negocio: $18.000\n\nDiagnóstico en máximo 5 líneas:\n1. ¿Qué está pasando en esta campaña?\n2. ¿Cuál es la causa probable?\n3. Acción inmediata (pausar, escalar, cambiar creative, ajustar audiencia)\n4. Proyección si se aplica la acción\n\nSé directo, usa los números reales.`
+                    try {
+                      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) })
+                      const data = await res.json()
+                      setResultado({ agente:'campanas', texto:data.texto||'' })
+                      if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'campanas', trigger_tipo:'manual', input_resumen:p.campana, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
+                    } catch { setResultado({ agente:'campanas', texto:'❌ Error al conectar' }) }
+                    setCorriendo(null)
+                  }} disabled={corriendo==='campanas'}
+                    style={{ padding:'6px 12px', background:`rgba(155,107,255,0.15)`, border:'none', borderRadius:'7px', color:'#9B6BFF', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                    {corriendo==='campanas'?'⏳':'🤖 Analizar'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ ...s, padding:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'12px' }}>💬 Diagnóstico del agente</div>
+            {resultado?.agente==='campanas' ? (
+              <>
+                <div style={{ background:'rgba(155,107,255,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(155,107,255,0.2)', fontSize:'13px', lineHeight:'1.8', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
+                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(155,107,255,0.1)', border:'none', borderRadius:'8px', color:'#9B6BFF', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
+              </>
+            ) : <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>Selecciona una campaña para analizarla</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB INVENTARIO ── */}
+      {tab === 'inventario' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontWeight:'700', marginBottom:'2px' }}>🏭 Productos con stock bajo o en quiebre</div>
+              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente sugiere traslado entre bodegas o compra urgente</div>
+            </div>
+            {stockBajoItems.length === 0 ? (
+              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>✅ Todos los productos tienen stock suficiente</div>
+            ) : stockBajoItems.map((item,i) => (
+              <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px', borderLeft:'3px solid #F05C5C' }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:'12px', fontWeight:'600' }}>Producto ID: {item.producto_id.slice(0,8)}...</div>
+                  <div style={{ fontSize:'10px', color:'#8B96A8' }}>Disponible: {item.cantidad_disponible} u · Mínimo: {item.stock_minimo} u</div>
+                </div>
+                <button onClick={async () => {
+                  setCorriendo('inventario'); setResultado(null)
+                  const prompt = `Eres el Agente de Inventario de DIZGO. Analiza esta situación de stock y da una recomendación concreta.\n\nPRODUCTO (ID): ${item.producto_id}\nStock disponible: ${item.cantidad_disponible} unidades\nStock mínimo configurado: ${item.stock_minimo} unidades\nDéficit: ${item.stock_minimo - item.cantidad_disponible} unidades\n\nCONTEXTO DEL NEGOCIO:\n- Tasa de entrega actual: 70%\n- Ritmo de ventas: ~80-100 pedidos/mes\n\nDiagnóstico en máximo 5 líneas:\n1. Urgencia del quiebre (días restantes de stock)\n2. Impacto en ventas si no se actúa\n3. Acción inmediata: ¿traslado desde otra bodega o compra nueva?\n4. Cantidad mínima a reponer para 30 días de operación\n\nSé directo y usa los números reales.`
+                  try {
+                    const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) })
+                    const data = await res.json()
+                    setResultado({ agente:'inventario', texto:data.texto||'' })
+                    if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'inventario', trigger_tipo:'manual', input_resumen:`Stock bajo: ${item.cantidad_disponible}/${item.stock_minimo}`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
+                  } catch { setResultado({ agente:'inventario', texto:'❌ Error al conectar' }) }
+                  setCorriendo(null)
+                }} disabled={corriendo==='inventario'}
+                  style={{ padding:'6px 12px', background:'rgba(240,92,92,0.15)', border:'none', borderRadius:'7px', color:'#F05C5C', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                  {corriendo==='inventario'?'⏳':'🤖 Analizar'}
+                </button>
+              </div>
+            ))}
+          </div>
+          <div style={{ ...s, padding:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'12px' }}>💬 Recomendación del agente</div>
+            {resultado?.agente==='inventario' ? (
+              <>
+                <div style={{ background:'rgba(240,92,92,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(240,92,92,0.2)', fontSize:'13px', lineHeight:'1.8', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
+                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:'#F05C5C', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
+              </>
+            ) : <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>Selecciona un producto con stock bajo para analizarlo</div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB LOGÍSTICO ── */}
+      {tab === 'logistico' && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ ...s, overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ fontWeight:'700', marginBottom:'2px' }}>🚚 Rendimiento por transportadora — 30 días</div>
+              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente detecta transportadoras con bajo rendimiento y sugiere acciones</div>
+            </div>
+            {transportadorasMetrica.length === 0 ? (
+              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin datos de transportadora en los pedidos del período</div>
+            ) : transportadorasMetrica.map((t,i) => {
+              const alerta = t.tasa < 70
+              return (
+                <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${alerta?'#F05C5C':'#2DD4A0'}` }}>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600' }}>{t.transportadora}</div>
+                    <div style={{ fontSize:'10px', color:'#8B96A8' }}>{t.total} pedidos · {t.entregados} entregados</div>
+                  </div>
+                  <div style={{ textAlign:'right', marginRight:'8px' }}>
+                    <div style={{ fontSize:'16px', fontWeight:'800', color:alerta?'#F05C5C':'#2DD4A0' }}>{t.tasa}%</div>
+                    <div style={{ fontSize:'9px', color:'#5A6478' }}>tasa entrega</div>
+                  </div>
+                  <button onClick={async () => {
+                    setCorriendo('logistico'); setResultado(null)
+                    const prompt = `Eres el Agente Logístico de DIZGO. Analiza el rendimiento de esta transportadora.\n\nTRANSPORTADORA: ${t.transportadora}\nTotal pedidos (30 días): ${t.total}\nEntregados: ${t.entregados}\nTasa de entrega: ${t.tasa}%\nBenchmark Colombia: 75%-82%\n\nDiagnóstico en máximo 5 líneas:\n1. Evaluación del rendimiento vs benchmark\n2. Impacto económico de la tasa actual en el negocio\n3. Causa probable del bajo/alto rendimiento\n4. Acción recomendada (mantener, renegociar, cambiar, escalar)\n5. Ciudades o zonas donde puede estar el problema\n\nSé directo y usa los números reales.`
+                    try {
+                      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) })
+                      const data = await res.json()
+                      setResultado({ agente:'logistico', texto:data.texto||'' })
+                      if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'logistico', trigger_tipo:'manual', input_resumen:`${t.transportadora}: ${t.tasa}% tasa entrega`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
+                    } catch { setResultado({ agente:'logistico', texto:'❌ Error al conectar' }) }
+                    setCorriendo(null)
+                  }} disabled={corriendo==='logistico'}
+                    style={{ padding:'6px 12px', background:'rgba(45,212,160,0.15)', border:'none', borderRadius:'7px', color:'#2DD4A0', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                    {corriendo==='logistico'?'⏳':'🤖 Analizar'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+          <div style={{ ...s, padding:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'12px' }}>💬 Diagnóstico logístico</div>
+            {resultado?.agente==='logistico' ? (
+              <>
+                <div style={{ background:'rgba(45,212,160,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(45,212,160,0.2)', fontSize:'13px', lineHeight:'1.8', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
+                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
+              </>
+            ) : <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>Selecciona una transportadora para analizarla</div>}
           </div>
         </div>
       )}
