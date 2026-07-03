@@ -364,6 +364,10 @@ const PASOS_SEED = [
   { key: 'bodegas', label: '🏭 Bodega', desc: '2 bodegas + inventario inicial' },
   { key: 'pqrsf', label: '📬 PQRSF', desc: '15 casos simulados (quejas, reclamos, preguntas)' },
   { key: 'alertas', label: '🚨 Alertas', desc: '8 alertas por módulo para demostración' },
+  { key: 'nomina', label: '👥 Nómina', desc: '2 colaboradores + tasas por país' },
+  { key: 'inversion', label: '💰 Inversión', desc: '3 activos fijos + 1 crédito capital trabajo' },
+  { key: 'cxp', label: '📋 Cuentas por Pagar', desc: '5 CXP (1 vencida para demo)' },
+  { key: 'metas_diarias', label: '📅 Seguimiento Diario', desc: '30 días de avance diario real' },
 ]
 
 function rnd(arr: unknown[]) { return arr[Math.floor(Math.random() * arr.length)] }
@@ -436,7 +440,6 @@ export default function AdminPage() {
     const pasos: Record<string, 'pendiente' | 'cargando' | 'ok' | 'error'> = {}
     PASOS_SEED.forEach(p => { pasos[p.key] = 'pendiente' })
     setProgreso({ ...pasos })
-
     // ── PRODUCTOS ──────────────────────────────────────────────
     setProgreso(p => ({ ...p, productos: 'cargando' }))
     addLog(`🛍️ Cargando ${cfg.productos.length} productos para ${cfg.nombre}...`)
@@ -705,6 +708,166 @@ export default function AdminPage() {
       ])
       setProgreso(p => ({ ...p, alertas: 'ok' }))
       addLog(`✅ 8 alertas de demostración creadas`)
+
+      // ── NÓMINA — colaboradores + tasas por país ───────────────
+      setProgreso(p => ({ ...p, nomina: 'cargando' }))
+      addLog('👥 Cargando colaboradores y tasas de nómina...')
+
+      const SALARIOS_PAIS: Record<string, { sm: number; aux: number; code_tel: string }> = {
+        COL: { sm: 1423500, aux: 200000, code_tel: '+57' },
+        ECU: { sm: 480, aux: 0, code_tel: '+593' },
+        MEX: { sm: 7468, aux: 0, code_tel: '+52' },
+        PER: { sm: 1025, aux: 0, code_tel: '+51' },
+        CHL: { sm: 500000, aux: 0, code_tel: '+56' },
+        ARG: { sm: 747000, aux: 0, code_tel: '+54' },
+        PAN: { sm: 650, aux: 0, code_tel: '+507' },
+        CRI: { sm: 380000, aux: 0, code_tel: '+506' },
+        GTM: { sm: 3230, aux: 0, code_tel: '+502' },
+        BOL: { sm: 2362, aux: 0, code_tel: '+591' },
+        URY: { sm: 23000, aux: 0, code_tel: '+598' },
+        VEN: { sm: 130, aux: 0, code_tel: '+58' },
+        HND: { sm: 12000, aux: 0, code_tel: '+504' },
+        SLV: { sm: 365, aux: 0, code_tel: '+503' },
+        DOM: { sm: 21000, aux: 0, code_tel: '+1' },
+        PRY: { sm: 2680373, aux: 0, code_tel: '+595' },
+        ESP: { sm: 1184, aux: 0, code_tel: '+34' },
+      }
+      const sal = SALARIOS_PAIS[paisCodigo] || SALARIOS_PAIS.COL
+      const hoyStr = new Date().toISOString().slice(0, 10)
+      const ingresoDate = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10)
+
+      await supabase.from('colaboradores').insert([
+        {
+          tenant_id: tenantId,
+          nombres: cfg.nombres[0], apellidos: cfg.apellidos[0],
+          tipo_doc: 'CC', num_doc: `10${rndInt(1000000, 9999999)}`,
+          pais_code: paisCodigo, ciudad: cfg.capital,
+          cargo: 'Confirmador de Pedidos', tipo_contrato: 'Empleado',
+          jornada: 'Medio tiempo', fecha_ingreso: ingresoDate,
+          salario_base: Math.round(sal.sm * 1.0),
+          aux_transporte: sal.aux,
+          codigo_tel: sal.code_tel,
+          celular: `${rndInt(300, 399)}${rndInt(1000000, 9999999)}`,
+          email: `confirmador@demo-dizgo.com`,
+          activo: true,
+        },
+        {
+          tenant_id: tenantId,
+          nombres: cfg.nombres[1], apellidos: cfg.apellidos[1],
+          tipo_doc: 'CC', num_doc: `10${rndInt(1000000, 9999999)}`,
+          pais_code: paisCodigo, ciudad: cfg.capital,
+          cargo: 'Administrador E-commerce', tipo_contrato: 'Empleado',
+          jornada: 'Tiempo completo', fecha_ingreso: ingresoDate,
+          salario_base: Math.round(sal.sm * 1.8),
+          aux_transporte: sal.aux,
+          codigo_tel: sal.code_tel,
+          celular: `${rndInt(300, 399)}${rndInt(1000000, 9999999)}`,
+          email: `admin@demo-dizgo.com`,
+          activo: true,
+        },
+      ])
+
+      // Tasas de nómina por país
+      await supabase.from('nomina_tasas_historico').upsert({
+        tenant_id: tenantId, pais_code: paisCodigo,
+        anio_fiscal: hoy.getFullYear(),
+        vigencia_inicio: `${hoy.getFullYear()}-01-01`,
+        estado: 'activo',
+        salario_minimo: sal.sm, aux_transporte: sal.aux,
+        salud_emp: 8.5, pension_emp: 12,
+        arl_nivel1: 0.522, arl_nivel2: 1.044, arl_nivel3: 2.436,
+        sena: 2, icbf: 3, caja_comp: 4,
+        cesantias: 8.33, intereses_ces: 1, prima: 8.33, vacaciones: 4.17,
+        salud_trab: 4, pension_trab: 4, tope_exoneracion: 10,
+      }, { onConflict: 'tenant_id,pais_code,anio_fiscal' })
+
+      setProgreso(p => ({ ...p, nomina: 'ok' }))
+      addLog('✅ 2 colaboradores + tasas de nómina cargadas')
+
+      // ── INVERSIÓN — activos fijos + crédito ───────────────────
+      setProgreso(p => ({ ...p, inversion: 'cargando' }))
+      addLog('💰 Cargando activos fijos e inversiones...')
+
+      const precioCompuQ = cfg.productos[0].pvp * 8
+      const precioCelQ = cfg.productos[0].pvp * 4
+      const precioRouterQ = cfg.productos[0].pvp * 2
+
+      await supabase.from('inversiones_activos').insert([
+        { tenant_id: tenantId, nombre: 'Computador portátil', tipo: 'hardware', valor: Math.round(precioCompuQ), vida_util_meses: 36, fecha_compra: new Date(hoy.getFullYear(), hoy.getMonth() - 5, 15).toISOString().slice(0, 10), activo: true },
+        { tenant_id: tenantId, nombre: 'Celular para operaciones', tipo: 'hardware', valor: Math.round(precioCelQ), vida_util_meses: 24, fecha_compra: new Date(hoy.getFullYear(), hoy.getMonth() - 3, 10).toISOString().slice(0, 10), activo: true },
+        { tenant_id: tenantId, nombre: 'Router WiFi y equipos de red', tipo: 'hardware', valor: Math.round(precioRouterQ), vida_util_meses: 48, fecha_compra: new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10), activo: true },
+      ])
+
+      const montoCreditoQ = cfg.productos[0].pvp * 30
+      await supabase.from('inversiones_creditos').insert({
+        tenant_id: tenantId,
+        nombre: 'Capital de trabajo inicial',
+        monto: Math.round(montoCreditoQ),
+        tasa_mensual: 1.8,
+        plazo_meses: 12,
+        tipo_cuota: 'francesa',
+        destino: 'capital_trabajo',
+        fecha_inicio: new Date(hoy.getFullYear(), hoy.getMonth() - 4, 1).toISOString().slice(0, 10),
+        estado: 'activo',
+      })
+
+      setProgreso(p => ({ ...p, inversion: 'ok' }))
+      addLog('✅ 3 activos fijos + 1 crédito de capital de trabajo')
+
+      // ── CUENTAS POR PAGAR ────────────────────────────────────
+      setProgreso(p => ({ ...p, cxp: 'cargando' }))
+      addLog('📋 Cargando cuentas por pagar...')
+
+      const fechaVenc5 = new Date(hoy.getFullYear(), hoy.getMonth(), 5).toISOString().slice(0, 10)
+      const fechaVenc15 = new Date(hoy.getFullYear(), hoy.getMonth(), 15).toISOString().slice(0, 10)
+      const fechaVenc28 = new Date(hoy.getFullYear(), hoy.getMonth(), 28).toISOString().slice(0, 10)
+      const fechaVencPast = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 28).toISOString().slice(0, 10)
+
+      await supabase.from('cuentas_por_pagar').insert([
+        { tenant_id: tenantId, tercero: cfg.transportadoras[0], tipo_tercero: 'proveedor', concepto: 'Fletes pendientes de pago', valor: Math.round(cfg.productos[0].pvp * 2.5), fecha_emision: hoyStr, fecha_vencimiento: fechaVenc15, estado: 'pendiente', categoria_flujo: 'operativo' },
+        { tenant_id: tenantId, tercero: `${cfg.nombres[0]} ${cfg.apellidos[0]}`, tipo_tercero: 'nomina', concepto: 'Salario Confirmador de Pedidos', valor: Math.round(sal.sm), fecha_emision: hoyStr, fecha_vencimiento: fechaVenc5, estado: 'pendiente', categoria_flujo: 'operativo' },
+        { tenant_id: tenantId, tercero: 'Meta Ads', tipo_tercero: 'proveedor', concepto: 'Inversión en pauta mes actual', valor: Math.round(cfg.productos[0].pvp * 7), fecha_emision: hoyStr, fecha_vencimiento: fechaVenc28, estado: 'pendiente', categoria_flujo: 'operativo' },
+        { tenant_id: tenantId, tercero: 'Shopify / WooCommerce', tipo_tercero: 'prestador_servicios', concepto: 'Membresía plataforma e-commerce', valor: cfg.cf_conceptos[0].valor, fecha_emision: hoyStr, fecha_vencimiento: fechaVenc5, estado: 'pendiente', categoria_flujo: 'operativo' },
+        { tenant_id: tenantId, tercero: cfg.transportadoras[1], tipo_tercero: 'proveedor', concepto: 'Fletes mes anterior pendientes', valor: Math.round(cfg.productos[0].pvp * 1.8), fecha_emision: fechaVencPast, fecha_vencimiento: fechaVencPast, estado: 'pendiente', categoria_flujo: 'operativo' },
+      ])
+
+      setProgreso(p => ({ ...p, cxp: 'ok' }))
+      addLog('✅ 5 cuentas por pagar (1 vencida para demo)')
+
+      // ── METAS SEGUIMIENTO DIARIO — 30 días ───────────────────
+      setProgreso(p => ({ ...p, metas_diarias: 'cargando' }))
+      addLog('📅 Cargando seguimiento diario 30 días...')
+
+      const metasDiarias = []
+      const pedidosDiaMeta = 4
+      for (let d = 29; d >= 0; d--) {
+        const fecha = new Date(hoy.getTime() - d * 86400000)
+        const esFinde = fecha.getDay() === 0 || fecha.getDay() === 6
+        const generados = esFinde ? rndInt(2, 5) : rndInt(3, 8)
+        const confirmados = Math.round(generados * (rndInt(60, 80) / 100))
+        const despachados = Math.round(confirmados * (rndInt(75, 90) / 100))
+        const entregados = Math.round(despachados * (rndInt(65, 85) / 100))
+        const ventasDia = entregados * cfg.productos[0].pvp
+        const pautaDia = Math.round(cfg.productos[0].pvp * rndInt(3, 7))
+        const cpaDia = entregados > 0 ? Math.round(pautaDia / entregados) : 0
+        const nivelPct = generados / pedidosDiaMeta * 100
+        metasDiarias.push({
+          tenant_id: tenantId,
+          fecha: fecha.toISOString().slice(0, 10),
+          pedidos_generados: generados,
+          pedidos_confirmados: confirmados,
+          pedidos_despachados: despachados,
+          pedidos_entregados: entregados,
+          ventas_dia: Math.round(ventasDia),
+          cpa_real: cpaDia,
+          pauta_dia: pautaDia,
+          iso_dia: Math.round(nivelPct),
+          alerta_nivel: nivelPct >= 100 ? 'verde' : nivelPct >= 70 ? 'amarillo' : 'rojo',
+        })
+      }
+      await supabase.from('metas_seguimiento_diario').insert(metasDiarias)
+      setProgreso(p => ({ ...p, metas_diarias: 'ok' }))
+      addLog(`✅ 30 días de seguimiento diario cargados`)
 
       addLog(`🎉 ¡Seed completo para ${cfg.nombre}! Todos los módulos tienen datos reales.`)
     } catch (err) {
