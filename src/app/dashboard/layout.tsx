@@ -28,8 +28,10 @@ const NAV = [
     { href:'/dashboard/alertas', icon:'🚨', label:'Alertas' },
   ]},
   { group:'ACTUAR', color:'#9B6BFF', items:[
-    { href:'/dashboard/formacion', icon:'🎓', label:'Formación' },
-    { href:'/dashboard/agentes',   icon:'🤖', label:'Agentes IA' },
+    { href:'/dashboard/agentes',  icon:'🤖', label:'Agentes IA' },
+    { href:'/dashboard/cazador',  icon:'🔍', label:'Cazador Productos' },
+    { href:'/dashboard/formacion',icon:'🎓', label:'Formación' },
+    { href:'/dashboard/admin',    icon:'⚙️', label:'Superadmin' },
   ]},
 ]
 
