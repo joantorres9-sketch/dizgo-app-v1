@@ -37,7 +37,7 @@ export default function DashboardPage() {
   const supabase = createClient()
   const printRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
-  const [periodo, setPeriodo] = useState('mes')
+  const [periodo, setPeriodo] = useState('semestre')
   const [fechaIni, setFechaIni] = useState('')
   const [fechaFin, setFechaFin] = useState('')
   const [historico, setHistorico] = useState<MesData[]>([])
@@ -421,6 +421,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
         <span>DIZGO v2.0 · Centro de Mando Gerencial · {new Date().toLocaleDateString('es-CO')}</span>
         <span>Datos en tiempo real desde Supabase · Análisis por Claude Sonnet 4.6</span>
       </div>
+    </div>
     </div>
   )
 }
