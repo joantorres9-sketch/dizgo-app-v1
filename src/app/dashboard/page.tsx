@@ -71,11 +71,11 @@ export default function DashboardPage() {
     setLoading(true)
     const { data:{ user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id, nombre_tienda').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('tenant_id, nombre').eq('id', user.id).single()
     if (!profile?.tenant_id) { setLoading(false); return }
     const tid = profile.tenant_id
     setTenantId(tid)
-    if (profile.nombre_tienda) setNombreTienda(profile.nombre_tienda)
+    if (profile.nombre) setNombreTienda(profile.nombre)
 
     const hoy = new Date()
     const mesesAtras = getMesesRango()
@@ -421,6 +421,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
         <span>DIZGO v2.0 · Centro de Mando Gerencial · {new Date().toLocaleDateString('es-CO')}</span>
         <span>Datos en tiempo real desde Supabase · Análisis por Claude Sonnet 4.6</span>
       </div>
+    </div>
     </div>
   )
 }
