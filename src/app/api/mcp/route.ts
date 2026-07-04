@@ -80,3 +80,4 @@ export async function GET(req: NextRequest) {
   if (!validarToken(req)) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   return NextResponse.json({ ok: true, nombre: 'DIZGO MCP Server', version: '1.0', herramientas: ['read_data', 'write_data', 'update_file', 'describe_table'] })
 }
+// DIZGO MCP Server v1.0 - Fri Jul  3 22:38:33 HPS 2026
