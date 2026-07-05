@@ -71,20 +71,28 @@ export default function DashboardPage() {
     setLoading(true)
     const { data:{ user } } = await supabase.auth.getUser()
     if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id, nombre_tienda').eq('id', user.id).single()
+    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
     if (!profile?.tenant_id) { setLoading(false); return }
     const tid = profile.tenant_id
     setTenantId(tid)
-    if (profile.nombre_tienda) setNombreTienda(profile.nombre_tienda)
+    const { data: tenant } = await supabase.from('tenants').select('nombre').eq('id', tid).single()
+    if (tenant?.nombre) setNombreTienda(tenant.nombre)
 
     const hoy = new Date()
     const mesesAtras = getMesesRango()
     const hoyStr = hoy.toISOString().slice(0,10)
 
+    // Ancla el rango de meses al pedido más reciente (no al reloj del sistema),
+    // así el histórico muestra los datos reales aunque el mes en curso esté vacío
+    const { data: ultimoPedido } = await supabase
+      .from('pedidos').select('fecha_pedido').eq('tenant_id', tid)
+      .order('fecha_pedido', { ascending: false }).limit(1).maybeSingle()
+    const fechaRef = ultimoPedido?.fecha_pedido ? new Date(ultimoPedido.fecha_pedido) : hoy
+
     // Cargar histórico de meses
     const mesesData: MesData[] = []
     for (let i = mesesAtras-1; i >= 0; i--) {
-      const fecha = new Date(hoy.getFullYear(), hoy.getMonth()-i, 1)
+      const fecha = new Date(fechaRef.getFullYear(), fechaRef.getMonth()-i, 1)
       const ini = fecha.toISOString().slice(0,10)
       const fin = new Date(fecha.getFullYear(), fecha.getMonth()+1, 0).toISOString().slice(0,10)
       const per = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-01`
@@ -421,7 +429,6 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
         <span>DIZGO v2.0 · Centro de Mando Gerencial · {new Date().toLocaleDateString('es-CO')}</span>
         <span>Datos en tiempo real desde Supabase · Análisis por Claude Sonnet 4.6</span>
       </div>
-    </div>
     </div>
   )
 }
