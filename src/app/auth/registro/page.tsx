@@ -25,7 +25,7 @@ const inp: React.CSSProperties = { width:'100%', background:'#0A1628', border:`1
 const sel: React.CSSProperties = { ...inp, appearance:'none' as any }
 const lbl: React.CSSProperties = { fontSize:'11px', color:'#5A7A9A', marginBottom:'4px', display:'block' }
 const fld: React.CSSProperties = { marginBottom:'10px' }
-const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }
+const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const row3: React.CSSProperties = { display:'grid', gridTemplateColumns:'90px 1fr', gap:'8px', marginBottom:'10px' }
 const stepH: React.CSSProperties = { display:'flex', alignItems:'center', gap:'10px', margin:'18px 0 12px' }
 const stepN = (color: string): React.CSSProperties => ({ width:'26px', height:'26px', borderRadius:'50%', background: color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', color: T.card, flexShrink:0 })
@@ -119,10 +119,10 @@ export default function RegistroPage() {
 
   return (
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
-      <div style={{ display:'flex', gap:'16px', alignItems:'flex-start', maxWidth:'820px', width:'100%' }}>
+      <div className="dz-registro-flex" style={{ display:'flex', gap:'16px', alignItems:'flex-start', maxWidth:'820px', width:'100%' }}>
 
         {/* Columna izquierda: aviso previo */}
-        <div style={{ width:'240px', flexShrink:0, position:'sticky', top:'20px' }}>
+        <div className="dz-registro-side" style={{ width:'240px', flexShrink:0, position:'sticky', top:'20px' }}>
           <div style={{ textAlign:'center', marginBottom:'20px' }}>
             <div style={{ width:'44px', height:'44px', background: T.accent, borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'16px', color: T.card, margin:'0 auto 10px' }}>DZ</div>
             <div style={{ fontWeight:'800', fontSize:'18px', color: T.text }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
@@ -216,7 +216,7 @@ export default function RegistroPage() {
               País principal — Casa matriz
               <span style={{ fontSize:'10px', fontWeight:'600', padding:'1px 7px', borderRadius:'4px', background:`${T.red}18`, color: T.red }}>Obligatorio</span>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'6px', marginBottom:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'6px', marginBottom:'12px' }}>
               {PAISES.map(p => (
                 <button type="button" key={p.code} onClick={() => { setPaisMatriz(p.code); setForm(f=>({...f,codigo_tel:p.tel})) }}
                   style={{ background: paisMatriz===p.code ? `${T.accent}15` : '#0A1628', border:`1.5px solid ${paisMatriz===p.code ? T.accent : '#1E3050'}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
@@ -233,7 +233,7 @@ export default function RegistroPage() {
               Otros países de operación
               <span style={{ fontSize:'10px', fontWeight:'600', padding:'1px 7px', borderRadius:'4px', background:`${T.blue}18`, color: T.blue }}>Opcional</span>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'6px', marginBottom:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'6px', marginBottom:'12px' }}>
               {PAISES.filter(p=>p.code!==paisMatriz).map(p => (
                 <button type="button" key={p.code} onClick={() => toggleOper(p.code)}
                   style={{ background: paisesOper.has(p.code) ? `${T.green}12` : '#0A1628', border:`1.5px solid ${paisesOper.has(p.code) ? T.green : '#1E3050'}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>

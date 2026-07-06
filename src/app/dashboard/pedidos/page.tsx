@@ -206,18 +206,18 @@ function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:200,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',backdropFilter:'blur(4px)'}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'14px',width:'580px',maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'14px',width:'min(580px,100%)',maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'16px 20px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div style={{fontSize:'14px',fontWeight:'700',color:T.text}}>📦 Nuevo Pedido Manual</div>
           <button onClick={onClose} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:'18px'}}>✕</button>
         </div>
         <div style={{overflowY:'auto',flex:1,padding:'18px 20px'}}>
           <div style={{fontSize:'11px',fontWeight:'700',color:T.accent,marginBottom:'8px'}}>📋 DATOS DEL CLIENTE</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px',marginBottom:'10px'}}>
             <div><label style={lbl}>Nombre completo *</label><input style={inp} value={form.cliente_nombre} onChange={set('cliente_nombre')} placeholder="Juan Pérez" /></div>
             <div><label style={lbl}>Teléfono *</label><input style={inp} value={form.cliente_telefono} onChange={set('cliente_telefono')} placeholder="3001234567" /></div>
           </div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px',marginBottom:'10px'}}>
             <div><label style={lbl}>Departamento</label><input style={inp} value={form.cliente_departamento} onChange={set('cliente_departamento')} placeholder="Antioquia" /></div>
             <div><label style={lbl}>Ciudad</label><input style={inp} value={form.cliente_ciudad} onChange={set('cliente_ciudad')} placeholder="Medellín" /></div>
           </div>
@@ -225,7 +225,7 @@ function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=
 
           <div style={{fontSize:'11px',fontWeight:'700',color:T.blue,marginBottom:'8px',marginTop:'14px'}}>🛍️ DATOS DEL PEDIDO</div>
           <div style={{marginBottom:'10px'}}><label style={lbl}>Producto *</label><input style={inp} value={form.producto_nombre} onChange={set('producto_nombre')} placeholder="RELOJ LED MODA" /></div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px',marginBottom:'10px'}}>
             <div><label style={lbl}>Valor del pedido</label><input style={inp} type="number" value={form.pvp||''} onChange={set('pvp')} placeholder="0" /></div>
             <div><label style={lbl}>Origen</label>
               <select style={{...inp,appearance:'none' as any}} value={form.origen} onChange={set('origen')}>
@@ -412,7 +412,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:200,display:'flex',justifyContent:'flex-end',backdropFilter:'blur(2px)'}}>
-      <div style={{width:'460px',background:T.card,borderLeft:`1px solid ${T.border}`,height:'100vh',display:'flex',flexDirection:'column',overflowY:'auto'}}>
+      <div style={{width:'min(460px,100vw)',background:T.card,borderLeft:`1px solid ${T.border}`,height:'100vh',display:'flex',flexDirection:'column',overflowY:'auto'}}>
 
         {/* Header */}
         <div style={{padding:'16px 20px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
@@ -448,7 +448,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 
         {/* Datos del pedido */}
         <div style={{padding:'14px 20px',borderBottom:`1px solid ${T.border}`}}>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',fontSize:'12px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px',fontSize:'12px'}}>
             {[
               ['Producto',pedido.producto_nombre],
               ['Valor',fmt(pedido.pvp||0)],
@@ -678,7 +678,7 @@ export default function PedidosPage() {
       {pedidoActivo && <PanelPedido pedido={pedidoActivo} onClose={()=>setPedidoActivo(null)} onUpdate={loadData} />}
 
       {/* Header */}
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'20px'}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'20px',flexWrap:'wrap',gap:'10px'}}>
         <div>
           <h1 style={{fontSize:'22px',fontWeight:'700',color:T.text,marginBottom:'4px'}}>📦 Gestión de Pedidos</h1>
           <p style={{fontSize:'12px',color:T.muted}}>Los pedidos son la mina de oro — cuídalos</p>
@@ -690,7 +690,7 @@ export default function PedidosPage() {
       </div>
 
       {/* KPIs — Embudo de etapas */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'8px',marginBottom:'14px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'8px',marginBottom:'14px'}}>
         {[
           {l:'Shopify/Woo',n:kpis.total,      c:T.blue,  icon:'🛍️', sub:'Total generados'},
           {l:'Confirmados', n:kpis.confirmados,c:T.green, icon:'✅', sub:`TC: ${tc}%`},
@@ -709,7 +709,7 @@ export default function PedidosPage() {
       </div>
 
       {/* Alertas rápidas */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'8px',marginBottom:'16px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:'8px',marginBottom:'16px'}}>
         {[
           {n:kpis.novedades,    l:'Con novedad',     c:T.yellow, icon:'⚠️', f:'novedad'},
           {n:kpis.sla_vencido,  l:'SLA vencido >4h', c:T.red,    icon:'🔴', f:'sla_rojo'},

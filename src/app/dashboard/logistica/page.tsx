@@ -178,7 +178,7 @@ export default function LogisticaPage() {
       </div>
 
       {/* Resumen financiero global */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'10px', marginBottom:'16px' }}>
         <div style={{ ...s, padding:'16px', borderTop:'3px solid #F5A623' }}>
           <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>💰 Dinero atrapado en proceso</div>
           <div style={{ fontSize:'24px', fontWeight:'800', color:'#F5A623' }}>{fmt(dineroAtrapado)}</div>
@@ -265,7 +265,7 @@ export default function LogisticaPage() {
                     <div style={{ fontSize:'10px', color:'#5A6478' }}>tasa real de entrega</div>
                   </div>
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px' }}>
                   {[
                     { l:'Total pedidos', v:t.total, c:'#E8EDF5' },
                     { l:'Entregados', v:t.entregados, c:'#2DD4A0' },

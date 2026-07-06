@@ -297,7 +297,7 @@ export default function AlertasPage() {
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { label:'Sin leer', value:noLeidas, color: noLeidas > 0 ? '#F05C5C' : '#2DD4A0', icon:'🔔' },
           { label:'Críticas', value:criticas, color: criticas > 0 ? '#F05C5C' : '#2DD4A0', icon:'🔴' },
@@ -436,13 +436,13 @@ export default function AlertasPage() {
       )}
 
       {tab === 'pef' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'4px' }}>🔍 Diagnóstico PEF — Costos Ocultos</div>
               <div style={{ fontSize:'12px', color:'#8B96A8' }}>Prevención · Evaluación · Fallas — calculado con tus datos reales del mes</div>
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               {[
                 { letra:'P', nombre:'Prevención', color:'#F5A623', items:costosOcultos.filter(c=>c.categoria==='Prevención') },
                 { letra:'E', nombre:'Evaluación', color:'#3D8EF0', items:costosOcultos.filter(c=>c.categoria==='Evaluación') },
@@ -490,7 +490,7 @@ export default function AlertasPage() {
       )}
 
       {tab === 'oportunidades' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'18px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'14px' }}>💡 OPORTUNIDADES DETECTADAS (desde Pauta real)</div>
             {oportunidadesProducto.length === 0 ? (
@@ -533,11 +533,11 @@ export default function AlertasPage() {
       )}
 
       {tab === 'nueva' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'16px' }}>✏️ CREAR NUEVA ALERTA {esSuperadmin && '— Modo Superadmin'}</div>
 
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'10px', marginBottom:'12px' }}>
               <div>
                 <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Categoría</label>
                 <select value={nueva.categoria} onChange={e => setNueva(p=>({...p,categoria:e.target.value}))} style={{ ...inp, cursor:'pointer' }}>

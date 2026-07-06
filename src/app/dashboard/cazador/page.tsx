@@ -325,7 +325,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
 
       {/* Contexto del negocio */}
       {contexto && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', marginBottom:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'8px', marginBottom:'16px' }}>
           {[
             { l:'CPA promedio real', v:`${fmt(contexto.cpa_promedio)}`, c:'#F5A623' },
             { l:'Tasa entrega real', v:`${contexto.tasa_entrega}%`, c:'#2DD4A0' },
@@ -340,7 +340,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'400px 1fr', gap:'16px', alignItems:'start' }}>
+      <div className="dz-grid-side-l" style={{ ['--side-w' as any]:'400px', gap:'16px', alignItems:'start' }}>
 
         {/* Formulario */}
         <div style={{ ...s, padding:'20px' }}>
@@ -360,7 +360,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
             </div>
           ))}
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }}>
             <div>
               <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Costo proveedor (COP) *</label>
               <input type="number" value={producto.costo_proveedor||''}
@@ -386,7 +386,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
             </div>
           )}
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }}>
             <div>
               <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Mercado objetivo</label>
               <select value={producto.mercado} onChange={e=>setProducto(p=>({...p,mercado:e.target.value}))}
@@ -403,7 +403,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
             </div>
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'16px' }}>
             <div>
               <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Temporada</label>
               <select value={producto.temporada} onChange={e=>setProducto(p=>({...p,temporada:e.target.value}))}

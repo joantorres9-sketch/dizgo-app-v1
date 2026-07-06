@@ -258,7 +258,7 @@ export default function PYGPage() {
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { l:'Utilidad neta (mes)', v:fmt(mesActual.utilidad), c:semG(mesActual.margen), icon:'💎' },
           { l:'Caja disponible', v:fmt(walletSaldo), c:'#2DD4A0', icon:'💰' },
@@ -294,7 +294,7 @@ export default function PYGPage() {
       </div>
 
       {tab === 'resultados' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📈 Histórico 6 meses — Estado de Resultados</div>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
@@ -384,7 +384,7 @@ export default function PYGPage() {
       )}
 
       {tab === 'mezcla' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🔀 MEZCLA — Contribución a utilidad</div>
             {calcTodos.length === 0 ? (
@@ -435,7 +435,7 @@ export default function PYGPage() {
       )}
 
       {tab === 'flujo_caja' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>💧 ESTADO DE FLUJO DE EFECTIVO — Método directo NIIF (30 días)</div>
             {[
@@ -491,7 +491,7 @@ export default function PYGPage() {
       )}
 
       {tab === 'balance' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>⚖️ Estado de Situación Financiera (Balance — parcial)</div>
             <div style={{ padding:'16px' }}>
@@ -554,7 +554,7 @@ export default function PYGPage() {
       )}
 
       {tab === 'cxp' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 360px', gap:'16px' }}>
+        <div className="dz-grid-side" style={{ ['--side-w' as any]:'360px', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📋 Cuentas por Pagar — Terceros</div>
             {cxp.length === 0 ? (
@@ -619,7 +619,7 @@ export default function PYGPage() {
       )}
 
       {tab === 'libro_caja' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 320px', gap:'16px' }}>
+        <div className="dz-grid-side" style={{ ['--side-w' as any]:'320px', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📒 Libro de Caja — últimos 30 días</div>
             {movimientosCaja.length === 0 ? (
@@ -645,7 +645,7 @@ export default function PYGPage() {
               <input value={nuevoMov.concepto} onChange={e=>setNuevoMov(p=>({...p,concepto:e.target.value}))}
                 style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
-            <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'10px', flexWrap:'wrap' }}>
               {(['entrada','salida'] as const).map(t => (
                 <button key={t} onClick={()=>setNuevoMov(p=>({...p,tipo:t}))}
                   style={{ flex:1, padding:'7px', borderRadius:'7px', cursor:'pointer', fontSize:'11px', fontWeight:'600',

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --sidebar-w: 240px;
+  --sidebar-w: 220px;
 }
 
 * { box-sizing: border-box; }
@@ -31,3 +31,68 @@ body {
   50%       { opacity: 0.6; }
 }
 .pulse-soft { animation: pulse-soft 2s ease-in-out infinite; }
+
+/* ── Layout responsivo (sidebar/drawer) ────────────────────── */
+.dz-hamburger { display:none; }
+.dz-overlay { display:none; }
+
+.dz-sidebar {
+  transition: transform 0.2s ease-out;
+}
+
+.dz-main {
+  margin-left: var(--sidebar-w);
+}
+
+@media (max-width: 1024px) {
+  .dz-hamburger { display:flex; }
+
+  .dz-sidebar {
+    transform: translateX(-100%);
+    z-index: 40;
+  }
+  .dz-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+  }
+
+  .dz-overlay.open {
+    display:block;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.5);
+    z-index:39;
+  }
+
+  .dz-main {
+    margin-left: 0;
+  }
+}
+
+/* ── Grids responsivos con panel de ancho fijo (form + lista) ─ */
+.dz-grid-side {
+  display:grid;
+  grid-template-columns: 1fr var(--side-w, 360px);
+  gap:12px;
+}
+.dz-grid-side-l {
+  display:grid;
+  grid-template-columns: var(--side-w, 320px) 1fr;
+  gap:12px;
+}
+.dz-grid-2-1 {
+  display:grid;
+  grid-template-columns: 2fr 1fr;
+  gap:12px;
+}
+@media (max-width: 900px) {
+  .dz-grid-side, .dz-grid-side-l, .dz-grid-2-1 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Layout de registro (aviso lateral + formulario) ─────────── */
+@media (max-width: 820px) {
+  .dz-registro-flex { flex-direction: column; }
+  .dz-registro-side { width: 100% !important; position: static !important; }
+}

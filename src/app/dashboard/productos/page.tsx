@@ -150,7 +150,7 @@ const lbl: React.CSSProperties = {
   fontSize: '11px', color: T.muted, marginBottom: '4px', display: 'block',
 }
 const row2: React.CSSProperties = {
-  display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px',
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '8px', marginBottom: '10px',
 }
 
 // ── TOOLTIP ───────────────────────────────────────────────
@@ -318,7 +318,7 @@ function ListaCombo({
               Quitar
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: '6px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '6px' }}>
             {[
               ['Costo prov.', 'costo_proveedor', p.costo_proveedor],
               ['Flete envío', 'costo_flete', p.costo_flete],
@@ -413,7 +413,7 @@ function ModalIAChat({ onClose }: { onClose: () => void }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: '500px', height: '560px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: 'min(500px,100%)', height: '560px', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '14px 18px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div style={{ width: '32px', height: '32px', background: `${T.purple}20`, borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>🤖</div>
@@ -493,7 +493,7 @@ function ModalPreview({
   const invalidas = filas.filter((f) => !f.valido).length
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: '760px', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: 'min(760px,100%)', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '700', color: T.text }}>👁️ Vista previa — Carga masiva</div>
@@ -674,7 +674,7 @@ function ModalFormulario({
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: '680px', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: 'min(680px,100%)', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
 
         {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
@@ -713,7 +713,7 @@ function ModalFormulario({
           {iaData && f.nombre.length > 4 && (
             <div style={{ background: `${T.purple}10`, border: `1px solid ${T.purple}30`, borderRadius: '9px', padding: '10px 14px', marginBottom: '14px', fontSize: '11px' }}>
               <div style={{ fontWeight: '700', color: T.purple, marginBottom: '6px' }}>🤖 IA — Análisis de mercado</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '5px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '5px' }}>
                 <div><span style={{ color: T.muted }}>Margen sugerido: </span><strong style={{ color: T.green }}>{iaData.margenSug}%</strong></div>
                 <div><span style={{ color: T.muted }}>Benchmark: </span><strong style={{ color: T.text }}>{iaData.benchmark}</strong></div>
                 <div><span style={{ color: T.muted }}>Saturación: </span><strong>{iaData.saturacion}</strong></div>
@@ -874,7 +874,7 @@ function ModalFormulario({
           {/* Mini P&G */}
           <div style={{ background: `${T.blue}10`, border: `1px solid ${T.blue}20`, borderRadius: '9px', padding: '12px', marginTop: '10px' }}>
             <div style={{ fontSize: '11px', fontWeight: '700', color: T.blue, marginBottom: '8px' }}>📊 ESTADO DE RESULTADOS MINI</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '6px' }}>
               {[
                 ['PVP Final', fmt(f.pvp_final), T.text],
                 ['Costos directos', fmt(costoDirecto), T.red],
@@ -920,7 +920,7 @@ function ModalResumen({
   const sem = getSem(margen)
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: '520px', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: 'min(520px,100%)', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: '13px', fontWeight: '700', color: T.text }}>{producto.nombre}</div>
@@ -1137,7 +1137,7 @@ export default function ProductosPage() {
       {preview && <ModalPreview filas={preview} onConfirm={confirmarMasiva} onClose={() => setPreview(null)} />}
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: '700', color: T.text, marginBottom: '4px' }}>🛍️ Catálogo de Productos</h1>
           <p style={{ fontSize: '12px', color: T.muted }}>Sin productos no hay magia — el corazón de tu tienda</p>
@@ -1166,7 +1166,7 @@ export default function ProductosPage() {
       </div>
 
       {/* KPIs — Semáforo SUPERIOR */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr', gap: '10px', marginBottom: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '10px', marginBottom: '20px' }}>
         <div style={{ background: semProm.bg, border: `1px solid ${semProm.color}30`, borderRadius: '10px', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: '11px', color: semProm.color, fontWeight: '600', marginBottom: '2px' }}>🚦 SEMÁFORO GLOBAL — Margen promedio</div>

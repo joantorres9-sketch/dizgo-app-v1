@@ -487,7 +487,7 @@ export default function InversionPage() {
       </div>
 
       {/* KPIs principales */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'10px', marginBottom:'20px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'10px', marginBottom:'20px' }}>
         {[
           { l:'Inversión total',    v:fmt(totalInversion, pais),          c:T.red,    sub:'activos + capital' },
           { l:'Aportes socios',     v:fmt(totalAportes, pais),            c:T.blue,   sub:'capital propio cubierto' },
@@ -526,7 +526,7 @@ export default function InversionPage() {
           TAB 1 — INVERSIÓN INICIAL
       ══════════════════════════════════════════════════════ */}
       {tab === 'inversion' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
 
           {/* Activos */}
           <div style={{ ...s, padding:'20px' }}>
@@ -649,7 +649,7 @@ export default function InversionPage() {
           TAB 2 — CAPITAL PROPIO
       ══════════════════════════════════════════════════════ */}
       {tab === 'capital_propio' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'14px' }}>🌱 DIAGNÓSTICO — ¿Puedo crecer con lo que tengo?</div>
             {[
@@ -734,7 +734,7 @@ export default function InversionPage() {
           TAB 3 — OPORTUNIDAD
       ══════════════════════════════════════════════════════ */}
       {tab === 'oportunidad' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'14px' }}>🎯 DETECTOR DE OPORTUNIDAD</div>
             {[
@@ -820,7 +820,7 @@ export default function InversionPage() {
           TAB 4 — DECISIÓN DEL CRÉDITO
       ══════════════════════════════════════════════════════ */}
       {tab === 'credito' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
 
           {/* Parámetros + Dictamen */}
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
@@ -930,7 +930,7 @@ export default function InversionPage() {
               </div>
 
               {/* Semáforos */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'14px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'14px' }}>
                 {[
                   { l:'TC ≥ 75%',      estado:semaforos.confirmacion, val:`${tcReal}%` },
                   { l:'TE ≥ 75%',      estado:semaforos.entrega,      val:`${teReal}%` },
@@ -998,12 +998,12 @@ export default function InversionPage() {
           TAB 5 — ROI & PAYBACK
       ══════════════════════════════════════════════════════ */}
       {tab === 'roi' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'14px' }}>📊 ANÁLISIS ROI DE LA INVERSIÓN</div>
 
             {/* Selector escenario */}
-            <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
               {(['pesimista','realista','optimista'] as const).map(m => (
                 <button key={m} onClick={() => setModoPayback(m)}
                   style={{ flex:1, padding:'7px', borderRadius:'7px', cursor:'pointer', fontSize:'11px', fontWeight:'600',

@@ -7,7 +7,7 @@ export default function PendientePage() {
   const radicado = `DIZGO-${Date.now().toString().slice(-6)}`
   return (
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
-      <div style={{ width:'440px', textAlign:'center' }}>
+      <div style={{ width:'min(440px, calc(100vw - 32px))', textAlign:'center' }}>
         <div style={{ width:'64px', height:'64px', background: T.accent, borderRadius:'16px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'22px', color: T.card, margin:'0 auto 16px' }}>DZ</div>
         <div style={{ fontWeight:'800', fontSize:'22px', color: T.text, marginBottom:'4px' }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
         <div style={{ fontSize:'12px', color: T.muted, marginBottom:'28px' }}>Hallazgo de dinero</div>

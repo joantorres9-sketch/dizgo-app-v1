@@ -365,7 +365,7 @@ export default function EquilibrioPage() {
         <div style={{ fontSize:'11px', fontWeight:'700', color:T.muted, marginBottom:'12px', letterSpacing:'0.05em' }}>
           MODO DE PUNTO DE EQUILIBRIO
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'10px' }}>
           {MODOS.map(m => (
             <button key={m.v} onClick={() => guardarConfig({ modo_activo: m.v })}
               style={{ padding:'12px 14px', borderRadius:'10px', cursor:'pointer', textAlign:'left', border:`2px solid ${config.modo_activo === m.v ? m.color : T.border}`,
@@ -390,7 +390,7 @@ export default function EquilibrioPage() {
       </div>
 
       {/* ── KPIs CENTRALES ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'20px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px', marginBottom:'20px' }}>
         {[
           { l:'PE Meta (modo activo)',   v:`${peMeta} pedidos`,          sub:`${shopifyRequerido(peMeta)} en Shopify`,   c:modoColor },
           { l:'Ganancia ponderada',      v:fmt(gananciaPond),             sub:'por pedido entregado (mezcla)',            c:T.green },
@@ -410,7 +410,7 @@ export default function EquilibrioPage() {
         <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'12px' }}>
           🔽 EMBUDO REAL DEL MES — 4 ETAPAS
         </div>
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'8px' }}>
           {[
             { l:'🛍️ Shopify',      n:datosLive.shopify,      perdida:0,                                             desc:'Total pedidos recibidos' },
             { l:'📞 Confirmados', n:datosLive.confirmados,  perdida:safe(100 - pct(datosLive.confirmados, datosLive.shopify)),     desc:`TC: ${pct(datosLive.confirmados, datosLive.shopify)}%` },
@@ -436,7 +436,7 @@ export default function EquilibrioPage() {
       </div>
 
       {/* ── TABS ── */}
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
           { v:'tiempo_real' as Tab, l:'🕐 Tiempo Real' },
           { v:'escenarios'  as Tab, l:'🎯 Escenarios' },
@@ -457,7 +457,7 @@ export default function EquilibrioPage() {
           TAB 1 — TIEMPO REAL (GPS del mes)
       ══════════════════════════════════════════════════════════ */}
       {tab === 'tiempo_real' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
 
           {/* Columna izquierda */}
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
@@ -539,7 +539,7 @@ export default function EquilibrioPage() {
             {/* Embudo de HOY */}
             <div style={{ ...s, padding:'18px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'12px' }}>📅 EMBUDO DE HOY</div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'6px' }}>
                 {[
                   { l:'Shopify', n:datosHoy.shopify },
                   { l:'Conf.',   n:datosHoy.confirmados,  perdida:safe(100 - pct(datosHoy.confirmados, datosHoy.shopify)) },
@@ -567,7 +567,7 @@ export default function EquilibrioPage() {
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'12px' }}>
               📆 CALENDARIO DEL MES — MAPA DE CALOR
             </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'4px', marginBottom:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'4px', marginBottom:'12px' }}>
               {Array.from({ length:30 }, (_, i) => i + 1).map(dia => {
                 const ritmo      = diaActual > 0 ? entregadosActuales / diaActual : 0
                 const acumDia    = Math.round(ritmo * dia)
@@ -633,7 +633,7 @@ export default function EquilibrioPage() {
       ══════════════════════════════════════════════════════════ */}
       {tab === 'escenarios' && (
         <div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'12px', marginBottom:'16px' }}>
             {escenarios.map((e, i) => (
               <div key={i}
                 onClick={() => setEscenarioActivo(escenarioActivo === i ? null : i)}
@@ -670,7 +670,7 @@ export default function EquilibrioPage() {
               <div style={{ fontSize:'13px', fontWeight:'700', color:escenarios[escenarioActivo].color, marginBottom:'16px' }}>
                 💰 FLUJO DE CAJA — Escenario {escenarios[escenarioActivo].nombre}
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
                 <div>
                   {[
                     { l:'📢 Inversión publicitaria', v:escenarios[escenarioActivo].inversion, nota:'CPA × pedidos Shopify requeridos' },
@@ -749,7 +749,7 @@ export default function EquilibrioPage() {
           TAB 3 — DIAGNÓSTICO DE CAPACIDAD
       ══════════════════════════════════════════════════════════ */}
       {tab === 'capacidad' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
 
           {/* Recursos actuales */}
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>

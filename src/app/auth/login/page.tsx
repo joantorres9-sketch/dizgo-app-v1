@@ -63,7 +63,7 @@ export default function LoginPage() {
       display:'flex', alignItems:'center', justifyContent:'center',
       padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif'
     }}>
-      <div style={{ width:'360px' }}>
+      <div style={{ width:'min(360px, calc(100vw - 32px))' }}>
 
         {/* Logo */}
         <div style={{ textAlign:'center', marginBottom:'24px' }}>
@@ -94,7 +94,7 @@ export default function LoginPage() {
             <div style={{ marginBottom:'16px' }}>
               <div style={{ ...lbl }}>Selecciona tu país de operación *</div>
               <div style={{
-                display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'6px'
+                display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'6px'
               }}>
                 {PAISES.map(p => (
                   <button

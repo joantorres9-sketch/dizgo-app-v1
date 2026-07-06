@@ -1060,7 +1060,7 @@ export default function AdminPage() {
         <p style={{ fontSize: '13px', color: '#8B96A8' }}>Seed de datos por país · Simulación · Mantenimiento · Solo para administradores</p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '8px', marginBottom: '16px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '8px', marginBottom: '16px' }}>
         {[
           { l: 'Productos', v: conteos.productos || 0, c: '#3D8EF0' },
           { l: 'Pedidos', v: conteos.pedidos || 0, c: '#2DD4A0' },
@@ -1074,7 +1074,7 @@ export default function AdminPage() {
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '380px 1fr', gap: '16px' }}>
+      <div className="dz-grid-side-l" style={{ ['--side-w' as any]:'380px', gap: '16px' }}>
         <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '20px' }}>
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#F5A623', marginBottom: '16px' }}>🌱 SEED DE DATOS DEMO</div>
 
@@ -1102,7 +1102,7 @@ export default function AdminPage() {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
             <button onClick={ejecutarSeed} disabled={seedActivo}
               style={{ flex: 2, padding: '11px', background: seedActivo ? 'rgba(45,212,160,0.15)' : '#2DD4A0', border: 'none', borderRadius: '9px', color: seedActivo ? '#2DD4A0' : '#0A0D14', fontWeight: '800', cursor: seedActivo ? 'wait' : 'pointer', fontSize: '13px' }}>
               {seedActivo ? '⏳ Cargando datos...' : '🌱 Cargar datos demo'}

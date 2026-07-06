@@ -211,7 +211,7 @@ export default function PautaPage() {
         <p style={{ fontSize:'13px', color:T.muted }}>Datos reales desde Supabase · {registros.length} registros (últimos 30 días) · HACER</p>
       </div>
 
-      <div style={{ display:'flex', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'8px', marginBottom:'16px', flexWrap:'wrap' }}>
         {(['TODAS','META','TIKTOK'] as const).map(p => (
           <button key={p} onClick={() => setPlataforma(p)}
             style={{ padding:'7px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
@@ -229,7 +229,7 @@ export default function PautaPage() {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { label:'Inversión total', value:fmt(totalInversion), color:T.red, icon:'💸' },
           { label:'Resultados', value:totalResultados.toLocaleString(), color:T.green, icon:'🛒' },
@@ -247,7 +247,7 @@ export default function PautaPage() {
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
           { key:'resumen', label:'📊 Resumen' },
           { key:'campanas', label:'🎯 Por Campaña' },
@@ -263,7 +263,7 @@ export default function PautaPage() {
       </div>
 
       {tab === 'resumen' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'18px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'14px' }}>💸 INVERSIÓN POR CAMPAÑA</div>
             {campanas.length === 0 ? (
@@ -375,7 +375,7 @@ export default function PautaPage() {
       )}
 
       {tab === 'dia_dia' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, fontWeight:'700' }}>📅 Evolución diaria (real, respeta filtro)</div>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
@@ -426,7 +426,7 @@ export default function PautaPage() {
       )}
 
       {tab === 'carga' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px', gridColumn:'1 / -1' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'10px' }}>💳 REGISTRAR GASTO PENDIENTE DE PAUTA</div>
             <div style={{ fontSize:'11px', color:T.muted, marginBottom:'12px' }}>
@@ -451,7 +451,7 @@ export default function PautaPage() {
             <div style={{ fontSize:'12px', color:T.muted, marginBottom:'14px', lineHeight:'1.6' }}>
               Exporta tu reporte de Meta Ads (Ads Manager → Reportes → Exportar → CSV) o de TikTok Ads Manager.
             </div>
-            <div style={{ display:'flex', gap:'6px', marginBottom:'14px' }}>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'14px', flexWrap:'wrap' }}>
               {(['META','TIKTOK'] as const).map(p => (
                 <button key={p} onClick={()=>setUploadPlataforma(p)}
                   style={{ flex:1, padding:'8px', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600',

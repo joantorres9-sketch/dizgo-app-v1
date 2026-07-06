@@ -153,8 +153,8 @@ const inp: React.CSSProperties = {
   color:T.text, outline:'none', boxSizing:'border-box',
 }
 const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
-const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }
-const row3: React.CSSProperties = { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', marginBottom:'10px' }
+const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
+const row3: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const sec: React.CSSProperties = { fontSize:'11px', fontWeight:'700', letterSpacing:'0.05em', marginBottom:'8px', marginTop:'16px' }
 
 function fmt(v: number, pais = 'COL'): string {
@@ -293,7 +293,7 @@ function ModalColaborador({
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', backdropFilter:'blur(4px)' }}>
-      <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'14px', width:'700px', maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column' }}>
+      <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'14px', width:'min(700px,100%)', maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column' }}>
 
         {/* Header + stepper */}
         <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
@@ -493,7 +493,7 @@ function ModalColaborador({
                 { key:'cesantias', label:'Fondo de Cesantías', lista: ['Protección','Porvenir','Colfondos','Skandia'], docKey:'cert_cesantias' },
                 { key:'banco', label:'Banco para pago nómina *', lista: paisConfig.entidades.banco, docKey:'cert_banco' },
               ].map(item => (
-                <div key={item.key} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
+                <div key={item.key} style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
                   <div>
                     <label style={lbl}>{item.label}</label>
                     <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as unknown as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
@@ -606,7 +606,7 @@ function ModalColaborador({
               {/* Carga prestacional detallada */}
               <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', padding:'12px', marginTop:'4px' }}>
                 <div style={{ fontSize:'11px', fontWeight:'700', color:T.blue, marginBottom:'8px' }}>📊 Carga prestacional calculada</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'4px' }}>
                   {[
                     ['Salario base', f.salario_base],
                     ['Salud empleador', Math.round(f.salario_base * (tasas.salud_emp||8.5)/100)],
@@ -804,7 +804,7 @@ export default function NominaPage() {
       )}
 
       {/* Header */}
-      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'20px' }}>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
           <h1 style={{ fontSize:'22px', fontWeight:'700', color:T.text, marginBottom:'4px' }}>👥 Gestión de Nómina</h1>
           <p style={{ fontSize:'12px', color:T.muted }}>Tu equipo es tu mayor activo — gestiona con precisión</p>
@@ -824,7 +824,7 @@ export default function NominaPage() {
       )}
 
       {/* KPIs */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'20px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px', marginBottom:'20px' }}>
         {[
           { l:'Total colaboradores', v:colaboradores.length, sub:'Activos', c:T.blue },
           { l:'Carga nómina total', v:fmt(totalNomina), sub:'Costo empleador mes', c:T.accent },
@@ -984,7 +984,7 @@ export default function NominaPage() {
       {tab === 'novedades' && (
         <div>
           <div style={{ marginBottom:'16px' }}>
-            <div style={{ display:'grid', gridTemplateColumns:'200px 1fr', gap:'10px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'16px' }}>
+            <div className="dz-grid-side-l" style={{ ['--side-w' as any]:'200px', gap:'10px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'16px' }}>
               <div>
                 <label style={lbl}>Colaborador</label>
                 <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={novedad.empleado_id} onChange={e => setNovedad(n => ({ ...n, empleado_id: e.target.value }))}>
@@ -1012,7 +1012,7 @@ export default function NominaPage() {
                 <div style={{ fontSize:'12px', fontWeight:'600', color:T.accent, marginBottom:'10px' }}>
                   {TIPOS_NOVEDAD.flatMap(c => c.items).find(i => i.v === novedad.tipo)?.l}
                 </div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'8px' }}>
                   {(TIPOS_NOVEDAD.flatMap(c => c.items).find(i => i.v === novedad.tipo)?.campos || []).map(campo => (
                     <div key={campo}>
                       <label style={lbl}>{campo.replace(/_/g,' ')}</label>
@@ -1156,7 +1156,7 @@ export default function NominaPage() {
 
       {/* ══ TASAS ══ */}
       {tab === 'tasas' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'20px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent }}>⚙️ TASAS {anioFiscal} — COLOMBIA</div>

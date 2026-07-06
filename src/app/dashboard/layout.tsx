@@ -1,6 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 const NAV = [
   { group:'PLANEAR', color:'#3D8EF0', items:[
@@ -37,9 +38,15 @@ const NAV = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => { setMenuOpen(false) }, [pathname])
+
   return (
     <div style={{ display:'flex', minHeight:'100vh', background:'#0A0D14', color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
-      <aside style={{ width:'220px', background:'#080B10', borderRight:'1px solid rgba(255,255,255,0.06)', display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
+      <div className={`dz-overlay${menuOpen?' open':''}`} onClick={()=>setMenuOpen(false)} />
+
+      <aside className={`dz-sidebar${menuOpen?' open':''}`} style={{ width:'220px', background:'#080B10', borderRight:'1px solid rgba(255,255,255,0.06)', display:'flex', flexDirection:'column', position:'fixed', top:0, left:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
         <div style={{ padding:'16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
           <Link href="/dashboard" style={{ textDecoration:'none', display:'flex', alignItems:'center', gap:'10px' }}>
             <div style={{ width:'36px', height:'36px', background:'#F5A623', borderRadius:'8px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'13px', color:'#0A0D14', flexShrink:0 }}>DZ</div>
@@ -70,7 +77,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <Link href="/auth/login" style={{ display:'block', textAlign:'center', padding:'7px', background:'rgba(255,255,255,0.04)', borderRadius:'8px', color:'#5A6478', textDecoration:'none', fontSize:'12px' }}>Cerrar sesión</Link>
         </div>
       </aside>
-      <main style={{ flex:1, marginLeft:'220px', padding:'28px', minWidth:0 }}>{children}</main>
+      <div className="dz-main" style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
+        <div
+          style={{ padding:'10px 14px', borderBottom:'1px solid rgba(255,255,255,0.06)', alignItems:'center', gap:'10px', position:'sticky', top:0, background:'#0A0D14', zIndex:30 }}
+          className="dz-hamburger"
+        >
+          <button onClick={()=>setMenuOpen(o=>!o)} aria-label="Abrir menú"
+            style={{ background:'rgba(255,255,255,0.06)', border:'none', borderRadius:'8px', width:'36px', height:'36px', color:'#E8EDF5', fontSize:'18px', cursor:'pointer', flexShrink:0 }}>
+            ☰
+          </button>
+          <div style={{ fontWeight:'800', fontSize:'15px' }}>DI<span style={{ color:'#F5A623' }}>Z</span>GO</div>
+        </div>
+        <main style={{ flex:1, padding:'28px', minWidth:0 }}>{children}</main>
+      </div>
     </div>
   )
 }

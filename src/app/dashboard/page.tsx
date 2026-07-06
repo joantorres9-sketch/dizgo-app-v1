@@ -286,7 +286,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
       )}
 
       {/* ── KPIs ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {kpis.map((k,i) => (
           <a key={i} href={k.href} style={{ ...s(), padding:'14px', borderTop:`2px solid ${k.color}`, textDecoration:'none', display:'block', cursor:'pointer' }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
@@ -303,7 +303,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
       </div>
 
       {/* ── GRÁFICAS PRINCIPALES ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'12px', marginBottom:'12px' }}>
+      <div className="dz-grid-2-1" style={{ marginBottom:'12px' }}>
         {/* Gráfica de línea ventas/ganancia */}
         <div style={{ ...s(), padding:'16px' }}>
           <div style={{ fontSize:'12px', fontWeight:'700', color:C.azul, marginBottom:'14px' }}>📈 Ventas vs Ganancia — evolución del período</div>
@@ -348,7 +348,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
       </div>
 
       {/* ── FILA INFERIOR ── */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'12px', marginBottom:'12px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'12px', marginBottom:'12px' }}>
         {/* Barras pedidos por mes */}
         <div style={{ ...s(), padding:'16px' }}>
           <div style={{ fontSize:'12px', fontWeight:'700', color:C.verde, marginBottom:'14px' }}>📦 Pedidos por mes</div>

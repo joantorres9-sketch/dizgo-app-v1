@@ -154,14 +154,14 @@ function ModalTesteo({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void
 
   return (
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',zIndex:300,display:'flex',alignItems:'center',justifyContent:'center',padding:'20px',backdropFilter:'blur(4px)'}}>
-      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'14px',width:'600px',maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column'}}>
+      <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'14px',width:'min(600px,100%)',maxHeight:'88vh',overflow:'hidden',display:'flex',flexDirection:'column'}}>
         <div style={{padding:'16px 20px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
           <div style={{fontSize:'14px',fontWeight:'700',color:T.text}}>🧪 Costos de Testeo por Producto</div>
           <button onClick={onClose} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:'18px'}}>✕</button>
         </div>
         <div style={{overflowY:'auto',flex:1,padding:'16px 20px'}}>
           {/* Filtros */}
-          <div style={{display:'flex',gap:'6px',marginBottom:'12px'}}>
+          <div style={{display:'flex',gap:'6px',marginBottom:'12px',flexWrap:'wrap'}}>
             {[{v:'todos',l:'Todos'},{v:'testeo',l:'En testeo'},{v:'activo',l:'Activos'}].map(f=>(
               <button key={f.v} onClick={()=>setFiltro(f.v as any)}
                 style={{padding:'5px 12px',borderRadius:'16px',cursor:'pointer',fontSize:'11px',border:`1px solid ${filtro===f.v?T.yellow:T.border}`,background:filtro===f.v?`${T.yellow}15`:'transparent',color:filtro===f.v?T.yellow:T.muted}}>
@@ -383,7 +383,7 @@ export default function CostosPage() {
       {showTesteo && <ModalTesteo tenantId={tenantId} onClose={()=>setShowTesteo(false)} onSave={saveTesteo} />}
 
       {/* Header */}
-      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'20px'}}>
+      <div style={{display:'flex',alignItems:'flex-start',justifyContent:'space-between',marginBottom:'20px',flexWrap:'wrap',gap:'10px'}}>
         <div>
           <h1 style={{fontSize:'22px',fontWeight:'700',color:T.text,marginBottom:'4px'}}>📊 Estructura de Costos</h1>
           <p style={{fontSize:'12px',color:T.muted}}>CF · CV · PEF — Lo que no se mide, no se controla</p>
@@ -429,7 +429,7 @@ export default function CostosPage() {
       {tab==='dashboard' && (
         <div>
           {/* 4 KPI Cards */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px',marginBottom:'20px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'10px',marginBottom:'20px'}}>
             {[
               {l:'Total CF mensual',   v:fmt(totalCF),          sub:'Nómina + operación',     c:T.blue,   tip:'Suma de todos los costos fijos del mes incluyendo nómina.\nFórmula: Σ(CF por categoría) + Nómina total'},
               {l:'Total CV mensual',   v:fmt(totalCV),          sub:'Variables por venta',    c:T.green,  tip:'Costos que varían según el volumen de ventas.\nEjemplo: pauta, fletes, fulfillment'},
@@ -447,7 +447,7 @@ export default function CostosPage() {
           </div>
 
           {/* Simulador + Torta */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'14px',marginBottom:'16px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'14px',marginBottom:'16px'}}>
             {/* Simulador sin límite */}
             <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'16px'}}>
               <div style={{fontSize:'12px',fontWeight:'700',color:T.accent,marginBottom:'12px'}}>
@@ -468,7 +468,7 @@ export default function CostosPage() {
                   ))}
                 </div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px'}}>
                 <div style={{background:`${T.blue}12`,borderRadius:'8px',padding:'10px',textAlign:'center'}}>
                   <div style={{fontSize:'10px',color:T.muted,marginBottom:'4px'}}>CF por pedido</div>
                   <div style={{fontSize:'20px',fontWeight:'800',color:T.blue}}>{fmt(cfSimulado)}</div>
@@ -492,7 +492,7 @@ export default function CostosPage() {
           </div>
 
           {/* Mini-dashboard 4 vistas */}
-          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:'10px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'10px'}}>
             <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px',cursor:'pointer'}} onClick={()=>setTab('cf')}>
               <div style={{fontSize:'10px',fontWeight:'700',color:T.blue,marginBottom:'8px'}}>VISTA 1 — CF TOTALES</div>
               {CATS_CF.slice(0,4).map(cat=>{
@@ -586,7 +586,7 @@ export default function CostosPage() {
           {showFormCF && (
             <div style={{background:T.card2,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'16px',marginBottom:'16px'}}>
               <div style={{fontSize:'12px',fontWeight:'600',color:T.blue,marginBottom:'12px'}}>{editCF?'Editar':'Nuevo'} Costo Fijo</div>
-              <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'8px',marginBottom:'8px'}}>
+              <div className="dz-grid-2-1" style={{gap:'8px',marginBottom:'8px'}}>
                 <div>
                   <label style={lbl}>Concepto * — IA sugerirá la clasificación PEF</label>
                   <input style={inp} value={formCF.concepto}
@@ -610,7 +610,7 @@ export default function CostosPage() {
                   </select>
                 </div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px',marginBottom:'8px'}}>
                 <div>
                   <label style={lbl}>Categoría</label>
                   <select style={{...inp,appearance:'none' as any}} value={formCF.categoria} onChange={e=>setFormCF(f=>({...f,categoria:e.target.value}))}>
@@ -626,7 +626,7 @@ export default function CostosPage() {
                   </select>
                 </div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:'8px',marginBottom:'10px'}}>
+              <div className="dz-grid-2-1" style={{gap:'8px',marginBottom:'10px'}}>
                 <div><label style={lbl}>Notas opcionales</label><input style={inp} value={formCF.notas} onChange={e=>setFormCF(f=>({...f,notas:e.target.value}))} placeholder="Detalle adicional..." /></div>
                 <div style={{display:'flex',alignItems:'flex-end',gap:'6px'}}>
                   <div style={{flex:1,background:`${T.blue}15`,borderRadius:'7px',padding:'8px 12px',fontSize:'12px',color:T.blue,textAlign:'center'}}>
@@ -708,7 +708,7 @@ export default function CostosPage() {
           {showFormCV && (
             <div style={{background:T.card2,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'16px',marginBottom:'16px'}}>
               <div style={{fontSize:'12px',fontWeight:'600',color:T.green,marginBottom:'12px'}}>{editCV?'Editar':'Nuevo'} Costo Variable</div>
-              <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr',gap:'8px',marginBottom:'8px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:'8px',marginBottom:'8px'}}>
                 <div><label style={lbl}>Concepto *</label><input style={inp} value={formCV.concepto} onChange={e=>setFormCV(f=>({...f,concepto:e.target.value}))} placeholder="Ej: Flete envío ENVIA zona 1" /></div>
                 <div><label style={lbl}>Tipo</label>
                   <select style={{...inp,appearance:'none' as any}} value={formCV.tipo} onChange={e=>setFormCV(f=>({...f,tipo:e.target.value}))}>
@@ -718,7 +718,7 @@ export default function CostosPage() {
                 <div><label style={lbl}>Valor ($)</label><input style={inp} type="number" value={formCV.valor||''} onChange={e=>setFormCV(f=>({...f,valor:parseFloat(e.target.value)||0}))} /></div>
                 <div><label style={lbl}>% sobre PVP</label><input style={inp} type="number" value={formCV.pct_sobre_pvp||''} onChange={e=>setFormCV(f=>({...f,pct_sobre_pvp:parseFloat(e.target.value)||0}))} /></div>
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'8px',marginBottom:'10px'}}>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'8px',marginBottom:'10px'}}>
                 <div><label style={lbl}>Modelo negocio</label>
                   <select style={{...inp,appearance:'none' as any}} value={formCV.modelo} onChange={e=>setFormCV(f=>({...f,modelo:e.target.value}))}>
                     {MODELOS.map(m=><option key={m} value={m}>{m}</option>)}
@@ -791,7 +791,7 @@ export default function CostosPage() {
           )}
 
           {/* 4 bloques PEF */}
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px',marginBottom:'16px'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'12px',marginBottom:'16px'}}>
             {PEF.filter(p=>p.v!=='no_clasificado').map(cat=>{
               const total=pefTotals[cat.v]||0
               const totalGeneral=Object.values(pefTotals).reduce((a,v)=>a+v,0)
@@ -830,7 +830,7 @@ export default function CostosPage() {
           {/* Comparativa Calidad vs No Calidad */}
           <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'16px'}}>
             <div style={{fontSize:'12px',fontWeight:'700',color:T.text,marginBottom:'12px'}}>🏆 Calidad vs No Calidad</div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'12px'}}>
               <div style={{textAlign:'center',padding:'16px',background:`${T.green}10`,borderRadius:'8px',border:`1px solid ${T.green}30`}}>
                 <div style={{fontSize:'11px',color:T.green,marginBottom:'4px'}}>✅ INVERSIÓN EN CALIDAD (P+E)</div>
                 <div style={{fontSize:'24px',fontWeight:'800',color:T.green}}>{fmt(totalCalidad)}</div>
@@ -911,7 +911,7 @@ export default function CostosPage() {
               {historico.length >= 2 && (
                 <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'16px'}}>
                   <div style={{fontSize:'12px',fontWeight:'700',color:T.purple,marginBottom:'12px'}}>🤖 IA — Proyección CF próximos 3 meses</div>
-                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px'}}>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:'10px'}}>
                     {[1,2,3].map(n=>{
                       const base=historico[0]?.total_cf||totalCF
                       const tendencia=historico.length>=2?(historico[0].total_cf-historico[1].total_cf)/historico[1].total_cf:0

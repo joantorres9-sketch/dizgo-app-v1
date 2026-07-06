@@ -199,7 +199,7 @@ export default function PQRSFPage() {
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { label:'Total', value:stats.total, color:'#E8EDF5', icon:'📬' },
           { label:'Recibidas', value:stats.recibidas, color:'#3D8EF0', icon:'📥' },
@@ -217,7 +217,7 @@ export default function PQRSFPage() {
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
           { key:'lista', label:'📋 Lista' },
           { key:'nueva', label:'✏️ Nueva PQRSF' },
@@ -314,7 +314,7 @@ export default function PQRSFPage() {
 
               <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:'10px', padding:'12px 14px', marginBottom:'12px' }}>
                 <div style={{ fontSize:'11px', color:'#5A6478', fontWeight:'700', marginBottom:'8px' }}>CLIENTE</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', fontSize:'12px' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', fontSize:'12px' }}>
                   {[
                     { l:'Nombre', v:seleccionada.nombre_cliente },
                     { l:'Teléfono', v:seleccionada.telefono || 'N/A' },
@@ -384,7 +384,7 @@ export default function PQRSFPage() {
       )}
 
       {tab === 'nueva' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'16px' }}>✏️ REGISTRAR NUEVA PQRSF</div>
             <div style={{ marginBottom:'14px' }}>
@@ -401,7 +401,7 @@ export default function PQRSFPage() {
               </div>
             </div>
 
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'10px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'10px', marginBottom:'10px' }}>
               <div style={{ gridColumn:'1/-1' }}>
                 <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Nombre del cliente</label>
                 <input value={nuevaPQRSF.nombre_cliente} placeholder="Ej: María García"
@@ -493,7 +493,7 @@ export default function PQRSFPage() {
       )}
 
       {tab === 'stats' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>📊 POR TIPO DE SOLICITUD</div>
             {Object.entries(TIPO_INFO).map(([key, info]) => {

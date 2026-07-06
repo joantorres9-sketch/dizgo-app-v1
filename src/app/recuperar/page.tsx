@@ -25,7 +25,7 @@ export default function RecuperarPage() {
 
   return (
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
-      <div style={{ width:'360px' }}>
+      <div style={{ width:'min(360px, calc(100vw - 32px))' }}>
         <div style={{ textAlign:'center', marginBottom:'24px' }}>
           <div style={{ width:'52px', height:'52px', background: T.accent, borderRadius:'14px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'18px', color: T.card, margin:'0 auto 12px' }}>DZ</div>
           <div style={{ fontWeight:'800', fontSize:'20px', color: T.text }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>

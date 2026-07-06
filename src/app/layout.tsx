@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 
@@ -16,6 +16,11 @@ export const metadata: Metadata = {
   title: 'DIZGO — Hallazgo de dinero',
   description: 'Plataforma de gestión financiera y operativa para e-commerce y dropshipping en LATAM',
   icons: { icon: '/favicon.ico' },
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -289,7 +289,7 @@ export default function WhatsAppPage() {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { l:'Total chats activos', v:stats.total, c:T.blue, icon:'💬' },
           { l:'En modo IA', v:stats.ia, c:T.purple, icon:'🤖' },
@@ -305,7 +305,7 @@ export default function WhatsAppPage() {
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
           { v:'kanban' as const, l:'📋 Tablero Kanban' },
           { v:'plantillas' as const, l:'📝 Plantillas' },
@@ -320,7 +320,7 @@ export default function WhatsAppPage() {
       </div>
 
       {tab === 'kanban' && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'12px' }}>
           {PISCINAS.map(pis => {
             const pedidosPiscina = pedidos.filter(p => chats[p.id]?.pool_actual === pis.v)
             return (
@@ -370,7 +370,7 @@ export default function WhatsAppPage() {
       )}
 
       {tab === 'plantillas' && (
-        <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:'16px' }}>
+        <div className="dz-grid-side-l" style={{ ['--side-w' as any]:'280px', gap:'16px' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {plantillas.map(pl => {
               const base = PLANTILLAS_BASE.find(b => b.tipo === pl.tipo)
@@ -407,7 +407,7 @@ export default function WhatsAppPage() {
       )}
 
       {tab === 'lotes' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between' }}>
               <span style={{ fontWeight:'700', fontSize:'13px' }}>Seleccionar pedidos</span>
@@ -457,7 +457,7 @@ export default function WhatsAppPage() {
 
       {pedidoActivo && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:200, display:'flex', justifyContent:'flex-end' }}>
-          <div style={{ width:'420px', background:T.card, height:'100vh', overflowY:'auto', borderLeft:`1px solid ${T.border}` }}>
+          <div style={{ width:'min(420px,100vw)', background:T.card, height:'100vh', overflowY:'auto', borderLeft:`1px solid ${T.border}` }}>
             <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between' }}>
               <div style={{ fontSize:'14px', fontWeight:'700' }}>{pedidoActivo.cliente_nombre}</div>
               <button onClick={()=>{setPedidoActivo(null);setSnapshot(null)}} style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'18px' }}>✕</button>

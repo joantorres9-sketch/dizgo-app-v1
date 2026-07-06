@@ -137,7 +137,7 @@ export default function BodegaPage() {
         <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(5,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { l:'Bodegas activas', v:bodegas.filter(b=>b.activa).length, c:'#3D8EF0', icon:'🏭' },
           { l:'Productos bodega propia', v:prodsBodegaPropia.length, c:'#2DD4A0', icon:'📦' },
@@ -173,7 +173,7 @@ export default function BodegaPage() {
       {showNuevaBodega && (
         <div style={{ ...s, padding:'18px', marginBottom:'16px', border:'1px solid rgba(245,166,35,0.3)' }}>
           <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'12px' }}>+ Nueva bodega</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }}>
             <input placeholder="Nombre" value={nuevaBodega.nombre} onChange={e=>setNuevaBodega(p=>({...p,nombre:e.target.value}))}
               style={{ background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px' }} />
             <select value={nuevaBodega.tipo} onChange={e=>setNuevaBodega(p=>({...p,tipo:e.target.value}))}
@@ -276,7 +276,7 @@ export default function BodegaPage() {
       )}
 
       {tab === 'piscinas' && (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'10px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'10px' }}>
           {PISCINAS_INFO.map(pis => {
             const enEsta = piscinas.filter(p=>p.piscina===pis.v)
             return (
@@ -303,7 +303,7 @@ export default function BodegaPage() {
       )}
 
       {tab === 'riesgo' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>⚠️ Alertas de riesgo por producto</div>
             {alertasRiesgo.length === 0 ? (

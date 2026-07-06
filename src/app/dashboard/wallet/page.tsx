@@ -135,7 +135,7 @@ export default function WalletPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold">💳 Wallet Dropi</h1>
           <p className="text-sm mt-1" style={{ color: '#8B96A8' }}>Historial de transacciones · Cargar Excel exportado de Dropi</p>
@@ -158,7 +158,7 @@ export default function WalletPage() {
       )}
 
       {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
           { label: 'Total Entradas', value: formatMoney(entradas, moneda), color: '#2DD4A0', icon: '⬆️' },
           { label: 'Total Salidas',  value: formatMoney(salidas, moneda),  color: '#F05C5C', icon: '⬇️' },
@@ -176,7 +176,7 @@ export default function WalletPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         {['TODO', 'ENTRADA', 'SALIDA'].map(f => (
           <button key={f} onClick={() => setFilter(f)}
                   className="px-4 py-1.5 rounded-lg text-xs font-semibold transition-all"

@@ -332,7 +332,7 @@ export default function PrecioPage() {
         </select>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'280px 1fr', gap:'16px' }}>
+      <div className="dz-grid-side-l" style={{ ['--side-w' as any]:'280px', gap:'16px' }}>
 
         <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', overflow:'hidden', height:'fit-content' }}>
           <div style={{ padding:'12px 14px', borderBottom:`1px solid ${T.border}`, fontSize:'12px', fontWeight:'600', color:T.muted }}>
@@ -402,7 +402,7 @@ export default function PrecioPage() {
             )}
 
             {prodSel && pvpHumano > 0 && margenReal < 25 && (
-              <div style={{ display:'flex', gap:'8px', marginBottom:'12px' }}>
+              <div style={{ display:'flex', gap:'8px', marginBottom:'12px', flexWrap:'wrap' }}>
                 <button onClick={enviarAlerta}
                   style={{ padding:'7px 12px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'7px', color:T.red, cursor:'pointer', fontSize:'11px', fontWeight:'600' }}>
                   🔴 Enviar alerta a módulo Alertas
@@ -434,7 +434,7 @@ export default function PrecioPage() {
             </div>
 
             {tab==='costeo' && (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'12px' }}>
 
                 <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px' }}>
                   <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>💰 ESTRUCTURA DE COSTOS — 8 CAPAS</div>
@@ -646,7 +646,7 @@ export default function PrecioPage() {
             )}
 
             {tab==='volumen' && (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'12px' }}>
                 {[
                   { label:'Precio x2 (combo de 2)', normal:pvpX2Normal, pvp:pvpX2Final, desc:x2Desc, costoUnit:2 },
                   { label:'Precio x3 (combo de 3)', normal:pvpX3Normal, pvp:pvpX3Final, desc:x3Desc, costoUnit:3 },
@@ -712,10 +712,10 @@ export default function PrecioPage() {
             )}
 
             {tab==='proyeccion' && (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'12px' }}>
                 <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'16px' }}>
                   <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>📈 PRESUPUESTO DEL PRODUCTO</div>
-                  <div style={{ display:'flex', gap:'6px', marginBottom:'12px' }}>
+                  <div style={{ display:'flex', gap:'6px', marginBottom:'12px', flexWrap:'wrap' }}>
                     {(['testeo','activo','temporada'] as const).map(e => (
                       <button key={e} onClick={() => setEstadoProd(e)}
                         style={{ flex:1, padding:'7px', borderRadius:'7px', cursor:'pointer', fontSize:'11px', fontWeight:'600',

@@ -175,7 +175,7 @@ export default function EmbudoPage() {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'6px', marginBottom:'16px' }}>
         {[
           { label:'Impresiones', value:(totalImpresiones/1000).toFixed(0)+'K', color:'#5A6478', icon:'👁️' },
           { label:'Clics', value:(totalClics/1000).toFixed(1)+'K', color:'#3D8EF0', icon:'🖱️' },
@@ -194,7 +194,7 @@ export default function EmbudoPage() {
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {[
           { key:'embudo', label:'🔬 Embudo visual' },
           { key:'diagnostico', label:'🚨 Diagnóstico' },
@@ -210,7 +210,7 @@ export default function EmbudoPage() {
       </div>
 
       {tab === 'embudo' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'16px' }}>🔬 EMBUDO COMPLETO — datos reales del mes</div>
             {ETAPAS.map((e,i) => {
@@ -298,7 +298,7 @@ export default function EmbudoPage() {
       )}
 
       {tab === 'diagnostico' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>🔍 DIAGNÓSTICO POR INDICADOR — con impacto en $</div>
             {[
@@ -374,7 +374,7 @@ export default function EmbudoPage() {
       )}
 
       {tab === 'simulador' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'6px' }}>⚡ SIMULADOR — basado en ganancia ponderada real</div>
             <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'16px' }}>Ganancia ponderada actual: <strong style={{ color:'#2DD4A0' }}>${gananciaPonderada.toLocaleString('es-CO')}</strong>/pedido (mezcla real)</div>
@@ -398,7 +398,7 @@ export default function EmbudoPage() {
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'20px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'14px' }}>📊 RESULTADO SIMULACIÓN</div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'14px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'14px' }}>
                 {[
                   { label:'Clics', actual:totalClics, sim:sim_clics, dinero:0 },
                   { label:'Confirmados', actual:confirmados.length, sim:sim_confirmados, dinero:sim_confirmados*pvpPonderado },

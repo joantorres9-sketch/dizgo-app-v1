@@ -404,7 +404,7 @@ export default function MetasPage() {
 
       {/* ══════════════════ TAB: ¿QUÉ NECESITAS HOY? ══════════════════ */}
       {tab === 'hoy' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'12px' }}>📋 RESUMEN DEL DÍA</div>
@@ -473,7 +473,7 @@ export default function MetasPage() {
           {/* Paso 1 — Modo objetivo */}
           <div style={{ ...s, padding:'18px', marginBottom:'16px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'12px' }}>PASO 1 — ¿Qué quieres lograr este mes?</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px' }}>
               {MODOS.map(m => (
                 <button key={m.v} onClick={()=>guardarMetas({ modo_objetivo:m.v })}
                   style={{ padding:'12px', borderRadius:'10px', cursor:'pointer', textAlign:'left',
@@ -487,7 +487,7 @@ export default function MetasPage() {
           </div>
 
           {/* Selector horizonte */}
-          <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+          <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
             {(['mes','trimestre','anual'] as Horizonte[]).map(h => (
               <button key={h} onClick={()=>guardarMetas({ horizonte:h })}
                 style={{ flex:1, padding:'8px', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600',
@@ -498,7 +498,7 @@ export default function MetasPage() {
             ))}
           </div>
 
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
             {/* Metas operativas mes */}
             {metas.horizonte === 'mes' && (
               <div style={{ ...s, padding:'20px' }}>
@@ -604,7 +604,7 @@ export default function MetasPage() {
 
       {/* ══════════════════ TAB: TIEMPO REAL ══════════════════ */}
       {tab === 'tiempo_real' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
@@ -633,7 +633,7 @@ export default function MetasPage() {
             {/* Embudo en tiempo real */}
             <div style={{ ...s, padding:'18px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'12px' }}>🔽 EFICIENCIA DEL EMBUDO</div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'6px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'6px' }}>
                 {[
                   { l:'Shopify', n:shopifyActuales, meta:100, c:T.text },
                   { l:'Confirmados', n:confActuales, pctV:tcReal, metaV:metas.meta_confirmacion },
@@ -656,7 +656,7 @@ export default function MetasPage() {
           {/* Calendario */}
           <div style={{ ...s, padding:'18px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'12px' }}>📆 CALENDARIO DEL MES</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'4px', marginBottom:'12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'4px', marginBottom:'12px' }}>
               {Array.from({ length:diasMes }, (_,i)=>i+1).map(dia => {
                 const acumDia = Math.round(ritmoActual*dia)
                 const metaDia = Math.ceil(metaEfectiva*dia/diasMes)
@@ -685,7 +685,7 @@ export default function MetasPage() {
 
       {/* ══════════════════ TAB: PROYECCIÓN ══════════════════ */}
       {tab === 'proyeccion' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>🔮 PROYECCIÓN 30/60/90 DÍAS</div>
             {[30,60,90].map(dias => {
@@ -696,7 +696,7 @@ export default function MetasPage() {
               return (
                 <div key={dias} style={{ ...s2, padding:'14px', marginBottom:'10px' }}>
                   <div style={{ fontSize:'11px', fontWeight:'700', color:T.accent, marginBottom:'8px' }}>+{dias} días</div>
-                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px' }}>
                     {[
                       { l:'Pedidos', v:proyP.toLocaleString('es-CO') },
                       { l:'Ventas', v:fmtK(proyV) },

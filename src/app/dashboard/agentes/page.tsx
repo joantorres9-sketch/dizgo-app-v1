@@ -256,7 +256,7 @@ Sé directo, usa números reales, sin rodeos.`
         <p style={{ fontSize:'13px', color:'#8B96A8' }}>Fase 1 · Confirmador · Novedades · Contable · Powered by Claude</p>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'8px', marginBottom:'16px' }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { label:'Pedidos sin confirmar (+2h)', v:pedidosSinConfirmar.length, c: pedidosSinConfirmar.length>0?'#F05C5C':'#2DD4A0', icon:'📞' },
           { label:'Novedades sin resolver (+24h)', v:pedidosNovedad.length, c: pedidosNovedad.length>0?'#F5A623':'#2DD4A0', icon:'⚠️' },
@@ -271,7 +271,7 @@ Sé directo, usa números reales, sin rodeos.`
         ))}
       </div>
 
-      <div style={{ display:'flex', gap:'6px', marginBottom:'16px' }}>
+      <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
         {AGENTES.map(a => (
           <button key={a.key} onClick={()=>setTab(a.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
@@ -283,7 +283,7 @@ Sé directo, usa números reales, sin rodeos.`
 
       {/* ── TAB CONFIRMADOR ── */}
       {tab === 'confirmador' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>📞 Pedidos sin confirmar — más de 2 horas</div>
@@ -338,7 +338,7 @@ Sé directo, usa números reales, sin rodeos.`
 
       {/* ── TAB NOVEDADES ── */}
       {tab === 'novedades' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>⚠️ Novedades sin resolver — más de 24 horas</div>
@@ -393,7 +393,7 @@ Sé directo, usa números reales, sin rodeos.`
 
       {/* ── TAB CONTABLE ── */}
       {tab === 'contable' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
               <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'14px' }}>📊 Contexto financiero que recibirá el agente</div>
@@ -443,7 +443,7 @@ Sé directo, usa números reales, sin rodeos.`
 
       {/* ── TAB CAMPAÑAS ── */}
       {tab === 'campanas' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>📡 Campañas activas — últimos 30 días</div>
@@ -496,7 +496,7 @@ Sé directo, usa números reales, sin rodeos.`
 
       {/* ── TAB INVENTARIO ── */}
       {tab === 'inventario' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>🏭 Productos con stock bajo o en quiebre</div>
@@ -541,7 +541,7 @@ Sé directo, usa números reales, sin rodeos.`
 
       {/* ── TAB LOGÍSTICO ── */}
       {tab === 'logistico' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>🚚 Rendimiento por transportadora — 30 días</div>
