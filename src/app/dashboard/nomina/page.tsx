@@ -21,7 +21,7 @@ interface Colaborador {
   pais_code: string; pais_nacimiento_code: string; departamento: string; ciudad: string
   direccion: string; codigo_tel: string; celular: string; email: string; correo_personal: string
   contacto_emergencia: Record<string, string>
-  nivel_formacion: string; cargo: string; proceso_id: string
+  nivel_formacion: string; cargo: string; cargo_id: string; proceso_id: string
   tipo_contrato: string; fecha_ingreso: string; fecha_fin: string
   jornada: string; lugar_ejecucion: string; sede: string
   salario_base: number; aux_transporte: number; tipo_salario: string
@@ -39,10 +39,11 @@ interface Proceso {
 }
 interface Cargo {
   id: string; proceso_id: string; nombre: string; tipo: string; activo: boolean
+  reporta_a_id: string | null
 }
 interface Indicador {
   id: string; proceso_id: string; nombre: string; objetivo: string; formula: string
-  unidad: string; frecuencia: string; meta: number; activo: boolean
+  unidad: string; frecuencia: string; meta: number; activo: boolean; origen: string
 }
 interface Medicion {
   id: string; indicador_id: string; fecha: string; valor: number; nota: string
@@ -250,7 +251,7 @@ function ModalColaborador({
   tasas: Partial<TasaHistorico>
   onProcesoCreado: (nombre: string, tipo: string) => Promise<string | null>
   cargos: Cargo[]
-  onCargoCreado: (nombre: string, procesoId: string) => Promise<void>
+  onCargoCreado: (nombre: string, procesoId: string) => Promise<string | null>
 }) {
   const supabase = createClient()
   const [step, setStep] = useState(0)
@@ -283,7 +284,7 @@ function ModalColaborador({
     email: editData?.email || '', correo_personal: editData?.correo_personal || '',
     contacto_emergencia: editData?.contacto_emergencia || { nombre:'', parentesco:'', celular:'' },
     nivel_formacion: editData?.nivel_formacion || '',
-    cargo: editData?.cargo || '', proceso_id: editData?.proceso_id || '',
+    cargo: editData?.cargo || '', cargo_id: editData?.cargo_id || '', proceso_id: editData?.proceso_id || '',
     tipo_contrato: editData?.tipo_contrato || 'Empleado',
     fecha_ingreso: editData?.fecha_ingreso || '', fecha_fin: editData?.fecha_fin || '',
     jornada: editData?.jornada || 'Tiempo completo',
@@ -726,7 +727,7 @@ function ModalColaborador({
                     <label style={lbl}>Proceso/Área</label>
                     <button type="button" onClick={() => setMostrarNuevoProceso(s => !s)} style={{ fontSize:'10px', color:T.purple, background:'none', border:'none', cursor:'pointer', marginBottom:'4px' }}>+ nuevo</button>
                   </div>
-                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.proceso_id} onChange={e => setF(p => ({ ...p, proceso_id: e.target.value, cargo: '' }))}>
+                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.proceso_id} onChange={e => setF(p => ({ ...p, proceso_id: e.target.value, cargo: '', cargo_id: '' }))}>
                     <option value="">Sin proceso</option>
                     {['Estratégico','Misional','Apoyo'].map(tipo => {
                       const grupo = procesos.filter(p => (p.tipo || 'Misional') === tipo)
@@ -756,9 +757,12 @@ function ModalColaborador({
                     <button type="button" disabled={!f.proceso_id} onClick={() => setMostrarNuevoCargo(s => !s)} style={{ fontSize:'10px', color: f.proceso_id ? T.purple : T.muted, background:'none', border:'none', cursor: f.proceso_id ? 'pointer' : 'not-allowed', marginBottom:'4px' }}>+ nuevo</button>
                   </div>
                   {f.proceso_id ? (
-                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.cargo} onChange={set('cargo')}>
+                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.cargo_id} onChange={e => {
+                      const c = cargos.find(x => x.id === e.target.value)
+                      setF(p => ({ ...p, cargo_id: e.target.value, cargo: c?.nombre || '' }))
+                    }}>
                       <option value="">Seleccionar...</option>
-                      {cargos.filter(c => c.proceso_id === f.proceso_id).map(c => <option key={c.id} value={c.nombre}>{c.nombre} ({c.tipo})</option>)}
+                      {cargos.filter(c => c.proceso_id === f.proceso_id).map(c => <option key={c.id} value={c.id}>{c.nombre} ({c.tipo})</option>)}
                     </select>
                   ) : (
                     <input style={inp} value={f.cargo} onChange={set('cargo')} placeholder="Elige un proceso para ver los cargos" />
@@ -767,8 +771,8 @@ function ModalColaborador({
                     <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
                       <input style={{ ...inp, flex:1 }} placeholder="Nombre del cargo" value={nuevoCargoNombre} onChange={e => setNuevoCargoNombre(e.target.value)} />
                       <button type="button" onClick={async () => {
-                        await onCargoCreado(nuevoCargoNombre, f.proceso_id)
-                        setF(p => ({ ...p, cargo: nuevoCargoNombre })); setNuevoCargoNombre(''); setMostrarNuevoCargo(false)
+                        const id = await onCargoCreado(nuevoCargoNombre, f.proceso_id)
+                        setF(p => ({ ...p, cargo: nuevoCargoNombre, cargo_id: id || '' })); setNuevoCargoNombre(''); setMostrarNuevoCargo(false)
                       }} style={{ padding:'0 12px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px' }}>Crear</button>
                     </div>
                   )}
@@ -916,6 +920,163 @@ function ModalColaborador({
   )
 }
 
+// ── ÁRBOL DE ORGANIGRAMA (drag-and-drop nativo, jerarquía real por cargo) ─
+const COLOR_NIVEL: Record<string,string> = {
+  Gerente:'#F05C5C', Director:'#F5A623', Coordinador:'#3D8EF0', Analista:'#2DD4A0', Auxiliar:'#9B6BFF',
+}
+
+function esDescendiente(cargos: Cargo[], posibleAncestroId: string, id: string): boolean {
+  let actual = cargos.find(c => c.id === id)
+  while (actual?.reporta_a_id) {
+    if (actual.reporta_a_id === posibleAncestroId) return true
+    actual = cargos.find(c => c.id === actual!.reporta_a_id)
+  }
+  return false
+}
+
+function CajaCargo({ cargo, cargos, colaboradores, procesos, tenantId, onReload, dragId, setDragId, nivel }: {
+  cargo: Cargo; cargos: Cargo[]; colaboradores: Colaborador[]; procesos: Proceso[]; tenantId: string
+  onReload: () => void; dragId: string | null; setDragId: (id: string | null) => void; nivel: number
+}) {
+  const supabase = createClient()
+  const [showNuevo, setShowNuevo] = useState(false)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+  const [nuevoTipo, setNuevoTipo] = useState('Analista')
+  const [showDetalle, setShowDetalle] = useState(false)
+
+  const ocupantes = colaboradores.filter(c => c.cargo_id === cargo.id)
+  const proceso = procesos.find(p => p.id === cargo.proceso_id)
+  const cargaTotal = ocupantes.reduce((a,c) => a + (c.carga_total_mes || 0), 0)
+  const vacante = ocupantes.length === 0
+  const hijos = cargos.filter(c => c.reporta_a_id === cargo.id)
+  const color = COLOR_NIVEL[cargo.tipo] || T.muted
+
+  async function crearHijo() {
+    if (!nuevoNombre.trim()) return
+    await supabase.from('nomina_cargos').insert({
+      tenant_id: tenantId, nombre: nuevoNombre, tipo: nuevoTipo,
+      proceso_id: cargo.proceso_id, reporta_a_id: cargo.id, activo: true,
+    })
+    setNuevoNombre(''); setShowNuevo(false); onReload()
+  }
+
+  async function onDrop(e: React.DragEvent) {
+    e.preventDefault(); e.stopPropagation()
+    if (!dragId || dragId === cargo.id) return
+    if (esDescendiente(cargos, dragId, cargo.id)) { alert('No puedes mover un cargo debajo de uno de sus propios subordinados'); return }
+    await supabase.from('nomina_cargos').update({ reporta_a_id: cargo.id }).eq('id', dragId)
+    setDragId(null); onReload()
+  }
+
+  return (
+    <div style={{ marginLeft: nivel > 0 ? '22px' : 0, borderLeft: nivel > 0 ? `2px solid ${T.border}` : 'none', paddingLeft: nivel > 0 ? '14px' : 0, marginTop:'10px' }}>
+      <div
+        draggable
+        onDragStart={() => setDragId(cargo.id)}
+        onDragOver={e => e.preventDefault()}
+        onDrop={onDrop}
+        onClick={() => setShowDetalle(s => !s)}
+        style={{
+          background: vacante ? 'rgba(240,92,92,0.08)' : 'rgba(45,212,160,0.08)',
+          border: `1px solid ${vacante ? `${T.red}40` : `${T.green}40`}`,
+          borderLeft: `3px solid ${color}`, borderRadius:'8px', padding:'10px 12px', cursor:'grab', maxWidth:'340px',
+        }}
+      >
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px' }}>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:T.text }}>{cargo.nombre}</div>
+          <span style={{ fontSize:'9px', padding:'2px 6px', borderRadius:'4px', background:`${color}20`, color, fontWeight:'700', flexShrink:0 }}>{cargo.tipo}</span>
+        </div>
+        <div style={{ fontSize:'10px', color:T.purple, marginTop:'2px' }}>{proceso?.nombre || 'Sin proceso'}</div>
+        <div style={{ display:'flex', justifyContent:'space-between', marginTop:'6px', fontSize:'10px' }}>
+          <span style={{ color: vacante ? T.red : T.green, fontWeight:'700' }}>{vacante ? '○ Vacante' : `● ${ocupantes.length} persona${ocupantes.length>1?'s':''}`}</span>
+          <span style={{ color:T.muted }}>{fmt(cargaTotal)}/mes</span>
+        </div>
+        {showDetalle && (
+          <div style={{ marginTop:'8px', paddingTop:'8px', borderTop:`1px solid ${T.border}` }} onClick={e => e.stopPropagation()}>
+            {ocupantes.length > 0 ? ocupantes.map(o => (
+              <div key={o.id} style={{ fontSize:'10px', color:T.muted, padding:'2px 0' }}>👤 {o.nombres} {o.apellidos} · {o.tipo_contrato}</div>
+            )) : <div style={{ fontSize:'10px', color:T.muted }}>Sin colaboradores activos en este cargo</div>}
+            <button onClick={() => setShowNuevo(s => !s)} style={{ marginTop:'6px', fontSize:'10px', color, background:'none', border:'none', cursor:'pointer', padding:0 }}>+ cargo debajo de este</button>
+            {showNuevo && (
+              <div style={{ display:'flex', gap:'4px', marginTop:'6px' }} onClick={e => e.stopPropagation()}>
+                <input style={{ ...inp, flex:1, fontSize:'11px', padding:'5px 8px' }} placeholder="Nombre del cargo" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} />
+                <select style={{ ...inp, width:'90px', fontSize:'11px', padding:'5px 6px' }} value={nuevoTipo} onChange={e => setNuevoTipo(e.target.value)}>
+                  {Object.keys(COLOR_NIVEL).map(t => <option key={t}>{t}</option>)}
+                </select>
+                <button onClick={crearHijo} style={{ padding:'0 10px', background:color, border:'none', borderRadius:'6px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'10px' }}>Crear</button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {hijos.map(h => (
+        <CajaCargo key={h.id} cargo={h} cargos={cargos} colaboradores={colaboradores} procesos={procesos} tenantId={tenantId} onReload={onReload} dragId={dragId} setDragId={setDragId} nivel={nivel + 1} />
+      ))}
+    </div>
+  )
+}
+
+function ArbolOrganigrama({ cargos, colaboradores, procesos, tenantId, onReload }: {
+  cargos: Cargo[]; colaboradores: Colaborador[]; procesos: Proceso[]; tenantId: string; onReload: () => void
+}) {
+  const supabase = createClient()
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [showNuevaRaiz, setShowNuevaRaiz] = useState(false)
+  const [nombreRaiz, setNombreRaiz] = useState('')
+  const [procesoRaiz, setProcesoRaiz] = useState('')
+
+  const raices = cargos.filter(c => !c.reporta_a_id)
+  const sinAsignar = colaboradores.filter(c => !c.cargo_id)
+
+  async function crearRaiz() {
+    if (!nombreRaiz.trim() || !procesoRaiz) return
+    await supabase.from('nomina_cargos').insert({
+      tenant_id: tenantId, nombre: nombreRaiz, tipo: 'Gerente', proceso_id: procesoRaiz, reporta_a_id: null, activo: true,
+    })
+    setNombreRaiz(''); setShowNuevaRaiz(false); onReload()
+  }
+
+  return (
+    <div>
+      <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'16px', fontSize:'11px', color:T.muted }}>
+        Arrastra una caja y suéltala sobre otra para reasignar a quién le reporta. Clic en una caja para ver quién la ocupa y agregar cargos debajo. Verde = ocupado, rojo = vacante — el headcount y la carga salen de los colaboradores reales, no se digitan a mano.
+      </div>
+      <div style={{ marginBottom:'14px' }}>
+        {showNuevaRaiz ? (
+          <div style={{ display:'flex', gap:'6px' }}>
+            <input style={{ ...inp, width:'200px' }} placeholder="Nombre del cargo raíz" value={nombreRaiz} onChange={e => setNombreRaiz(e.target.value)} />
+            <select style={{ ...inp, width:'200px' }} value={procesoRaiz} onChange={e => setProcesoRaiz(e.target.value)}>
+              <option value="">Proceso...</option>
+              {procesos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+            </select>
+            <button onClick={crearRaiz} style={{ padding:'0 14px', background:T.red, border:'none', borderRadius:'7px', color:'#fff', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Crear</button>
+            <button onClick={() => setShowNuevaRaiz(false)} style={{ padding:'0 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:'7px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>✕</button>
+          </div>
+        ) : (
+          <button onClick={() => setShowNuevaRaiz(true)} style={{ padding:'8px 14px', background:`${T.red}15`, border:`1px solid ${T.red}40`, borderRadius:'8px', color:T.red, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+ Cargo raíz (ej. Gerente General)</button>
+        )}
+      </div>
+
+      {raices.length === 0 ? (
+        <div style={{ textAlign:'center', padding:'48px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', color:T.muted, fontSize:'13px' }}>
+          Sin cargos en el organigrama todavía
+        </div>
+      ) : raices.map(r => (
+        <CajaCargo key={r.id} cargo={r} cargos={cargos} colaboradores={colaboradores} procesos={procesos} tenantId={tenantId} onReload={onReload} dragId={dragId} setDragId={setDragId} nivel={0} />
+      ))}
+
+      {sinAsignar.length > 0 && (
+        <div style={{ marginTop:'20px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', maxWidth:'340px' }}>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:T.muted, marginBottom:'8px' }}>Sin cargo asignado en el organigrama ({sinAsignar.length})</div>
+          {sinAsignar.map(c => (
+            <div key={c.id} style={{ fontSize:'11px', color:T.muted, padding:'3px 0' }}>{c.nombres} {c.apellidos} — {c.cargo || 'sin cargo'}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── TABLERO DE PROCESOS (drag-and-drop nativo, sin librerías) ─
 const TIPOS_PROCESO = [
   { v:'Estratégico', c:T.red },
@@ -1044,6 +1205,7 @@ function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onRelo
   const [form, setForm] = useState({ proceso_id:'', nombre:'', objetivo:'', formula:'', unidad:'%', frecuencia:'Mensual', meta:0 })
   const [midiendo, setMidiendo] = useState<string | null>(null)
   const [medForm, setMedForm] = useState({ fecha: new Date().toISOString().slice(0,10), valor:0, nota:'' })
+  const [recalculando, setRecalculando] = useState<string | null>(null)
 
   async function crearIndicador() {
     if (!form.nombre || !form.proceso_id) return
@@ -1056,6 +1218,46 @@ function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onRelo
     await supabase.from('nomina_indicador_mediciones').insert({ tenant_id: tenantId, indicador_id: indicadorId, ...medForm })
     setMedForm({ fecha: new Date().toISOString().slice(0,10), valor:0, nota:'' })
     setMidiendo(null); onReload()
+  }
+
+  // Recalcula el indicador desde los datos reales de pedidos/pauta — misma lógica y mismos
+  // campos que ya usa el dashboard principal (src/app/dashboard/page.tsx), no un cálculo paralelo.
+  async function recalcular(ind: Indicador) {
+    setRecalculando(ind.id)
+    try {
+      const { data: ultimoPedido } = await supabase.from('pedidos').select('fecha_pedido')
+        .eq('tenant_id', tenantId).order('fecha_pedido', { ascending: false }).limit(1).maybeSingle()
+      const fechaRef = ultimoPedido?.fecha_pedido ? new Date(ultimoPedido.fecha_pedido) : new Date()
+      const ini = new Date(fechaRef.getFullYear(), fechaRef.getMonth(), 1).toISOString().slice(0,10)
+      const fin = new Date(fechaRef.getFullYear(), fechaRef.getMonth()+1, 0).toISOString().slice(0,10)
+
+      let valor = 0
+      if (ind.origen === 'pedidos_gestionados' || ind.origen === 'pedidos_tasa_entrega') {
+        const { data: peds } = await supabase.from('pedidos').select('estado').eq('tenant_id', tenantId)
+          .gte('fecha_pedido', ini).lte('fecha_pedido', fin + 'T23:59:59')
+        const rows = (peds || []) as { estado: string }[]
+        const total = rows.length
+        const entregados = rows.filter(p => ['ENTREGADO','entregado'].includes(p.estado)).length
+        const cancelados = rows.filter(p => ['CANCELADO','cancelado'].includes(p.estado)).length
+        valor = ind.origen === 'pedidos_tasa_entrega'
+          ? (total > 0 ? Math.round(entregados / total * 100) : 0)
+          : (total > 0 ? Math.round((entregados + cancelados) / total * 100) : 0)
+      } else if (ind.origen === 'pauta_roas') {
+        const [{ data: peds }, { data: pauta }] = await Promise.all([
+          supabase.from('pedidos').select('pvp,estado').eq('tenant_id', tenantId).gte('fecha_pedido', ini).lte('fecha_pedido', fin + 'T23:59:59'),
+          supabase.from('pauta').select('inversion').eq('tenant_id', tenantId).gte('fecha', ini).lte('fecha', fin),
+        ])
+        const ventas = ((peds || []) as { pvp:number; estado:string }[]).filter(p => ['ENTREGADO','entregado'].includes(p.estado)).reduce((a,p) => a + Number(p.pvp||0), 0)
+        const inversion = ((pauta || []) as { inversion:number }[]).reduce((a,r) => a + Number(r.inversion||0), 0)
+        valor = inversion > 0 ? Math.round(ventas / inversion * 10) / 10 : 0
+      }
+
+      await supabase.from('nomina_indicador_mediciones').insert({
+        tenant_id: tenantId, indicador_id: ind.id, fecha: new Date().toISOString().slice(0,10), valor,
+        nota: `Recalculado automáticamente desde pedidos/pauta (${ini} a ${fin})`,
+      })
+      onReload()
+    } finally { setRecalculando(null) }
   }
 
   const porProceso = procesos
@@ -1137,7 +1339,12 @@ function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onRelo
                         ))}
                       </div>
                     )}
-                    {midiendo === ind.id ? (
+                    {ind.origen !== 'manual' ? (
+                      <button onClick={() => recalcular(ind)} disabled={recalculando === ind.id}
+                        style={{ width:'100%', padding:'6px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'6px', color:T.blue, cursor: recalculando === ind.id ? 'wait' : 'pointer', fontSize:'11px', fontWeight:'600' }}>
+                        {recalculando === ind.id ? 'Calculando...' : '🔄 Recalcular desde pedidos/pauta'}
+                      </button>
+                    ) : midiendo === ind.id ? (
                       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
                         <input style={{ ...inpDate, flex:1 }} type="date" value={medForm.fecha} onChange={e => setMedForm(f => ({ ...f, fecha: e.target.value }))} />
                         <input style={{ ...inp, width:'70px' }} type="number" value={medForm.valor || ''} onChange={e => setMedForm(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))} />
@@ -1175,10 +1382,8 @@ export default function NominaPage() {
   const [buscar, setBuscar] = useState('')
   const [anioFiscal, setAnioFiscal] = useState(2025)
 
-  // Organigrama
+  // Creación rápida de proceso desde el wizard de colaborador
   const [nuevoProceso, setNuevoProceso] = useState('')
-  const [showNuevoProceso, setShowNuevoProceso] = useState(false)
-  const [nuevoProcesoTipoOrg, setNuevoProcesoTipoOrg] = useState('Misional')
 
   // Novedades
   const [novedad, setNovedad] = useState({ empleado_id:'', tipo:'', campos:{} as Record<string,string|number> })
@@ -1258,15 +1463,18 @@ export default function NominaPage() {
     const { data, error: err } = await supabase.from('nomina_procesos')
       .insert({ nombre: n, tipo: tipo || 'Misional', tenant_id: tenantId, orden: procesos.length + 1, activo: true })
       .select('id').single()
-    setNuevoProceso(''); setShowNuevoProceso(false); await loadData()
+    setNuevoProceso(''); await loadData()
     return err ? null : data?.id || null
   }
 
   async function crearCargo(nombre: string, procesoId: string) {
     const n = nombre.trim()
-    if (!n || !procesoId) return
-    await supabase.from('nomina_cargos').insert({ tenant_id: tenantId, proceso_id: procesoId, nombre: n, tipo: 'Analista', activo: true })
+    if (!n || !procesoId) return null
+    const { data, error: err } = await supabase.from('nomina_cargos')
+      .insert({ tenant_id: tenantId, proceso_id: procesoId, nombre: n, tipo: 'Analista', activo: true })
+      .select('id').single()
     await loadData()
+    return err ? null : data?.id || null
   }
 
   async function eliminarColaborador(id: string) {
@@ -1404,72 +1612,9 @@ export default function NominaPage() {
         ))}
       </div>
 
-      {/* ══ ORGANIGRAMA ══ */}
+      {/* ══ ORGANIGRAMA (árbol real por cargo) ══ */}
       {tab === 'organigrama' && (
-        <div>
-          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:'12px', gap:'8px' }}>
-            {showNuevoProceso ? (
-              <div style={{ display:'flex', gap:'6px' }}>
-                <input style={{ ...inp, width:'200px' }} placeholder="Nombre del proceso/área" value={nuevoProceso} onChange={e => setNuevoProceso(e.target.value)} />
-                <select style={{ ...inp, width:'120px' }} value={nuevoProcesoTipoOrg} onChange={e => setNuevoProcesoTipoOrg(e.target.value)}>
-                  {['Estratégico','Misional','Apoyo'].map(t => <option key={t}>{t}</option>)}
-                </select>
-                <button onClick={() => crearProceso(nuevoProceso, nuevoProcesoTipoOrg)} style={{ padding:'7px 14px', background:T.green, border:'none', borderRadius:'7px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Crear</button>
-                <button onClick={() => setShowNuevoProceso(false)} style={{ padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:'7px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>✕</button>
-              </div>
-            ) : (
-              <button onClick={() => setShowNuevoProceso(true)} style={{ padding:'8px 14px', background:`${T.purple}15`, border:`1px solid ${T.purple}40`, borderRadius:'8px', color:T.purple, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>+ Nuevo proceso/área</button>
-            )}
-          </div>
-
-          {/* Organigrama visual — agrupado por tipo de proceso */}
-          {(['Estratégico','Misional','Apoyo'] as const).map(tipoGrupo => {
-            const grupo = porProceso.filter(p => (p.tipo || 'Misional') === tipoGrupo)
-            if (grupo.length === 0) return null
-            const colorGrupo = tipoGrupo === 'Estratégico' ? T.red : tipoGrupo === 'Misional' ? T.blue : T.yellow
-            return (
-              <div key={tipoGrupo} style={{ marginBottom:'18px' }}>
-                <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.05em', color:colorGrupo, marginBottom:'8px' }}>{tipoGrupo.toUpperCase()}</div>
-                <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-                  {grupo.map(p => (
-                    <div key={p.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderTop:`2px solid ${colorGrupo}`, borderRadius:'10px', padding:'14px', minWidth:'220px', flex:'1' }}>
-                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:T.purple }}>{p.nombre}</div>
-                        <div style={{ fontSize:'11px', color:T.muted }}>{p.colaboradores.length} personas</div>
-                      </div>
-                      <div style={{ fontSize:'12px', color:T.accent, fontWeight:'600', marginBottom:'10px' }}>{fmt(p.carga)}/mes</div>
-                      {p.colaboradores.map(c => (
-                        <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:`1px solid ${T.border}` }}>
-                          <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:`${T.blue}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'700', color:T.blue, flexShrink:0 }}>
-                            {(c.nombres[0]||'')+(c.apellidos[0]||'')}
-                          </div>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:'12px', color:T.text, fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.nombres} {c.apellidos}</div>
-                            <div style={{ fontSize:'10px', color:T.muted }}>{c.cargo} · {c.tipo_contrato}</div>
-                          </div>
-                        </div>
-                      ))}
-                      {p.colaboradores.length === 0 && <div style={{ fontSize:'11px', color:T.muted, textAlign:'center', padding:'10px 0' }}>Sin colaboradores</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-
-          {/* Sin proceso */}
-          {colaboradores.filter(c => !c.proceso_id).length > 0 && (
-            <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', maxWidth:'320px' }}>
-              <div style={{ fontSize:'13px', fontWeight:'700', color:T.muted, marginBottom:'10px' }}>Sin proceso asignado</div>
-              {colaboradores.filter(c => !c.proceso_id).map(c => (
-                <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:`1px solid ${T.border}` }}>
-                  <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:`${T.muted}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px' }}>👤</div>
-                  <div><div style={{ fontSize:'12px', color:T.text }}>{c.nombres} {c.apellidos}</div><div style={{ fontSize:'10px', color:T.muted }}>{c.cargo}</div></div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <ArbolOrganigrama cargos={cargos} colaboradores={colaboradores} procesos={procesos} tenantId={tenantId} onReload={loadData} />
       )}
 
       {/* ══ PROCESOS (tablero drag-and-drop) ══ */}
