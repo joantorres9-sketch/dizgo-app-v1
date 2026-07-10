@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { PAISES, buscarPaises, paisPorCodigo, divisionesPorPais, etiquetaDivision, configRHPorPais } from '@/lib/paises'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -17,8 +18,8 @@ interface Colaborador {
   fecha_nacimiento: string; genero: string; estado_civil: string
   tiene_conyuge: boolean; datos_conyuge: Record<string, string>
   tiene_hijos: boolean; datos_hijos: Array<Record<string, string>>
-  pais_code: string; departamento: string; ciudad: string
-  direccion: string; codigo_tel: string; celular: string; email: string
+  pais_code: string; pais_nacimiento_code: string; departamento: string; ciudad: string
+  direccion: string; codigo_tel: string; celular: string; email: string; correo_personal: string
   contacto_emergencia: Record<string, string>
   nivel_formacion: string; cargo: string; proceso_id: string
   tipo_contrato: string; fecha_ingreso: string; fecha_fin: string
@@ -28,11 +29,12 @@ interface Colaborador {
   tipo_cotizante: string; eps: string; pension: string; arl: string
   caja_comp: string; cesantias: string; banco: string
   tipo_cuenta: string; num_cuenta: string
+  doc_pension_url: string; doc_ss_independiente_url: string
   docs_urls: Record<string, string>; activo: boolean
   carga_total_mes: number
 }
 interface Proceso {
-  id: string; nombre: string; descripcion: string; orden: number; activo: boolean
+  id: string; nombre: string; descripcion: string; orden: number; activo: boolean; tipo: string
 }
 interface TasaHistorico {
   id: string; pais_code: string; anio_fiscal: number
@@ -46,59 +48,9 @@ interface TasaHistorico {
   salud_trab: number; pension_trab: number; tope_exoneracion: number
 }
 
-// ── CONSTANTES POR PAÍS ───────────────────────────────────
-const PAISES_CONFIG: Record<string, {
-  nombre: string; moneda: string; doc_id: string
-  entidades: { eps: string[]; pension: string[]; arl: string[]; banco: string[] }
-  niveles_formacion: string[]
-  semanas_mat: number; dias_pat: number; dias_luto: number
-}> = {
-  COL: {
-    nombre: 'Colombia', moneda: 'COP', doc_id: 'CC/CE',
-    entidades: {
-      eps: ['Sura','Compensar','Nueva EPS','Sanitas','Coomeva','Famisanar','Salud Total','Coosalud'],
-      pension: ['Protección','Porvenir','Colfondos','Colpensiones','Skandia'],
-      arl: ['Sura','Positiva','Colmena','Bolívar','Liberty'],
-      banco: ['Bancolombia','Davivienda','Banco de Bogotá','BBVA','Nequi','Daviplata','Banco Agrario'],
-    },
-    niveles_formacion: ['Primaria','Bachillerato','Técnico','Tecnólogo','Profesional','Especialización','Maestría','Doctorado'],
-    semanas_mat: 18, dias_pat: 14, dias_luto: 5,
-  },
-  ECU: {
-    nombre: 'Ecuador', moneda: 'USD', doc_id: 'CI',
-    entidades: {
-      eps: ['IESS','Salud S.A.','Humana','Colonial'],
-      pension: ['IESS Pensión'],
-      arl: ['IESS Riesgos del Trabajo'],
-      banco: ['Banco Pichincha','Produbanco','Banco Guayaquil','Banco del Pacífico','Banco Internacional'],
-    },
-    niveles_formacion: ['Primaria','Secundaria','Bachillerato','Técnico','Tecnólogo','Tercer Nivel','Cuarto Nivel'],
-    semanas_mat: 12, dias_pat: 10, dias_luto: 3,
-  },
-  MEX: {
-    nombre: 'México', moneda: 'MXN', doc_id: 'CURP',
-    entidades: {
-      eps: ['IMSS','ISSSTE'],
-      pension: ['AFORE XXI Banorte','AFORE SURA','Profuturo','Citibanamex AFORE'],
-      arl: ['IMSS RT'],
-      banco: ['BBVA México','Santander','Banorte','HSBC','Scotiabank'],
-    },
-    niveles_formacion: ['Primaria','Secundaria','Preparatoria','Técnico','Licenciatura','Especialidad','Maestría','Doctorado'],
-    semanas_mat: 12, dias_pat: 5, dias_luto: 3,
-  },
-  PER: {
-    nombre: 'Perú', moneda: 'PEN', doc_id: 'DNI',
-    entidades: {
-      eps: ['EsSalud','Pacífico Salud','Rímac'],
-      pension: ['ONP','AFP Integra','Prima AFP','Habitat','Profuturo'],
-      arl: ['La Positiva','Rímac','MAPFRE'],
-      banco: ['BCP','Scotiabank','BBVA Perú','Interbank','BanBif'],
-    },
-    niveles_formacion: ['Primaria','Secundaria','Técnico','Universitario','Posgrado'],
-    semanas_mat: 14, dias_pat: 10, dias_luto: 5,
-  },
-}
-const PAIS_DEFAULT = PAISES_CONFIG.COL
+// ── CONSTANTES POR PAÍS (consolidadas en src/lib/paises.ts) ──
+// País operativo/domicilio: usa configRHPorPais(pais_code) para entidades EPS/pensión/ARL/banco,
+// niveles de formación y tipos de cuenta. País de nacimiento es independiente (ver pais_nacimiento_code).
 
 const TIPOS_NOVEDAD = [
   { cat: 'A. Incapacidades y Licencias', items: [
@@ -156,6 +108,82 @@ const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:
 const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const row3: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const sec: React.CSSProperties = { fontSize:'11px', fontWeight:'700', letterSpacing:'0.05em', marginBottom:'8px', marginTop:'16px' }
+// El ícono nativo del selector de fecha es negro y se vuelve invisible sobre fondo oscuro —
+// color-scheme:dark hace que el navegador dibuje el ícono en tono claro.
+const inpDate: React.CSSProperties = { ...inp, colorScheme: 'dark' }
+
+// ── Tooltip de ayuda reutilizable (ícono ⓘ, texto al hover) ──
+function Ayuda({ texto }: { texto: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <span style={{ position:'relative', display:'inline-block', marginLeft:'5px' }}>
+      <span
+        onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+        style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'13px', height:'13px', borderRadius:'50%', background:`${T.blue}30`, color:T.blue, fontSize:'9px', fontWeight:'700', cursor:'help' }}
+      >ⓘ</span>
+      {open && (
+        <span style={{ position:'absolute', bottom:'18px', left:'0', zIndex:50, width:'220px', background:'#050B16', border:`1px solid ${T.border}`, borderRadius:'7px', padding:'8px 10px', fontSize:'10.5px', lineHeight:1.5, color:T.text, boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
+          {texto}
+        </span>
+      )}
+    </span>
+  )
+}
+
+// ── Input numérico con separador de miles en vivo (1.500.000, no 1500000) ──
+function InputMiles({ value, onChange, style }: { value: number; onChange: (v: number) => void; style?: React.CSSProperties }) {
+  const [texto, setTexto] = useState(value ? value.toLocaleString('es-CO') : '')
+  useEffect(() => {
+    const limpio = parseInt(texto.replace(/\D/g, ''), 10) || 0
+    if (limpio !== value) setTexto(value ? value.toLocaleString('es-CO') : '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+  return (
+    <input
+      style={style || inp}
+      inputMode="numeric"
+      value={texto}
+      onChange={e => {
+        const digitos = e.target.value.replace(/\D/g, '')
+        const num = digitos ? parseInt(digitos, 10) : 0
+        setTexto(num ? num.toLocaleString('es-CO') : '')
+        onChange(num)
+      }}
+    />
+  )
+}
+
+// ── Combo buscable (filtra mientras escribes) — país, banco, etc. ──
+function ComboBuscable({ value, onChange, opciones, placeholder }: {
+  value: string; onChange: (v: string) => void; opciones: string[]; placeholder?: string
+}) {
+  const [q, setQ] = useState(value)
+  const [open, setOpen] = useState(false)
+  useEffect(() => { setQ(value) }, [value])
+  const filtradas = opciones.filter(o => o.toLowerCase().includes(q.toLowerCase())).slice(0, 30)
+  return (
+    <div style={{ position:'relative' }}>
+      <input
+        style={inp} value={q} placeholder={placeholder || 'Buscar...'}
+        onChange={e => { setQ(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      />
+      {open && filtradas.length > 0 && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:50, maxHeight:'180px', overflowY:'auto', background:'#050B16', border:`1px solid ${T.border}`, borderRadius:'8px', boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
+          {filtradas.map(o => (
+            <div key={o} onMouseDown={() => { onChange(o); setQ(o); setOpen(false) }}
+              style={{ padding:'7px 10px', fontSize:'12px', color:T.text, cursor:'pointer' }}
+              onMouseEnter={e => e.currentTarget.style.background = '#0F1E32'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              {o}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function fmt(v: number, pais = 'COL'): string {
   const cfgs: Record<string,{locale:string;currency:string;dec:number}> = {
@@ -167,8 +195,26 @@ function fmt(v: number, pais = 'COL'): string {
   return new Intl.NumberFormat(c.locale,{style:'currency',currency:c.currency,minimumFractionDigits:c.dec}).format(v)
 }
 
+// Honorarios/Contratista: independientes que facturan por prestación de servicios — no
+// acumulan prestaciones sociales (cesantías, prima, vacaciones) ni auxilio de transporte, y
+// gestionan su propia seguridad social (la empresa solo verifica soporte de pago). Ver
+// tipoEsIndependiente().
+function tipoEsIndependiente(tipo_contrato: string): boolean {
+  return tipo_contrato === 'Honorarios' || tipo_contrato === 'Contratista'
+}
+
+// Auxilio de transporte (Colombia): aplica solo si el salario base es ≤ 2 SMMLV vigentes y el
+// contrato NO es independiente. Otros países: no se calcula automático (normativa no verificada).
+function calcAuxTransporte(salario_base: number, tipo_contrato: string, pais_code: string, tasas: Partial<TasaHistorico>): number {
+  if (pais_code !== 'COL') return 0
+  if (tipoEsIndependiente(tipo_contrato)) return 0
+  const dosSmmlv = (tasas.salario_minimo || 1300000) * 2
+  return salario_base > 0 && salario_base <= dosSmmlv ? (tasas.aux_transporte || 162000) : 0
+}
+
 function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): number {
   const s = colab.salario_base || 0
+  if (tipoEsIndependiente(colab.tipo_contrato || '')) return Math.round(s)
   const arl_pcts = [tasas.arl_nivel1||0.522,tasas.arl_nivel2||1.044,tasas.arl_nivel3||2.436,tasas.arl_nivel4||4.350,tasas.arl_nivel5||6.960]
   const nivel = (colab.nivel_arl || 1) - 1
   const smmlv10 = (tasas.salario_minimo||1300000) * (tasas.tope_exoneracion||10)
@@ -181,23 +227,32 @@ function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): 
     (tasas.cesantias||8.33)/100 + (tasas.intereses_ces||1)/100 +
     (tasas.prima||8.33)/100 + (tasas.vacaciones||4.17)/100
   )
-  return Math.round(s + carga)
+  return Math.round(s + carga + (colab.aux_transporte || 0))
 }
 
 // ── MODAL COLABORADOR (Formulario completo) ───────────────
 function ModalColaborador({
-  onClose, onSave, tenantId, editData, procesos, tasas,
+  onClose, onSave, tenantId, editData, procesos, tasas, onProcesoCreado,
 }: {
   onClose: () => void; onSave: () => void; tenantId: string
   editData: Colaborador | null; procesos: Proceso[]
   tasas: Partial<TasaHistorico>
+  onProcesoCreado: (nombre: string, tipo: string) => Promise<string | null>
 }) {
   const supabase = createClient()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState<Record<string,boolean>>({})
-  const [docUrls, setDocUrls] = useState<Record<string,string>>(editData?.docs_urls || {})
+  const [fotoDisplayUrl, setFotoDisplayUrl] = useState('')
+  const [mostrarNuevoProceso, setMostrarNuevoProceso] = useState(false)
+  const [nuevoProcesoNombre, setNuevoProcesoNombre] = useState('')
+  const [nuevoProcesoTipo, setNuevoProcesoTipo] = useState('Misional')
+  const [docUrls, setDocUrls] = useState<Record<string,string>>({
+    ...(editData?.docs_urls || {}),
+    ...(editData?.doc_pension_url ? { pension_doc: editData.doc_pension_url } : {}),
+    ...(editData?.doc_ss_independiente_url ? { ss_independiente_doc: editData.doc_ss_independiente_url } : {}),
+  })
 
   const [f, setF] = useState({
     nombres: editData?.nombres || '', apellidos: editData?.apellidos || '',
@@ -206,10 +261,11 @@ function ModalColaborador({
     genero: editData?.genero || 'M', estado_civil: editData?.estado_civil || 'Soltero',
     tiene_conyuge: editData?.tiene_conyuge || false, datos_conyuge: editData?.datos_conyuge || {},
     tiene_hijos: editData?.tiene_hijos || false, datos_hijos: editData?.datos_hijos || [],
-    pais_code: editData?.pais_code || 'COL', departamento: editData?.departamento || '',
+    pais_code: editData?.pais_code || 'COL', pais_nacimiento_code: editData?.pais_nacimiento_code || '',
+    departamento: editData?.departamento || '',
     ciudad: editData?.ciudad || '', direccion: editData?.direccion || '',
     codigo_tel: editData?.codigo_tel || '+57', celular: editData?.celular || '',
-    email: editData?.email || '',
+    email: editData?.email || '', correo_personal: editData?.correo_personal || '',
     contacto_emergencia: editData?.contacto_emergencia || { nombre:'', parentesco:'', celular:'' },
     nivel_formacion: editData?.nivel_formacion || '',
     cargo: editData?.cargo || '', proceso_id: editData?.proceso_id || '',
@@ -227,7 +283,9 @@ function ModalColaborador({
     num_cuenta: editData?.num_cuenta || '',
   })
 
-  const paisConfig = PAISES_CONFIG[f.pais_code] || PAIS_DEFAULT
+  const paisConfig = configRHPorPais(f.pais_code)
+  const paisNombre = paisPorCodigo(f.pais_code)?.nombre || f.pais_code
+  const esIndependiente = tipoEsIndependiente(f.tipo_contrato)
   const cargaTotal = calcCarga(f as Partial<Colaborador>, tasas)
 
   // Alerta contrato término fijo
@@ -240,23 +298,54 @@ function ModalColaborador({
 
   async function uploadDoc(id: string, file: File | null) {
     if (!file) return
+    if (file.size > 5 * 1024 * 1024) { alert('El archivo supera el máximo de 5MB'); return }
     setUploading(u => ({ ...u, [id]: true }))
     try {
       const path = `nomina/${tenantId}/${Date.now()}_${id}_${file.name}`
-      const { error: err } = await supabase.storage.from('documentos-nomina').upload(path, file)
+      const { error: err } = await supabase.storage.from('documentos-nomina').upload(path, file, { contentType: file.type || 'application/pdf' })
       if (err) throw err
-      const { data: { publicUrl } } = supabase.storage.from('documentos-nomina').getPublicUrl(path)
-      setDocUrls(d => ({ ...d, [id]: publicUrl }))
-    } catch { alert('Error al subir archivo') }
+      // Bucket privado: se guarda solo la ruta; la URL firmada (temporal) se genera al momento de ver el documento.
+      setDocUrls(d => ({ ...d, [id]: path }))
+    } catch (e: unknown) {
+      console.error('Error subiendo documento de nómina:', e)
+      const msg = e instanceof Error ? e.message : 'Error desconocido'
+      alert(`Error al subir archivo: ${msg}`)
+    }
     finally { setUploading(u => ({ ...u, [id]: false })) }
   }
+
+  async function verDoc(path: string) {
+    if (!path) return
+    const { data, error: err } = await supabase.storage.from('documentos-nomina').createSignedUrl(path, 300)
+    if (err || !data?.signedUrl) { alert('No se pudo generar el link del documento'); return }
+    window.open(data.signedUrl, '_blank')
+  }
+
+  useEffect(() => {
+    if (!f.foto_url) { setFotoDisplayUrl(''); return }
+    supabase.storage.from('documentos-nomina').createSignedUrl(f.foto_url, 3600).then(({ data }) => {
+      if (data?.signedUrl) setFotoDisplayUrl(data.signedUrl)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.foto_url])
+
+  // Auxilio de transporte automático (Colombia, solo contratos dependientes) — el usuario puede
+  // seguir editándolo manualmente para el resto de países.
+  useEffect(() => {
+    if (f.pais_code !== 'COL' || tipoEsIndependiente(f.tipo_contrato)) return
+    const auto = calcAuxTransporte(f.salario_base, f.tipo_contrato, f.pais_code, tasas)
+    setF(prev => prev.aux_transporte === auto ? prev : { ...prev, aux_transporte: auto })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.salario_base, f.tipo_contrato, f.pais_code])
 
   async function guardar() {
     if (!f.nombres || !f.num_doc || !f.cargo) { setError('Nombres, documento y cargo son obligatorios'); return }
     setSaving(true); setError('')
     try {
+      const { pension_doc, ss_independiente_doc, ...restDocs } = docUrls
       const payload = {
-        ...f, tenant_id: tenantId, activo: true, docs_urls: docUrls,
+        ...f, tenant_id: tenantId, activo: true, docs_urls: restDocs,
+        doc_pension_url: pension_doc || null, doc_ss_independiente_url: ss_independiente_doc || null,
         carga_total_mes: cargaTotal,
       }
       if (editData?.id) {
@@ -279,15 +368,23 @@ function ModalColaborador({
         <label style={lbl}>{label}{req ? ' *' : ''}</label>
         {req && <span style={{ fontSize:'9px', color:T.red, padding:'1px 5px', borderRadius:'3px', background:`${T.red}15` }}>Obligatorio</span>}
       </div>
-      <label style={{
-        display:'block', width:'100%', padding:'10px', textAlign:'center',
-        background:'#0A1628', border:`1.5px dashed ${docUrls[id] ? T.green : T.border}`,
-        borderRadius:'8px', cursor:'pointer', fontSize:'11px',
-        color: docUrls[id] ? T.green : T.muted, boxSizing:'border-box',
-      }}>
-        {uploading[id] ? 'Subiendo...' : docUrls[id] ? '✓ Archivo cargado' : '+ Subir PDF · máx. 5MB'}
-        <input type="file" accept="application/pdf" style={{ display:'none' }} onChange={e => uploadDoc(id, e.target.files?.[0] || null)} />
-      </label>
+      <div style={{ display:'flex', gap:'6px' }}>
+        <label style={{
+          flex:1, display:'block', padding:'10px', textAlign:'center',
+          background:'#0A1628', border:`1.5px dashed ${docUrls[id] ? T.green : T.border}`,
+          borderRadius:'8px', cursor:'pointer', fontSize:'11px',
+          color: docUrls[id] ? T.green : T.muted, boxSizing:'border-box',
+        }}>
+          {uploading[id] ? 'Subiendo...' : docUrls[id] ? '✓ Archivo cargado — clic para reemplazar' : '+ Subir PDF · máx. 5MB'}
+          <input type="file" accept="application/pdf" style={{ display:'none' }} onChange={e => uploadDoc(id, e.target.files?.[0] || null)} />
+        </label>
+        {docUrls[id] && (
+          <button type="button" onClick={() => verDoc(docUrls[id])}
+            style={{ padding:'0 12px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'8px', color:T.blue, cursor:'pointer', fontSize:'11px' }}>
+            👁 Ver
+          </button>
+        )}
+      </div>
     </div>
   )
 
@@ -346,18 +443,20 @@ function ModalColaborador({
               {/* Foto */}
               <div style={{ marginBottom:'10px', textAlign:'center' }}>
                 <div style={{ width:'72px', height:'72px', borderRadius:'50%', background:`${T.blue}20`, border:`2px dashed ${T.border}`, margin:'0 auto 6px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'28px', overflow:'hidden' }}>
-                  {f.foto_url ? <img src={f.foto_url} alt="foto" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : '👤'}
+                  {fotoDisplayUrl ? <img src={fotoDisplayUrl} alt="foto" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : '👤'}
                 </div>
                 <label style={{ fontSize:'11px', color:T.accent, cursor:'pointer', textDecoration:'underline' }}>
-                  Subir foto
+                  {uploading.foto ? 'Subiendo...' : 'Subir foto'}
                   <input type="file" accept="image/*" style={{ display:'none' }} onChange={async (e) => {
                     const file = e.target.files?.[0]; if (!file) return
                     setUploading(u => ({ ...u, foto: true }))
                     const path = `nomina/${tenantId}/foto_${Date.now()}_${file.name}`
-                    const { error: err } = await supabase.storage.from('documentos-nomina').upload(path, file)
-                    if (!err) {
-                      const { data: { publicUrl } } = supabase.storage.from('documentos-nomina').getPublicUrl(path)
-                      setF(prev => ({ ...prev, foto_url: publicUrl }))
+                    const { error: err } = await supabase.storage.from('documentos-nomina').upload(path, file, { contentType: file.type })
+                    if (err) {
+                      console.error('Error subiendo foto:', err)
+                      alert(`Error al subir foto: ${err.message}`)
+                    } else {
+                      setF(prev => ({ ...prev, foto_url: path }))
                     }
                     setUploading(u => ({ ...u, foto: false }))
                   }} />
@@ -378,7 +477,7 @@ function ModalColaborador({
                 <div><label style={lbl}>Número documento *</label><input style={inp} value={f.num_doc} onChange={set('num_doc')} /></div>
               </div>
               <div style={row2}>
-                <div><label style={lbl}>Fecha nacimiento</label><input style={inp} type="date" value={f.fecha_nacimiento} onChange={set('fecha_nacimiento')} /></div>
+                <div><label style={lbl}>Fecha nacimiento</label><input style={inpDate} type="date" value={f.fecha_nacimiento} onChange={set('fecha_nacimiento')} /></div>
                 <div>
                   <label style={lbl}>Género</label>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.genero} onChange={set('genero')}>
@@ -386,32 +485,63 @@ function ModalColaborador({
                   </select>
                 </div>
               </div>
-              <div style={row3}>
+
+              <div style={row2}>
                 <div>
-                  <label style={lbl}>País</label>
-                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.pais_code} onChange={set('pais_code')}>
-                    {Object.entries(PAISES_CONFIG).map(([k,v]) => <option key={k} value={k}>{v.nombre}</option>)}
+                  <label style={lbl}>País de nacimiento<Ayuda texto="Independiente del país donde opera la tienda — busca por nombre, ej. si nació en Venezuela pero trabaja en Colombia." /></label>
+                  <ComboBuscable
+                    value={paisPorCodigo(f.pais_nacimiento_code)?.nombre || ''}
+                    onChange={nombre => { const p = PAISES.find(x => x.nombre === nombre); if (p) setF(prev => ({ ...prev, pais_nacimiento_code: p.code })) }}
+                    opciones={PAISES.map(p => p.nombre)}
+                    placeholder="Escribe para buscar un país..."
+                  />
+                </div>
+                <div>
+                  <label style={lbl}>País de residencia (operación)</label>
+                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.pais_code} onChange={e => {
+                    const code = e.target.value
+                    const p = paisPorCodigo(code)
+                    setF(prev => ({ ...prev, pais_code: code, codigo_tel: p?.codigoTel || prev.codigo_tel, departamento: '' }))
+                  }}>
+                    {PAISES.map(p => <option key={p.code} value={p.code}>{p.nombre}</option>)}
                   </select>
                 </div>
-                <div><label style={lbl}>Departamento</label><input style={inp} value={f.departamento} onChange={set('departamento')} /></div>
-                <div><label style={lbl}>Ciudad</label><input style={inp} value={f.ciudad} onChange={set('ciudad')} /></div>
               </div>
-              <div style={{ marginBottom:'10px' }}><label style={lbl}>Dirección</label><input style={inp} value={f.direccion} onChange={set('direccion')} /></div>
+
+              <div style={row3}>
+                <div>
+                  <label style={lbl}>{etiquetaDivision(f.pais_code)}</label>
+                  {divisionesPorPais(f.pais_code) ? (
+                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.departamento} onChange={set('departamento')}>
+                      <option value="">Seleccionar...</option>
+                      {divisionesPorPais(f.pais_code)!.map(d => <option key={d}>{d}</option>)}
+                    </select>
+                  ) : (
+                    <input style={inp} value={f.departamento} onChange={set('departamento')} placeholder={etiquetaDivision(f.pais_code)} />
+                  )}
+                </div>
+                <div><label style={lbl}>Ciudad</label><input style={inp} value={f.ciudad} onChange={set('ciudad')} /></div>
+                <div><label style={lbl}>Dirección</label><input style={inp} value={f.direccion} onChange={set('direccion')} /></div>
+              </div>
+
               <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:'8px', marginBottom:'10px' }}>
                 <div>
-                  <label style={lbl}>Código</label>
+                  <label style={lbl}>Código<Ayuda texto="Se autocompleta al elegir el país de residencia. Puedes cambiarlo manualmente si el colaborador usa otro número." /></label>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.codigo_tel} onChange={set('codigo_tel')}>
-                    {['+57','+593','+52','+51','+56','+54','+506','+595','+58','+34','+502','+507'].map(v => <option key={v}>{v}</option>)}
+                    {PAISES.map(p => <option key={p.code} value={p.codigoTel}>{p.codigoTel}</option>)}
                   </select>
                 </div>
                 <div><label style={lbl}>Celular</label><input style={inp} value={f.celular} onChange={set('celular')} /></div>
               </div>
-              <div style={{ marginBottom:'10px' }}><label style={lbl}>Email</label><input style={inp} type="email" value={f.email} onChange={set('email')} /></div>
+              <div style={row2}>
+                <div><label style={lbl}>Correo de contacto</label><input style={inp} type="email" value={f.email} onChange={set('email')} placeholder="Notificaciones y nómina" /></div>
+                <div><label style={lbl}>Correo personal</label><input style={inp} type="email" value={f.correo_personal} onChange={set('correo_personal')} placeholder="correo@gmail.com" /></div>
+              </div>
               <div>
                 <label style={lbl}>Nivel de formación</label>
                 <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.nivel_formacion} onChange={set('nivel_formacion')}>
                   <option value="">Seleccionar...</option>
-                  {(PAISES_CONFIG[f.pais_code]?.niveles_formacion || PAIS_DEFAULT.niveles_formacion).map(v => <option key={v}>{v}</option>)}
+                  {configRHPorPais(f.pais_code).nivelesFormacion.map(v => <option key={v}>{v}</option>)}
                 </select>
               </div>
 
@@ -438,7 +568,7 @@ function ModalColaborador({
                     <div><label style={lbl}>Celular</label><input style={inp} value={f.datos_conyuge.celular || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, celular: e.target.value } }))} /></div>
                   </div>
                   <div style={row2}>
-                    <div><label style={lbl}>Fecha nacimiento</label><input style={inp} type="date" value={f.datos_conyuge.fecha_nac || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, fecha_nac: e.target.value } }))} /></div>
+                    <div><label style={lbl}>Fecha nacimiento</label><input style={inpDate} type="date" value={f.datos_conyuge.fecha_nac || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, fecha_nac: e.target.value } }))} /></div>
                     <div><label style={lbl}>Ocupación</label><input style={inp} value={f.datos_conyuge.ocupacion || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, ocupacion: e.target.value } }))} /></div>
                   </div>
                 </div>
@@ -459,7 +589,7 @@ function ModalColaborador({
                   {f.datos_hijos.map((h, i) => (
                     <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 32px', gap:'6px', marginBottom:'6px' }}>
                       <input style={inp} placeholder="Nombre" value={h.nombre || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, nombre: e.target.value } : x) }))} />
-                      <input style={inp} type="date" value={h.fecha_nac || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, fecha_nac: e.target.value } : x) }))} />
+                      <input style={inpDate} type="date" value={h.fecha_nac || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, fecha_nac: e.target.value } : x) }))} />
                       <input style={inp} placeholder="Celular" value={h.celular || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, celular: e.target.value } : x) }))} />
                       <button onClick={() => setF(p => ({ ...p, datos_hijos: p.datos_hijos.filter((_, j) => j !== i) }))} style={{ background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'6px', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
                     </div>
@@ -480,59 +610,94 @@ function ModalColaborador({
           {/* STEP 1: Seguridad Social */}
           {step === 1 && (
             <div>
-              <div style={{ ...sec, color:T.green }}>🔐 SEGURIDAD SOCIAL — {paisConfig.nombre}</div>
-              <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'14px', fontSize:'11px', color:T.muted }}>
-                Las entidades se filtran según el país del colaborador: <strong style={{ color:T.blue }}>{paisConfig.nombre}</strong>
-              </div>
+              <div style={{ ...sec, color:T.green }}>🔐 SEGURIDAD SOCIAL — {paisNombre}</div>
 
-              {[
-                { key:'eps', label:'EPS / Seguro Médico *', lista: paisConfig.entidades.eps, docKey:'cert_eps' },
-                { key:'pension', label:'Fondo de Pensiones *', lista: paisConfig.entidades.pension, docKey:'cert_pension' },
-                { key:'arl', label:'ARL / Riesgos Laborales', lista: paisConfig.entidades.arl, docKey:'cert_arl' },
-                { key:'caja_comp', label:'Caja de Compensación', lista: ['Comfama','Comfenalco','Compensar','Cafam','Comfandi'], docKey:'cert_caja' },
-                { key:'cesantias', label:'Fondo de Cesantías', lista: ['Protección','Porvenir','Colfondos','Skandia'], docKey:'cert_cesantias' },
-                { key:'banco', label:'Banco para pago nómina *', lista: paisConfig.entidades.banco, docKey:'cert_banco' },
-              ].map(item => (
-                <div key={item.key} style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
-                  <div>
-                    <label style={lbl}>{item.label}</label>
-                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as unknown as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
-                      <option value="">Seleccionar...</option>
-                      {item.lista.map(v => <option key={v}>{v}</option>)}
-                    </select>
+              {esIndependiente ? (
+                <>
+                  <div style={{ background:`${T.yellow}10`, border:`1px solid ${T.yellow}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'14px', fontSize:'11px', color:T.yellow }}>
+                    Contrato por <strong>{f.tipo_contrato}</strong>: el colaborador gestiona su propia EPS, pensión y ARL de forma
+                    independiente. La empresa solo verifica que esté al día con un soporte de pago.
                   </div>
-                  <div style={{ paddingTop:'2px' }}>
-                    {fileBtn(item.docKey, 'Certificado PDF')}
+                  {fileBtn('ss_independiente_doc', 'Soporte de pago de seguridad social (planilla/PILA independiente)', true)}
+                </>
+              ) : (
+                <>
+                  <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'14px', fontSize:'11px', color:T.muted }}>
+                    Las entidades se filtran según el país de residencia: <strong style={{ color:T.blue }}>{paisNombre}</strong>
+                    {paisConfig.entidades.eps.length === 0 && <> — no tenemos catálogo de entidades cargado para este país aún; escribe el nombre manualmente.</>}
                   </div>
-                </div>
-              ))}
 
-              <div style={{ ...sec, color:T.yellow }}>⚙️ CONFIGURACIÓN ARL</div>
+                  {[
+                    { key:'eps', label:'EPS / Seguro Médico *', lista: paisConfig.entidades.eps, docKey:'cert_eps' },
+                    { key:'pension', label:'Fondo de Pensiones *', lista: paisConfig.entidades.pension, docKey:'cert_pension' },
+                    { key:'arl', label:'ARL / Riesgos Laborales', lista: paisConfig.entidades.arl, docKey:'cert_arl' },
+                    { key:'caja_comp', label:'Caja de Compensación', lista: paisConfig.entidades.cajaComp, docKey:'cert_caja' },
+                    { key:'cesantias', label:'Fondo de Cesantías', lista: paisConfig.entidades.cesantias, docKey:'cert_cesantias' },
+                  ].map(item => (
+                    <div key={item.key} style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
+                      <div>
+                        <label style={lbl}>{item.label}</label>
+                        {item.lista.length > 0 ? (
+                          <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={(f as unknown as Record<string,string>)[item.key] || ''} onChange={set(item.key)}>
+                            <option value="">Seleccionar...</option>
+                            {item.lista.map(v => <option key={v}>{v}</option>)}
+                          </select>
+                        ) : (
+                          <input style={inp} value={(f as unknown as Record<string,string>)[item.key] || ''} onChange={set(item.key)} placeholder="Nombre de la entidad" />
+                        )}
+                      </div>
+                      <div style={{ paddingTop:'2px' }}>
+                        {fileBtn(item.docKey, 'Certificado PDF')}
+                      </div>
+                    </div>
+                  ))}
+
+                  {f.es_pensionado && (
+                    <div style={{ marginBottom:'10px' }}>
+                      {fileBtn('pension_doc', 'Resolución de pensión (vejez/invalidez)', true)}
+                    </div>
+                  )}
+
+                  <div style={{ ...sec, color:T.yellow }}>⚙️ CONFIGURACIÓN ARL</div>
+                  <div style={row2}>
+                    <div>
+                      <label style={lbl}>Nivel de riesgo ARL</label>
+                      <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.nivel_arl} onChange={set('nivel_arl')}>
+                        {[1,2,3,4,5].map(n => <option key={n} value={n}>Nivel {n} — {[0.522,1.044,2.436,4.350,6.960][n-1]}%</option>)}
+                      </select>
+                    </div>
+                    <div />
+                  </div>
+
+                  <div style={{ marginBottom:'10px' }}>
+                    {fileBtn('examen_medico', 'Examen médico de ingreso (obligatorio por ley)', true)}
+                  </div>
+                </>
+              )}
+
+              <div style={{ ...sec, color:T.blue }}>🏦 DATOS BANCARIOS</div>
               <div style={row2}>
                 <div>
-                  <label style={lbl}>Nivel de riesgo ARL</label>
-                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.nivel_arl} onChange={set('nivel_arl')}>
-                    {[1,2,3,4,5].map(n => <option key={n} value={n}>Nivel {n} — {[0.522,1.044,2.436,4.350,6.960][n-1]}%</option>)}
-                  </select>
+                  <label style={lbl}>Banco para pago nómina *<Ayuda texto="Escribe para buscar el banco según el país de residencia." /></label>
+                  <ComboBuscable value={f.banco} onChange={v => setF(p => ({ ...p, banco: v }))} opciones={paisConfig.entidades.banco} placeholder="Buscar banco..." />
                 </div>
                 <div>
                   <label style={lbl}>Tipo de cuenta bancaria</label>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.tipo_cuenta} onChange={set('tipo_cuenta')}>
-                    {['Ahorros','Corriente','Nequi','Daviplata'].map(v => <option key={v}>{v}</option>)}
+                    {paisConfig.tipoCuenta.map(v => <option key={v}>{v}</option>)}
                   </select>
                 </div>
               </div>
               <div style={{ marginBottom:'10px' }}><label style={lbl}>Número de cuenta</label><input style={inp} value={f.num_cuenta} onChange={set('num_cuenta')} /></div>
-              <div style={{ marginBottom:'10px' }}>
-                {fileBtn('examen_medico', 'Examen médico de ingreso (obligatorio por ley)', true)}
-              </div>
 
-              <div style={{ display:'flex', gap:'16px', marginBottom:'10px' }}>
-                <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:T.text }}>
-                  <input type="checkbox" checked={f.es_pensionado} onChange={set('es_pensionado')} />
-                  ¿Es pensionado? (no aplica aporte pensión)
-                </label>
-              </div>
+              {!esIndependiente && (
+                <div style={{ display:'flex', gap:'16px', marginBottom:'10px' }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:T.text }}>
+                    <input type="checkbox" checked={f.es_pensionado} onChange={set('es_pensionado')} />
+                    ¿Es pensionado? (no aplica aporte pensión — requiere soporte de la resolución)
+                  </label>
+                </div>
+              )}
             </div>
           )}
 
@@ -543,16 +708,38 @@ function ModalColaborador({
               <div style={row2}>
                 <div><label style={lbl}>Cargo *</label><input style={inp} value={f.cargo} onChange={set('cargo')} placeholder="Confirmador de pedidos" /></div>
                 <div>
-                  <label style={lbl}>Proceso/Área</label>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <label style={lbl}>Proceso/Área</label>
+                    <button type="button" onClick={() => setMostrarNuevoProceso(s => !s)} style={{ fontSize:'10px', color:T.purple, background:'none', border:'none', cursor:'pointer', marginBottom:'4px' }}>+ nuevo</button>
+                  </div>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.proceso_id} onChange={set('proceso_id')}>
                     <option value="">Sin proceso</option>
-                    {procesos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    {['Estratégico','Misional','Apoyo'].map(tipo => {
+                      const grupo = procesos.filter(p => (p.tipo || 'Misional') === tipo)
+                      return grupo.length > 0 ? (
+                        <optgroup key={tipo} label={tipo}>
+                          {grupo.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        </optgroup>
+                      ) : null
+                    })}
                   </select>
+                  {mostrarNuevoProceso && (
+                    <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
+                      <input style={{ ...inp, flex:1 }} placeholder="Nombre del proceso" value={nuevoProcesoNombre} onChange={e => setNuevoProcesoNombre(e.target.value)} />
+                      <select style={{ ...inp, width:'110px' }} value={nuevoProcesoTipo} onChange={e => setNuevoProcesoTipo(e.target.value)}>
+                        {['Estratégico','Misional','Apoyo'].map(t => <option key={t}>{t}</option>)}
+                      </select>
+                      <button type="button" onClick={async () => {
+                        const id = await onProcesoCreado(nuevoProcesoNombre, nuevoProcesoTipo)
+                        if (id) { setF(p => ({ ...p, proceso_id: id })); setNuevoProcesoNombre(''); setMostrarNuevoProceso(false) }
+                      }} style={{ padding:'0 12px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px' }}>Crear</button>
+                    </div>
+                  )}
                 </div>
               </div>
               <div style={row2}>
                 <div>
-                  <label style={lbl}>Tipo contrato *</label>
+                  <label style={lbl}>Tipo contrato *<Ayuda texto="Honorarios/Contratista son prestadores independientes: sin vacaciones, prima, cesantías ni auxilio de transporte — esos costos van incluidos en su tarifa." /></label>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.tipo_contrato} onChange={set('tipo_contrato')}>
                     {['Empleado','Término fijo','Obra o labor','Contratista','Honorarios','Aprendiz SENA'].map(v => <option key={v}>{v}</option>)}
                   </select>
@@ -565,11 +752,11 @@ function ModalColaborador({
                 </div>
               </div>
               <div style={row2}>
-                <div><label style={lbl}>Fecha ingreso *</label><input style={inp} type="date" value={f.fecha_ingreso} onChange={set('fecha_ingreso')} /></div>
+                <div><label style={lbl}>Fecha ingreso *</label><input style={inpDate} type="date" value={f.fecha_ingreso} onChange={set('fecha_ingreso')} /></div>
                 {f.tipo_contrato.includes('fijo') || f.tipo_contrato === 'Obra o labor' ? (
                   <div>
                     <label style={lbl}>Fecha fin contrato</label>
-                    <input style={{ ...inp, borderColor: diasAlerta !== null && diasAlerta <= 40 ? T.yellow : T.border }} type="date" value={f.fecha_fin} onChange={set('fecha_fin')} />
+                    <input style={{ ...inpDate, borderColor: diasAlerta !== null && diasAlerta <= 40 ? T.yellow : T.border }} type="date" value={f.fecha_fin} onChange={set('fecha_fin')} />
                     {diasAlerta !== null && diasAlerta <= 40 && <div style={{ fontSize:'10px', color:T.yellow, marginTop:'2px' }}>⚠️ Vence en {diasAlerta} días</div>}
                   </div>
                 ) : <div />}
@@ -579,8 +766,18 @@ function ModalColaborador({
 
               <div style={{ ...sec, color:T.accent }}>💰 CONDICIONES SALARIALES</div>
               <div style={row2}>
-                <div><label style={lbl}>Salario base *</label><input style={inp} type="number" value={f.salario_base || ''} onChange={set('salario_base')} /></div>
-                <div><label style={lbl}>Auxilio de transporte</label><input style={inp} type="number" value={f.aux_transporte || ''} onChange={set('aux_transporte')} /></div>
+                <div><label style={lbl}>Salario base *</label><InputMiles value={f.salario_base} onChange={v => setF(p => ({ ...p, salario_base: v }))} /></div>
+                <div>
+                  <label style={lbl}>
+                    Auxilio de transporte
+                    <Ayuda texto={f.pais_code === 'COL' && !esIndependiente ? 'Automático en Colombia: aplica si el salario base es ≤ 2 SMMLV vigentes. Se recalcula solo.' : 'Fuera de Colombia (o en contratos independientes) no calculamos esta regla automáticamente — verifica la normativa local.'} />
+                  </label>
+                  {f.pais_code === 'COL' && !esIndependiente ? (
+                    <input style={{ ...inp, color:T.muted }} value={fmt(f.aux_transporte, f.pais_code)} readOnly />
+                  ) : (
+                    <InputMiles value={f.aux_transporte} onChange={v => setF(p => ({ ...p, aux_transporte: v }))} />
+                  )}
+                </div>
               </div>
               <div style={row2}>
                 <div>
@@ -590,39 +787,52 @@ function ModalColaborador({
                   </select>
                 </div>
                 <div>
-                  <label style={lbl}>Tipo cotizante SS</label>
+                  <label style={lbl}>Tipo cotizante SS<Ayuda texto="Clasificación PILA (Colombia) que usan EPS/pensión/ARL para calcular tus aportes correctamente. Si tu país no usa PILA, deja el que más se acerque." /></label>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.tipo_cotizante} onChange={set('tipo_cotizante')}>
-                    {['1','2','3','51','12','15'].map(v => <option key={v} value={v}>Tipo {v}</option>)}
+                    {[
+                      ['1','01 — Dependiente'],['2','02 — Independiente'],['3','03 — Servicio doméstico'],
+                      ['12','12 — Dependiente sector público sin tope'],['15','15 — Aprendiz etapa lectiva (sin cotización)'],['51','51 — Aprendiz etapa práctica'],
+                    ].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
               </div>
-              <div style={{ display:'flex', gap:'16px', marginBottom:'10px' }}>
-                <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:T.text }}>
-                  <input type="checkbox" checked={f.aplica_ley1607} onChange={set('aplica_ley1607')} />
-                  Aplica Ley 1607 (exoneración parafiscal &lt; 10 SMMLV)
-                </label>
-              </div>
+              {!esIndependiente && (
+                <div style={{ display:'flex', gap:'16px', marginBottom:'10px' }}>
+                  <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:T.text }}>
+                    <input type="checkbox" checked={f.aplica_ley1607} onChange={set('aplica_ley1607')} />
+                    Aplica Ley 1607 (exoneración parafiscal &lt; 10 SMMLV)
+                    <Ayuda texto="Si tu empresa está exonerada de aportes a SENA, ICBF y salud del empleador para trabajadores que ganan menos de 10 SMMLV." />
+                  </label>
+                </div>
+              )}
 
               {/* Carga prestacional detallada */}
               <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', padding:'12px', marginTop:'4px' }}>
                 <div style={{ fontSize:'11px', fontWeight:'700', color:T.blue, marginBottom:'8px' }}>📊 Carga prestacional calculada</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'4px' }}>
-                  {[
-                    ['Salario base', f.salario_base],
-                    ['Salud empleador', Math.round(f.salario_base * (tasas.salud_emp||8.5)/100)],
-                    ['Pensión empleador', Math.round(f.salario_base * (tasas.pension_emp||12)/100)],
-                    ['ARL nivel '+f.nivel_arl, Math.round(f.salario_base * ([tasas.arl_nivel1||0.522,tasas.arl_nivel2||1.044,tasas.arl_nivel3||2.436,tasas.arl_nivel4||4.350,tasas.arl_nivel5||6.960][f.nivel_arl-1])/100)],
-                    ['Cesantías', Math.round(f.salario_base * (tasas.cesantias||8.33)/100)],
-                    ['Prima', Math.round(f.salario_base * (tasas.prima||8.33)/100)],
-                    ['Vacaciones', Math.round(f.salario_base * (tasas.vacaciones||4.17)/100)],
-                    ['SENA+ICBF+Caja', f.aplica_ley1607 ? 0 : Math.round(f.salario_base * ((tasas.sena||2)+(tasas.icbf||3)+(tasas.caja_comp||4))/100)],
-                  ].map(([l, v]) => (
-                    <div key={l as string} style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', padding:'3px 0', borderBottom:`1px solid ${T.border}` }}>
-                      <span style={{ color:T.muted }}>{l}</span>
-                      <span style={{ color:T.text }}>{fmt(v as number, f.pais_code)}</span>
-                    </div>
-                  ))}
-                </div>
+                {esIndependiente ? (
+                  <div style={{ fontSize:'11px', color:T.muted, padding:'6px 0' }}>
+                    Contrato independiente: la carga es el valor de la tarifa acordada — sin prestaciones sociales ni parafiscales a cargo de la empresa.
+                  </div>
+                ) : (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'4px' }}>
+                    {[
+                      ['Salario base', f.salario_base],
+                      ['Auxilio de transporte', f.aux_transporte],
+                      ['Salud empleador', Math.round(f.salario_base * (tasas.salud_emp||8.5)/100)],
+                      ['Pensión empleador', Math.round(f.salario_base * (tasas.pension_emp||12)/100)],
+                      ['ARL nivel '+f.nivel_arl, Math.round(f.salario_base * ([tasas.arl_nivel1||0.522,tasas.arl_nivel2||1.044,tasas.arl_nivel3||2.436,tasas.arl_nivel4||4.350,tasas.arl_nivel5||6.960][f.nivel_arl-1])/100)],
+                      ['Cesantías', Math.round(f.salario_base * (tasas.cesantias||8.33)/100)],
+                      ['Prima', Math.round(f.salario_base * (tasas.prima||8.33)/100)],
+                      ['Vacaciones', Math.round(f.salario_base * (tasas.vacaciones||4.17)/100)],
+                      ['SENA+ICBF+Caja', f.aplica_ley1607 ? 0 : Math.round(f.salario_base * ((tasas.sena||2)+(tasas.icbf||3)+(tasas.caja_comp||4))/100)],
+                    ].map(([l, v]) => (
+                      <div key={l as string} style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', padding:'3px 0', borderBottom:`1px solid ${T.border}` }}>
+                        <span style={{ color:T.muted }}>{l}</span>
+                        <span style={{ color:T.text }}>{fmt(v as number, f.pais_code)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', fontSize:'13px', fontWeight:'700' }}>
                   <span style={{ color:T.text }}>CARGA TOTAL</span>
                   <span style={{ color:T.blue }}>{fmt(cargaTotal, f.pais_code)}</span>
@@ -672,7 +882,8 @@ function ModalColaborador({
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function NominaPage() {
   const supabase = createClient()
-  const [tab, setTab] = useState<'organigrama'|'colaboradores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
+  const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
+  const [solicitudes, setSolicitudes] = useState<Array<Record<string, unknown>>>([])
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
@@ -686,6 +897,7 @@ export default function NominaPage() {
   // Organigrama
   const [nuevoProceso, setNuevoProceso] = useState('')
   const [showNuevoProceso, setShowNuevoProceso] = useState(false)
+  const [nuevoProcesoTipoOrg, setNuevoProcesoTipoOrg] = useState('Misional')
 
   // Novedades
   const [novedad, setNovedad] = useState({ empleado_id:'', tipo:'', campos:{} as Record<string,string|number> })
@@ -704,26 +916,63 @@ export default function NominaPage() {
     if (!profile?.tenant_id) { setLoading(false); return }
     setTenantId(profile.tenant_id)
 
-    const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }] = await Promise.all([
+    const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }, { data: sols }] = await Promise.all([
       supabase.from('colaboradores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombres'),
       supabase.from('nomina_procesos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('orden'),
       supabase.from('nomina_novedades_tipos').select('*').eq('activo', true),
       supabase.from('nomina_tasas_historico').select('*').eq('tenant_id', profile.tenant_id).eq('anio_fiscal', anioFiscal).eq('estado', 'activo').single(),
+      supabase.from('nomina_solicitudes').select('*').eq('tenant_id', profile.tenant_id).eq('estado', 'pendiente').order('created_at', { ascending: false }),
     ])
 
     setColaboradores((cols || []) as Colaborador[])
     setProcesos((procs || []) as Proceso[])
     setNovedades(novs || [])
     if (tasa) { setTasas(tasa as TasaHistorico); setFormTasa(tasa as TasaHistorico) }
+    setSolicitudes(sols || [])
     setLoading(false)
+  }
+
+  async function aprobarSolicitud(s: Record<string, unknown>) {
+    if (!confirm(`¿Convertir la solicitud de ${s.nombres} ${s.apellidos} en colaborador activo?`)) return
+    const { data: { user } } = await supabase.auth.getUser()
+    const { error: err } = await supabase.from('colaboradores').insert({
+      tenant_id: tenantId,
+      nombres: s.nombres, apellidos: s.apellidos, tipo_doc: s.tipo_doc, num_doc: s.numero_doc,
+      celular: s.celular, email: s.email, correo_personal: s.email,
+      pais_code: s.pais_code, pais_nacimiento_code: s.pais_code, ciudad: s.ciudad,
+      nivel_formacion: s.nivel_formacion, estado_civil: s.estado_civil,
+      datos_conyuge: s.datos_conyuge || {}, datos_hijos: s.datos_hijos || [],
+      docs_urls: s.docs_urls || {}, cargo: 'Por definir', tipo_contrato: 'Empleado',
+      fecha_ingreso: new Date().toISOString().slice(0, 10), activo: true, carga_total_mes: 0,
+    })
+    if (err) { alert(`Error al aprobar: ${err.message}`); return }
+    await supabase.from('nomina_solicitudes').update({ estado: 'aprobado', aprobado_por: user?.id }).eq('id', s.id as string)
+    alert('Colaborador creado — completa su información laboral y salarial desde "Colaboradores".')
+    loadData()
+  }
+
+  async function rechazarSolicitud(id: string) {
+    if (!confirm('¿Rechazar esta solicitud?')) return
+    await supabase.from('nomina_solicitudes').update({ estado: 'rechazado' }).eq('id', id)
+    loadData()
+  }
+
+  function copiarLinkRegistro() {
+    const url = `${window.location.origin}/registro-colaborador/${tenantId}`
+    navigator.clipboard.writeText(url)
+    alert(`Link copiado:\n${url}`)
   }
 
   useEffect(() => { loadData() }, [anioFiscal])
 
-  async function crearProceso() {
-    if (!nuevoProceso.trim()) return
-    await supabase.from('nomina_procesos').insert({ nombre: nuevoProceso, tenant_id: tenantId, orden: procesos.length + 1, activo: true })
-    setNuevoProceso(''); setShowNuevoProceso(false); loadData()
+  async function crearProceso(nombre?: string, tipo?: string) {
+    const n = (nombre ?? nuevoProceso).trim()
+    if (!n) return null
+    const { data, error: err } = await supabase.from('nomina_procesos')
+      .insert({ nombre: n, tipo: tipo || 'Misional', tenant_id: tenantId, orden: procesos.length + 1, activo: true })
+      .select('id').single()
+    setNuevoProceso(''); setShowNuevoProceso(false); await loadData()
+    return err ? null : data?.id || null
   }
 
   async function eliminarColaborador(id: string) {
@@ -785,6 +1034,7 @@ export default function NominaPage() {
   const TABS = [
     { v:'organigrama',   l:'🗂️ Organigrama',  c:T.purple },
     { v:'colaboradores', l:'👥 Colaboradores', c:T.blue },
+    { v:'solicitudes',   l:`📥 Solicitudes${solicitudes.length ? ` (${solicitudes.length})` : ''}`, c:T.red },
     { v:'novedades',     l:'📋 Novedades',     c:T.yellow },
     { v:'liquidacion',   l:'💵 Liquidación',   c:T.green },
     { v:'tasas',         l:'⚙️ Tasas',         c:T.accent },
@@ -800,6 +1050,7 @@ export default function NominaPage() {
           editData={editData}
           procesos={procesos}
           tasas={tasas}
+          onProcesoCreado={crearProceso}
         />
       )}
 
@@ -809,10 +1060,16 @@ export default function NominaPage() {
           <h1 style={{ fontSize:'22px', fontWeight:'700', color:T.text, marginBottom:'4px' }}>👥 Gestión de Nómina</h1>
           <p style={{ fontSize:'12px', color:T.muted }}>Tu equipo es tu mayor activo — gestiona con precisión</p>
         </div>
-        <button onClick={() => { setEditData(null); setShowModal(true) }}
-          style={{ padding:'9px 18px', background:T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
-          + Nuevo colaborador
-        </button>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          <button onClick={copiarLinkRegistro}
+            style={{ padding:'9px 16px', background:`${T.blue}15`, border:`1px solid ${T.blue}40`, borderRadius:'9px', color:T.blue, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
+            🔗 Copiar link de registro
+          </button>
+          <button onClick={() => { setEditData(null); setShowModal(true) }}
+            style={{ padding:'9px 18px', background:T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
+            + Nuevo colaborador
+          </button>
+        </div>
       </div>
 
       {/* Alertas contratos */}
@@ -856,7 +1113,10 @@ export default function NominaPage() {
             {showNuevoProceso ? (
               <div style={{ display:'flex', gap:'6px' }}>
                 <input style={{ ...inp, width:'200px' }} placeholder="Nombre del proceso/área" value={nuevoProceso} onChange={e => setNuevoProceso(e.target.value)} />
-                <button onClick={crearProceso} style={{ padding:'7px 14px', background:T.green, border:'none', borderRadius:'7px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Crear</button>
+                <select style={{ ...inp, width:'120px' }} value={nuevoProcesoTipoOrg} onChange={e => setNuevoProcesoTipoOrg(e.target.value)}>
+                  {['Estratégico','Misional','Apoyo'].map(t => <option key={t}>{t}</option>)}
+                </select>
+                <button onClick={() => crearProceso(nuevoProceso, nuevoProcesoTipoOrg)} style={{ padding:'7px 14px', background:T.green, border:'none', borderRadius:'7px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Crear</button>
                 <button onClick={() => setShowNuevoProceso(false)} style={{ padding:'7px 12px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:'7px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>✕</button>
               </div>
             ) : (
@@ -864,31 +1124,44 @@ export default function NominaPage() {
             )}
           </div>
 
-          {/* Organigrama visual */}
-          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
-            {porProceso.map(p => (
-              <div key={p.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', minWidth:'220px', flex:'1' }}>
-                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
-                  <div style={{ fontSize:'13px', fontWeight:'700', color:T.purple }}>{p.nombre}</div>
-                  <div style={{ fontSize:'11px', color:T.muted }}>{p.colaboradores.length} personas</div>
+          {/* Organigrama visual — agrupado por tipo de proceso */}
+          {(['Estratégico','Misional','Apoyo'] as const).map(tipoGrupo => {
+            const grupo = porProceso.filter(p => (p.tipo || 'Misional') === tipoGrupo)
+            if (grupo.length === 0) return null
+            const colorGrupo = tipoGrupo === 'Estratégico' ? T.red : tipoGrupo === 'Misional' ? T.blue : T.yellow
+            return (
+              <div key={tipoGrupo} style={{ marginBottom:'18px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.05em', color:colorGrupo, marginBottom:'8px' }}>{tipoGrupo.toUpperCase()}</div>
+                <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                  {grupo.map(p => (
+                    <div key={p.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderTop:`2px solid ${colorGrupo}`, borderRadius:'10px', padding:'14px', minWidth:'220px', flex:'1' }}>
+                      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:T.purple }}>{p.nombre}</div>
+                        <div style={{ fontSize:'11px', color:T.muted }}>{p.colaboradores.length} personas</div>
+                      </div>
+                      <div style={{ fontSize:'12px', color:T.accent, fontWeight:'600', marginBottom:'10px' }}>{fmt(p.carga)}/mes</div>
+                      {p.colaboradores.map(c => (
+                        <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:`1px solid ${T.border}` }}>
+                          <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:`${T.blue}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'700', color:T.blue, flexShrink:0 }}>
+                            {(c.nombres[0]||'')+(c.apellidos[0]||'')}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'12px', color:T.text, fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.nombres} {c.apellidos}</div>
+                            <div style={{ fontSize:'10px', color:T.muted }}>{c.cargo} · {c.tipo_contrato}</div>
+                          </div>
+                        </div>
+                      ))}
+                      {p.colaboradores.length === 0 && <div style={{ fontSize:'11px', color:T.muted, textAlign:'center', padding:'10px 0' }}>Sin colaboradores</div>}
+                    </div>
+                  ))}
                 </div>
-                <div style={{ fontSize:'12px', color:T.accent, fontWeight:'600', marginBottom:'10px' }}>{fmt(p.carga)}/mes</div>
-                {p.colaboradores.map(c => (
-                  <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:`1px solid ${T.border}` }}>
-                    <div style={{ width:'28px', height:'28px', borderRadius:'50%', background:`${T.blue}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', flexShrink:0, overflow:'hidden' }}>
-                      {c.foto_url ? <img src={c.foto_url} style={{ width:'100%', height:'100%', objectFit:'cover' }} alt="" /> : '👤'}
-                    </div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontSize:'12px', color:T.text, fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.nombres} {c.apellidos}</div>
-                      <div style={{ fontSize:'10px', color:T.muted }}>{c.cargo} · {c.tipo_contrato}</div>
-                    </div>
-                  </div>
-                ))}
-                {p.colaboradores.length === 0 && <div style={{ fontSize:'11px', color:T.muted, textAlign:'center', padding:'10px 0' }}>Sin colaboradores</div>}
               </div>
-            ))}
-            {/* Sin proceso */}
-            <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', minWidth:'220px', flex:'1' }}>
+            )
+          })}
+
+          {/* Sin proceso */}
+          {colaboradores.filter(c => !c.proceso_id).length > 0 && (
+            <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', maxWidth:'320px' }}>
               <div style={{ fontSize:'13px', fontWeight:'700', color:T.muted, marginBottom:'10px' }}>Sin proceso asignado</div>
               {colaboradores.filter(c => !c.proceso_id).map(c => (
                 <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'6px 0', borderTop:`1px solid ${T.border}` }}>
@@ -897,7 +1170,7 @@ export default function NominaPage() {
                 </div>
               ))}
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -938,8 +1211,8 @@ export default function NominaPage() {
                         <td style={{ padding:'8px 12px', fontSize:'11px', color:T.muted }}>#{String(i+1).padStart(3,'0')}</td>
                         <td style={{ padding:'8px 12px' }}>
                           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                            <div style={{ width:'30px', height:'30px', borderRadius:'50%', background:`${T.blue}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', flexShrink:0, overflow:'hidden' }}>
-                              {c.foto_url ? <img src={c.foto_url} style={{ width:'100%', height:'100%', objectFit:'cover' }} alt="" /> : '👤'}
+                            <div style={{ width:'30px', height:'30px', borderRadius:'50%', background:`${T.blue}20`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'700', color:T.blue, flexShrink:0 }}>
+                              {(c.nombres[0]||'')+(c.apellidos[0]||'')}
                             </div>
                             <div>
                               <div style={{ fontSize:'12px', fontWeight:'600', color:T.text }}>{c.nombres} {c.apellidos}</div>
@@ -977,6 +1250,38 @@ export default function NominaPage() {
             </div>
           </div>
           {colsFiltrados.length > 0 && <div style={{ textAlign:'center', marginTop:'10px', fontSize:'12px', color:T.muted }}>Total carga nómina: <strong style={{ color:T.accent }}>{fmt(totalNomina)}</strong></div>}
+        </div>
+      )}
+
+      {/* ══ SOLICITUDES (autorregistro) ══ */}
+      {tab === 'solicitudes' && (
+        <div>
+          <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'14px', fontSize:'11px', color:T.muted }}>
+            Comparte el link de registro con el nuevo colaborador — al enviar el formulario aparece aquí para tu aprobación.
+          </div>
+          {solicitudes.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'48px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }}>
+              <div style={{ fontSize:'32px', marginBottom:'10px' }}>📥</div>
+              <div style={{ fontSize:'14px', fontWeight:'600', color:T.text, marginBottom:'6px' }}>Sin solicitudes pendientes</div>
+              <button onClick={copiarLinkRegistro} style={{ padding:'9px 20px', background:T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>🔗 Copiar link de registro</button>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              {solicitudes.map(s => (
+                <div key={String(s.id)} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+                  <div>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:T.text }}>{String(s.nombres)} {String(s.apellidos)}</div>
+                    <div style={{ fontSize:'11px', color:T.muted }}>{String(s.tipo_doc)} {String(s.numero_doc)} · {String(s.email)} · {String(s.celular)}</div>
+                    <div style={{ fontSize:'10px', color:T.muted, marginTop:'2px' }}>{s.ciudad ? `${s.ciudad}, ` : ''}{String(s.pais_code || '')}</div>
+                  </div>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button onClick={() => aprobarSolicitud(s)} style={{ padding:'7px 14px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>✓ Aprobar</button>
+                    <button onClick={() => rechazarSolicitud(String(s.id))} style={{ padding:'7px 14px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'8px', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕ Rechazar</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
