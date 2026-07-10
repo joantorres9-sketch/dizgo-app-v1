@@ -35,6 +35,17 @@ interface Colaborador {
 }
 interface Proceso {
   id: string; nombre: string; descripcion: string; orden: number; activo: boolean; tipo: string
+  responsable_id: string | null
+}
+interface Cargo {
+  id: string; proceso_id: string; nombre: string; tipo: string; activo: boolean
+}
+interface Indicador {
+  id: string; proceso_id: string; nombre: string; objetivo: string; formula: string
+  unidad: string; frecuencia: string; meta: number; activo: boolean
+}
+interface Medicion {
+  id: string; indicador_id: string; fecha: string; valor: number; nota: string
 }
 interface TasaHistorico {
   id: string; pais_code: string; anio_fiscal: number
@@ -232,12 +243,14 @@ function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): 
 
 // ── MODAL COLABORADOR (Formulario completo) ───────────────
 function ModalColaborador({
-  onClose, onSave, tenantId, editData, procesos, tasas, onProcesoCreado,
+  onClose, onSave, tenantId, editData, procesos, tasas, onProcesoCreado, cargos, onCargoCreado,
 }: {
   onClose: () => void; onSave: () => void; tenantId: string
   editData: Colaborador | null; procesos: Proceso[]
   tasas: Partial<TasaHistorico>
   onProcesoCreado: (nombre: string, tipo: string) => Promise<string | null>
+  cargos: Cargo[]
+  onCargoCreado: (nombre: string, procesoId: string) => Promise<void>
 }) {
   const supabase = createClient()
   const [step, setStep] = useState(0)
@@ -248,6 +261,8 @@ function ModalColaborador({
   const [mostrarNuevoProceso, setMostrarNuevoProceso] = useState(false)
   const [nuevoProcesoNombre, setNuevoProcesoNombre] = useState('')
   const [nuevoProcesoTipo, setNuevoProcesoTipo] = useState('Misional')
+  const [mostrarNuevoCargo, setMostrarNuevoCargo] = useState(false)
+  const [nuevoCargoNombre, setNuevoCargoNombre] = useState('')
   const [docUrls, setDocUrls] = useState<Record<string,string>>({
     ...(editData?.docs_urls || {}),
     ...(editData?.doc_pension_url ? { pension_doc: editData.doc_pension_url } : {}),
@@ -706,13 +721,12 @@ function ModalColaborador({
             <div>
               <div style={{ ...sec, color:T.purple }}>💼 INFORMACIÓN LABORAL</div>
               <div style={row2}>
-                <div><label style={lbl}>Cargo *</label><input style={inp} value={f.cargo} onChange={set('cargo')} placeholder="Confirmador de pedidos" /></div>
                 <div>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
                     <label style={lbl}>Proceso/Área</label>
                     <button type="button" onClick={() => setMostrarNuevoProceso(s => !s)} style={{ fontSize:'10px', color:T.purple, background:'none', border:'none', cursor:'pointer', marginBottom:'4px' }}>+ nuevo</button>
                   </div>
-                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.proceso_id} onChange={set('proceso_id')}>
+                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.proceso_id} onChange={e => setF(p => ({ ...p, proceso_id: e.target.value, cargo: '' }))}>
                     <option value="">Sin proceso</option>
                     {['Estratégico','Misional','Apoyo'].map(tipo => {
                       const grupo = procesos.filter(p => (p.tipo || 'Misional') === tipo)
@@ -732,6 +746,29 @@ function ModalColaborador({
                       <button type="button" onClick={async () => {
                         const id = await onProcesoCreado(nuevoProcesoNombre, nuevoProcesoTipo)
                         if (id) { setF(p => ({ ...p, proceso_id: id })); setNuevoProcesoNombre(''); setMostrarNuevoProceso(false) }
+                      }} style={{ padding:'0 12px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px' }}>Crear</button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                    <label style={lbl}>Cargo *</label>
+                    <button type="button" disabled={!f.proceso_id} onClick={() => setMostrarNuevoCargo(s => !s)} style={{ fontSize:'10px', color: f.proceso_id ? T.purple : T.muted, background:'none', border:'none', cursor: f.proceso_id ? 'pointer' : 'not-allowed', marginBottom:'4px' }}>+ nuevo</button>
+                  </div>
+                  {f.proceso_id ? (
+                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.cargo} onChange={set('cargo')}>
+                      <option value="">Seleccionar...</option>
+                      {cargos.filter(c => c.proceso_id === f.proceso_id).map(c => <option key={c.id} value={c.nombre}>{c.nombre} ({c.tipo})</option>)}
+                    </select>
+                  ) : (
+                    <input style={inp} value={f.cargo} onChange={set('cargo')} placeholder="Elige un proceso para ver los cargos" />
+                  )}
+                  {mostrarNuevoCargo && f.proceso_id && (
+                    <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
+                      <input style={{ ...inp, flex:1 }} placeholder="Nombre del cargo" value={nuevoCargoNombre} onChange={e => setNuevoCargoNombre(e.target.value)} />
+                      <button type="button" onClick={async () => {
+                        await onCargoCreado(nuevoCargoNombre, f.proceso_id)
+                        setF(p => ({ ...p, cargo: nuevoCargoNombre })); setNuevoCargoNombre(''); setMostrarNuevoCargo(false)
                       }} style={{ padding:'0 12px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px' }}>Crear</button>
                     </div>
                   )}
@@ -879,15 +916,259 @@ function ModalColaborador({
   )
 }
 
+// ── TABLERO DE PROCESOS (drag-and-drop nativo, sin librerías) ─
+const TIPOS_PROCESO = [
+  { v:'Estratégico', c:T.red },
+  { v:'Misional',    c:T.blue },
+  { v:'Apoyo',       c:T.yellow },
+] as const
+
+function TableroProcesos({ procesos, colaboradores, tenantId, onReload }: {
+  procesos: Proceso[]; colaboradores: Colaborador[]; tenantId: string; onReload: () => void
+}) {
+  const supabase = createClient()
+  const [dragId, setDragId] = useState<string | null>(null)
+  const [editando, setEditando] = useState<Proceso | null>(null)
+  const [form, setForm] = useState({ nombre:'', descripcion:'', responsable_id:'' })
+  const [showNuevo, setShowNuevo] = useState<string | null>(null)
+  const [nuevoNombre, setNuevoNombre] = useState('')
+
+  function abrirEditor(p: Proceso) {
+    setEditando(p)
+    setForm({ nombre: p.nombre, descripcion: p.descripcion || '', responsable_id: p.responsable_id || '' })
+  }
+
+  async function guardarEdicion() {
+    if (!editando) return
+    await supabase.from('nomina_procesos').update({
+      nombre: form.nombre, descripcion: form.descripcion, responsable_id: form.responsable_id || null,
+    }).eq('id', editando.id)
+    setEditando(null); onReload()
+  }
+
+  async function crear(tipo: string) {
+    if (!nuevoNombre.trim()) return
+    const orden = procesos.filter(p => p.tipo === tipo).length + 1
+    await supabase.from('nomina_procesos').insert({ tenant_id: tenantId, nombre: nuevoNombre, tipo, orden, activo: true })
+    setNuevoNombre(''); setShowNuevo(null); onReload()
+  }
+
+  async function onDrop(tipo: string) {
+    if (!dragId) return
+    const orden = procesos.filter(p => p.tipo === tipo).length + 1
+    await supabase.from('nomina_procesos').update({ tipo, orden }).eq('id', dragId)
+    setDragId(null); onReload()
+  }
+
+  return (
+    <div>
+      <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'16px', fontSize:'11px', color:T.muted }}>
+        Arrastra una tarjeta entre columnas para reclasificarla. Clic en una tarjeta para editar nombre, descripción y responsable.
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'14px', alignItems:'start' }}>
+        {TIPOS_PROCESO.map(({ v: tipo, c: color }) => {
+          const items = procesos.filter(p => (p.tipo || 'Misional') === tipo).sort((a,b) => a.orden - b.orden)
+          return (
+            <div key={tipo}
+              onDragOver={e => e.preventDefault()}
+              onDrop={() => onDrop(tipo)}
+              style={{ background:T.card2, border:`1px solid ${T.border}`, borderTop:`3px solid ${color}`, borderRadius:'10px', padding:'12px', minHeight:'160px' }}
+            >
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color }}>{tipo.toUpperCase()} <span style={{ color:T.muted, fontWeight:'400' }}>({items.length})</span></div>
+                <button onClick={() => setShowNuevo(s => s === tipo ? null : tipo)} style={{ fontSize:'11px', color, background:'none', border:'none', cursor:'pointer' }}>+ nuevo</button>
+              </div>
+              {showNuevo === tipo && (
+                <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+                  <input style={{ ...inp, flex:1 }} placeholder="Nombre del proceso" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} />
+                  <button onClick={() => crear(tipo)} style={{ padding:'0 10px', background:color, border:'none', borderRadius:'7px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px' }}>Crear</button>
+                </div>
+              )}
+              {items.map(p => {
+                const responsable = colaboradores.find(c => c.id === p.responsable_id)
+                return (
+                  <div key={p.id}
+                    draggable
+                    onDragStart={() => setDragId(p.id)}
+                    onClick={() => abrirEditor(p)}
+                    style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'8px', padding:'10px 12px', marginBottom:'8px', cursor:'grab' }}
+                  >
+                    <div style={{ fontSize:'12px', fontWeight:'600', color:T.text, marginBottom:'3px' }}>{p.nombre}</div>
+                    {p.descripcion && <div style={{ fontSize:'10px', color:T.muted, marginBottom:'4px' }}>{p.descripcion}</div>}
+                    <div style={{ fontSize:'10px', color:T.blue }}>{responsable ? `👤 ${responsable.nombres} ${responsable.apellidos}` : '— sin responsable'}</div>
+                  </div>
+                )
+              })}
+              {items.length === 0 && !showNuevo && <div style={{ fontSize:'11px', color:T.muted, textAlign:'center', padding:'10px 0' }}>Sin procesos</div>}
+            </div>
+          )
+        })}
+      </div>
+
+      {editando && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', backdropFilter:'blur(4px)' }} onClick={() => setEditando(null)}>
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'14px', width:'min(440px,100%)', padding:'20px' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:T.text, marginBottom:'14px' }}>Editar proceso</div>
+            <div style={{ marginBottom:'10px' }}><label style={lbl}>Nombre</label><input style={inp} value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} /></div>
+            <div style={{ marginBottom:'10px' }}><label style={lbl}>Descripción (misionalidad)</label><textarea style={{ ...inp, minHeight:'70px', resize:'vertical' as React.CSSProperties['resize'] }} value={form.descripcion} onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} /></div>
+            <div style={{ marginBottom:'16px' }}>
+              <label style={lbl}>Responsable del proceso</label>
+              <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={form.responsable_id} onChange={e => setForm(f => ({ ...f, responsable_id: e.target.value }))}>
+                <option value="">Sin asignar</option>
+                {colaboradores.map(c => <option key={c.id} value={c.id}>{c.nombres} {c.apellidos} — {c.cargo}</option>)}
+              </select>
+            </div>
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={() => setEditando(null)} style={{ flex:1, padding:'9px', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>Cancelar</button>
+              <button onClick={guardarEdicion} style={{ flex:1, padding:'9px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── MATRIZ DE INDICADORES ─────────────────────────────────
+function semaforoIndicador(valor: number, meta: number): string {
+  if (!meta) return T.muted
+  const pct = valor / meta
+  return pct >= 0.9 ? T.green : pct >= 0.7 ? T.yellow : T.red
+}
+
+function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onReload }: {
+  indicadores: Indicador[]; mediciones: Medicion[]; procesos: Proceso[]; tenantId: string; onReload: () => void
+}) {
+  const supabase = createClient()
+  const [showForm, setShowForm] = useState(false)
+  const [form, setForm] = useState({ proceso_id:'', nombre:'', objetivo:'', formula:'', unidad:'%', frecuencia:'Mensual', meta:0 })
+  const [midiendo, setMidiendo] = useState<string | null>(null)
+  const [medForm, setMedForm] = useState({ fecha: new Date().toISOString().slice(0,10), valor:0, nota:'' })
+
+  async function crearIndicador() {
+    if (!form.nombre || !form.proceso_id) return
+    await supabase.from('nomina_indicadores').insert({ ...form, tenant_id: tenantId, activo: true })
+    setForm({ proceso_id:'', nombre:'', objetivo:'', formula:'', unidad:'%', frecuencia:'Mensual', meta:0 })
+    setShowForm(false); onReload()
+  }
+
+  async function registrarMedicion(indicadorId: string) {
+    await supabase.from('nomina_indicador_mediciones').insert({ tenant_id: tenantId, indicador_id: indicadorId, ...medForm })
+    setMedForm({ fecha: new Date().toISOString().slice(0,10), valor:0, nota:'' })
+    setMidiendo(null); onReload()
+  }
+
+  const porProceso = procesos
+    .map(p => ({ proceso: p, items: indicadores.filter(i => i.proceso_id === p.id) }))
+    .filter(g => g.items.length > 0)
+  const sinProceso = indicadores.filter(i => !i.proceso_id)
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:'14px' }}>
+        <button onClick={() => setShowForm(s => !s)} style={{ padding:'8px 14px', background:`${T.green}15`, border:`1px solid ${T.green}40`, borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+          {showForm ? '✕ Cancelar' : '+ Nuevo indicador'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'16px', marginBottom:'16px' }}>
+          <div style={row2}>
+            <div>
+              <label style={lbl}>Proceso *</label>
+              <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={form.proceso_id} onChange={e => setForm(f => ({ ...f, proceso_id: e.target.value }))}>
+                <option value="">Seleccionar...</option>
+                {procesos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+            </div>
+            <div><label style={lbl}>Nombre del indicador *</label><input style={inp} value={form.nombre} onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))} placeholder="% Pedidos gestionados" /></div>
+          </div>
+          <div style={{ marginBottom:'10px' }}><label style={lbl}>Objetivo</label><input style={inp} value={form.objetivo} onChange={e => setForm(f => ({ ...f, objetivo: e.target.value }))} placeholder="Aumentar el % de pedidos confirmados" /></div>
+          <div style={{ marginBottom:'10px' }}><label style={lbl}>Fórmula</label><input style={inp} value={form.formula} onChange={e => setForm(f => ({ ...f, formula: e.target.value }))} placeholder="Pedidos gestionados / Total asignados" /></div>
+          <div style={row2}>
+            <div>
+              <label style={lbl}>Unidad</label>
+              <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={form.unidad} onChange={e => setForm(f => ({ ...f, unidad: e.target.value }))}>
+                {['%','$','#'].map(u => <option key={u}>{u}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>Frecuencia de medición</label>
+              <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={form.frecuencia} onChange={e => setForm(f => ({ ...f, frecuencia: e.target.value }))}>
+                {['Diaria','Semanal','Mensual'].map(u => <option key={u}>{u}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ marginBottom:'12px' }}><label style={lbl}>Meta</label><input style={inp} type="number" value={form.meta || ''} onChange={e => setForm(f => ({ ...f, meta: parseFloat(e.target.value) || 0 }))} /></div>
+          <button onClick={crearIndicador} style={{ padding:'9px 20px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>✅ Crear indicador</button>
+        </div>
+      )}
+
+      {indicadores.length === 0 && !showForm ? (
+        <div style={{ textAlign:'center', padding:'48px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }}>
+          <div style={{ fontSize:'32px', marginBottom:'10px' }}>📈</div>
+          <div style={{ fontSize:'14px', fontWeight:'600', color:T.text }}>Sin indicadores todavía</div>
+        </div>
+      ) : (
+        [...porProceso, ...(sinProceso.length ? [{ proceso: { id:'', nombre:'Sin proceso' } as Proceso, items: sinProceso }] : [])].map(g => (
+          <div key={g.proceso.id || 'sin'} style={{ marginBottom:'18px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', letterSpacing:'0.05em', color:T.purple, marginBottom:'8px' }}>{g.proceso.nombre.toUpperCase()}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(260px,1fr))', gap:'12px' }}>
+              {g.items.map(ind => {
+                const meds = mediciones.filter(m => m.indicador_id === ind.id).sort((a,b) => b.fecha.localeCompare(a.fecha))
+                const ultimo = meds[0]
+                const color = ultimo ? semaforoIndicador(ultimo.valor, ind.meta) : T.muted
+                return (
+                  <div key={ind.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderTop:`3px solid ${color}`, borderRadius:'10px', padding:'14px' }}>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:T.text, marginBottom:'2px' }}>{ind.nombre}</div>
+                    {ind.objetivo && <div style={{ fontSize:'10px', color:T.muted, marginBottom:'8px' }}>{ind.objetivo}</div>}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'6px' }}>
+                      <span style={{ fontSize:'20px', fontWeight:'800', color }}>{ultimo ? `${ultimo.valor}${ind.unidad === '%' ? '%' : ''}` : '—'}</span>
+                      <span style={{ fontSize:'11px', color:T.muted }}>Meta: {ind.meta}{ind.unidad === '%' ? '%' : ind.unidad === '$' ? '' : 'x'}</span>
+                    </div>
+                    <div style={{ fontSize:'9px', color:T.muted, marginBottom:'8px' }}>{ind.frecuencia} · {ind.formula}</div>
+                    {meds.length > 0 && (
+                      <div style={{ marginBottom:'8px' }}>
+                        {meds.slice(0,3).map(m => (
+                          <div key={m.id} style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:T.muted, padding:'2px 0' }}>
+                            <span>{new Date(m.fecha).toLocaleDateString('es-CO')}</span>
+                            <span style={{ color:T.text }}>{m.valor}{ind.unidad === '%' ? '%' : ''}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {midiendo === ind.id ? (
+                      <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+                        <input style={{ ...inpDate, flex:1 }} type="date" value={medForm.fecha} onChange={e => setMedForm(f => ({ ...f, fecha: e.target.value }))} />
+                        <input style={{ ...inp, width:'70px' }} type="number" value={medForm.valor || ''} onChange={e => setMedForm(f => ({ ...f, valor: parseFloat(e.target.value) || 0 }))} />
+                        <button onClick={() => registrarMedicion(ind.id)} style={{ padding:'0 10px', background:T.green, border:'none', borderRadius:'6px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'11px', height:'32px' }}>✓</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setMidiendo(ind.id)} style={{ width:'100%', padding:'6px', background:'none', border:`1px dashed ${T.border}`, borderRadius:'6px', color:T.muted, cursor:'pointer', fontSize:'11px' }}>+ Registrar medición</button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function NominaPage() {
   const supabase = createClient()
-  const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
+  const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'procesos'|'indicadores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
   const [solicitudes, setSolicitudes] = useState<Array<Record<string, unknown>>>([])
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
   const [procesos, setProcesos] = useState<Proceso[]>([])
+  const [cargos, setCargos] = useState<Cargo[]>([])
+  const [indicadores, setIndicadores] = useState<Indicador[]>([])
+  const [mediciones, setMediciones] = useState<Medicion[]>([])
   const [tasas, setTasas] = useState<Partial<TasaHistorico>>(TASAS_COL_2025)
   const [showModal, setShowModal] = useState(false)
   const [editData, setEditData] = useState<Colaborador | null>(null)
@@ -916,12 +1197,15 @@ export default function NominaPage() {
     if (!profile?.tenant_id) { setLoading(false); return }
     setTenantId(profile.tenant_id)
 
-    const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }, { data: sols }] = await Promise.all([
+    const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }, { data: sols }, { data: cargs }, { data: inds }, { data: meds }] = await Promise.all([
       supabase.from('colaboradores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombres'),
       supabase.from('nomina_procesos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('orden'),
       supabase.from('nomina_novedades_tipos').select('*').eq('activo', true),
       supabase.from('nomina_tasas_historico').select('*').eq('tenant_id', profile.tenant_id).eq('anio_fiscal', anioFiscal).eq('estado', 'activo').single(),
       supabase.from('nomina_solicitudes').select('*').eq('tenant_id', profile.tenant_id).eq('estado', 'pendiente').order('created_at', { ascending: false }),
+      supabase.from('nomina_cargos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
+      supabase.from('nomina_indicadores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
+      supabase.from('nomina_indicador_mediciones').select('*').eq('tenant_id', profile.tenant_id).order('fecha', { ascending: false }),
     ])
 
     setColaboradores((cols || []) as Colaborador[])
@@ -929,6 +1213,9 @@ export default function NominaPage() {
     setNovedades(novs || [])
     if (tasa) { setTasas(tasa as TasaHistorico); setFormTasa(tasa as TasaHistorico) }
     setSolicitudes(sols || [])
+    setCargos((cargs || []) as Cargo[])
+    setIndicadores((inds || []) as Indicador[])
+    setMediciones((meds || []) as Medicion[])
     setLoading(false)
   }
 
@@ -973,6 +1260,13 @@ export default function NominaPage() {
       .select('id').single()
     setNuevoProceso(''); setShowNuevoProceso(false); await loadData()
     return err ? null : data?.id || null
+  }
+
+  async function crearCargo(nombre: string, procesoId: string) {
+    const n = nombre.trim()
+    if (!n || !procesoId) return
+    await supabase.from('nomina_cargos').insert({ tenant_id: tenantId, proceso_id: procesoId, nombre: n, tipo: 'Analista', activo: true })
+    await loadData()
   }
 
   async function eliminarColaborador(id: string) {
@@ -1033,6 +1327,8 @@ export default function NominaPage() {
 
   const TABS = [
     { v:'organigrama',   l:'🗂️ Organigrama',  c:T.purple },
+    { v:'procesos',      l:'🧭 Procesos',      c:T.purple },
+    { v:'indicadores',   l:'📈 Indicadores',   c:T.green },
     { v:'colaboradores', l:'👥 Colaboradores', c:T.blue },
     { v:'solicitudes',   l:`📥 Solicitudes${solicitudes.length ? ` (${solicitudes.length})` : ''}`, c:T.red },
     { v:'novedades',     l:'📋 Novedades',     c:T.yellow },
@@ -1051,6 +1347,8 @@ export default function NominaPage() {
           procesos={procesos}
           tasas={tasas}
           onProcesoCreado={crearProceso}
+          cargos={cargos}
+          onCargoCreado={crearCargo}
         />
       )}
 
@@ -1172,6 +1470,16 @@ export default function NominaPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ══ PROCESOS (tablero drag-and-drop) ══ */}
+      {tab === 'procesos' && (
+        <TableroProcesos procesos={procesos} colaboradores={colaboradores} tenantId={tenantId} onReload={loadData} />
+      )}
+
+      {/* ══ MATRIZ DE INDICADORES ══ */}
+      {tab === 'indicadores' && (
+        <MatrizIndicadores indicadores={indicadores} mediciones={mediciones} procesos={procesos} tenantId={tenantId} onReload={loadData} />
       )}
 
       {/* ══ COLABORADORES ══ */}
