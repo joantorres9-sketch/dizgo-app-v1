@@ -1,7 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { PAISES, buscarPaises, paisPorCodigo, divisionesPorPais, etiquetaDivision, configRHPorPais } from '@/lib/paises'
+import * as XLSX from 'xlsx'
+import { construirColillaPDF } from '@/lib/colillaPdf'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -93,10 +95,16 @@ const TIPOS_NOVEDAD = [
     { v:'he_dom_nocturna',  l:'HE Dominical Nocturna (+150%)',     campos:['cantidad_horas'] },
     { v:'recargo_noc',      l:'Recargo Nocturno (+35%)',           campos:['cantidad_horas'] },
     { v:'recargo_dom',      l:'Recargo Dominical/Festivo (+75%)',  campos:['cantidad_horas'] },
+    { v:'recargo_noc_dom',  l:'Recargo Nocturno Dominical (+110%)',campos:['cantidad_horas'] },
     { v:'bonif_habitual',   l:'Bonificación Habitual (suma SS)',   campos:['valor'] },
     { v:'bonif_no_hab',     l:'Bonificación NO Habitual',         campos:['valor'] },
     { v:'comision',         l:'Comisiones por Ventas',             campos:['valor'] },
     { v:'aux_rodamiento',   l:'Auxilio de Rodamiento/Herramientas',campos:['valor'] },
+  ]},
+  { cat: 'E. Autorregistradas por el colaborador', items: [
+    { v:'vacaciones',    l:'Vacaciones (autorregistro)',    campos:['fecha_inicio','fecha_fin'] },
+    { v:'incapacidad',   l:'Incapacidad (autorregistro)',   campos:['fecha_inicio','fecha_fin'] },
+    { v:'auxilio',       l:'Auxilio (autorregistro)',       campos:['descripcion'] },
   ]},
 ]
 
@@ -240,6 +248,114 @@ function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): 
     (tasas.prima||8.33)/100 + (tasas.vacaciones||4.17)/100
   )
   return Math.round(s + carga + (colab.aux_transporte || 0))
+}
+
+// Multiplicador de horas extra/recargos (Código Sustantivo del Trabajo, Colombia) — mismo mapa
+// usado en el registro de novedades, reutilizado aquí para no duplicar la tabla de porcentajes.
+const MULT_HORAS: Record<string, number> = {
+  he_diurna:1.25, he_nocturna:1.75, he_dom_diurna:2, he_dom_nocturna:2.5,
+  recargo_noc:1.35, recargo_dom:1.75, recargo_noc_dom:2.10,
+}
+
+interface LineaLiquidacion { concepto: string; valor: number }
+interface LiquidacionResultado {
+  devengado: LineaLiquidacion[]; totalDevengado: number
+  ibc: number
+  deducciones: LineaLiquidacion[]; totalDeducciones: number
+  neto: number
+  apropiaciones: LineaLiquidacion[]; totalApropiaciones: number
+  cargaTotal: number
+  avisoPaisNoVerificado: boolean
+  avisoFsp: boolean
+}
+
+// Motor de liquidación de nómina — fórmulas exactas de Colombia (Devengado/IBC/Deducciones/
+// Apropiaciones) según el documento de mejoras del módulo. Para países ≠ COL se usa un cálculo
+// simplificado (sin retefuente/FSP/exoneración, que son normativa colombiana específica) y se
+// marca `avisoPaisNoVerificado` para que la UI muestre el aviso de verificar con asesor local.
+function calcularLiquidacion(
+  colab: Colaborador,
+  novedadesPeriodo: Array<Record<string, unknown>>,
+  tasas: Partial<TasaHistorico>,
+  esquema: 'mensual' | 'quincenal',
+): LiquidacionResultado {
+  const esCOL = colab.pais_code === 'COL'
+  const independiente = tipoEsIndependiente(colab.tipo_contrato)
+  const diasPeriodo = esquema === 'quincenal' ? 15 : 30
+  const salarioProp = independiente ? (colab.salario_base || 0) : Math.round((colab.salario_base || 0) / 30 * diasPeriodo)
+
+  const auxTransporteMes = calcAuxTransporte(colab.salario_base || 0, colab.tipo_contrato, colab.pais_code, tasas)
+  const auxTransporte = independiente ? 0 : (esquema === 'quincenal' ? Math.round(auxTransporteMes / 2) : auxTransporteMes)
+
+  const novedadesColab = novedadesPeriodo.filter(n => n.colaborador_id === colab.id && n.estado === 'aprobada')
+  const horasExtra = novedadesColab.filter(n => MULT_HORAS[String(n.tipo)]).reduce((a, n) => a + Number(n.valor || 0), 0)
+  const comisionesBonif = novedadesColab.filter(n => ['bonif_habitual','bonif_no_hab','comision','aux_rodamiento'].includes(String(n.tipo))).reduce((a, n) => a + Number(n.valor || 0), 0)
+  const otrosDescuentos = novedadesColab.filter(n => ['prestamo','deduccion_daños','anticipo','libranza','embargo','sancion_impunt'].includes(String(n.tipo))).reduce((a, n) => a + Number(n.valor || 0), 0)
+
+  const devengado: LineaLiquidacion[] = [
+    { concepto: esquema === 'quincenal' ? 'Sueldo (quincena)' : 'Sueldo proporcional', valor: salarioProp },
+    ...(auxTransporte > 0 ? [{ concepto: 'Auxilio de transporte', valor: auxTransporte }] : []),
+    ...(horasExtra > 0 ? [{ concepto: 'Horas extra / recargos', valor: horasExtra }] : []),
+    ...(comisionesBonif > 0 ? [{ concepto: 'Comisiones / bonificaciones', valor: comisionesBonif }] : []),
+  ]
+  const totalDevengado = devengado.reduce((a, d) => a + d.valor, 0)
+
+  // IBC excluye auxilio de transporte (mismo criterio que calcCarga) — sí incluye horas extra y
+  // comisiones/bonificaciones habituales, que por ley sí cotizan a seguridad social.
+  const ibc = salarioProp + horasExtra + comisionesBonif
+
+  let deducciones: LineaLiquidacion[] = []
+  let apropiaciones: LineaLiquidacion[] = []
+  let avisoFsp = false
+
+  if (esCOL && !independiente) {
+    const salud = Math.round(ibc * (tasas.salud_trab || 4) / 100)
+    const pension = Math.round(ibc * (tasas.pension_trab || 4) / 100)
+    const smmlv = tasas.salario_minimo || 1300000
+    // FSP progresivo desde 4 SMMLV (1%) y 16 SMMLV (2%) — tramos intermedios varían según
+    // decreto vigente; se muestra `avisoFsp` para que RRHH verifique el tramo exacto con su
+    // contador antes de pagar, en vez de asumir un porcentaje no verificado.
+    let fsp = 0
+    if (ibc >= smmlv * 16) { fsp = Math.round(ibc * 0.02); avisoFsp = true }
+    else if (ibc >= smmlv * 4) { fsp = Math.round(ibc * 0.01); avisoFsp = true }
+    deducciones = [
+      { concepto: 'Salud (4%)', valor: salud },
+      { concepto: 'Pensión (4%)', valor: pension },
+      ...(fsp > 0 ? [{ concepto: 'Fondo de Solidaridad Pensional', valor: fsp }] : []),
+      ...(otrosDescuentos > 0 ? [{ concepto: 'Otros descuentos (préstamos/embargos/anticipos)', valor: otrosDescuentos }] : []),
+    ]
+
+    const arl_pcts = [tasas.arl_nivel1||0.522,tasas.arl_nivel2||1.044,tasas.arl_nivel3||2.436,tasas.arl_nivel4||4.350,tasas.arl_nivel5||6.960]
+    const nivel = (colab.nivel_arl || 1) - 1
+    const smmlv10 = smmlv * (tasas.tope_exoneracion || 10)
+    const exonera = ibc < smmlv10 && colab.aplica_ley1607
+    const sena = exonera ? 0 : Math.round(ibc * (tasas.sena || 2) / 100)
+    const icbf = exonera ? 0 : Math.round(ibc * (tasas.icbf || 3) / 100)
+    apropiaciones = [
+      { concepto: `Salud empleador (${tasas.salud_emp || 8.5}%)`, valor: Math.round(ibc * (tasas.salud_emp || 8.5) / 100) },
+      { concepto: `Pensión empleador (${tasas.pension_emp || 12}%)`, valor: Math.round(ibc * (tasas.pension_emp || 12) / 100) },
+      { concepto: `ARL nivel ${colab.nivel_arl || 1} (${arl_pcts[nivel]}%)`, valor: Math.round(ibc * arl_pcts[nivel] / 100) },
+      { concepto: `Caja de Compensación (${tasas.caja_comp || 4}%)`, valor: Math.round(ibc * (tasas.caja_comp || 4) / 100) },
+      ...(sena > 0 ? [{ concepto: `SENA (${tasas.sena || 2}%)`, valor: sena }] : []),
+      ...(icbf > 0 ? [{ concepto: `ICBF (${tasas.icbf || 3}%)`, valor: icbf }] : []),
+      { concepto: `Prima de servicios (${tasas.prima || 8.33}%)`, valor: Math.round(ibc * (tasas.prima || 8.33) / 100) },
+      { concepto: `Cesantías (${tasas.cesantias || 8.33}%)`, valor: Math.round(ibc * (tasas.cesantias || 8.33) / 100) },
+      { concepto: `Intereses cesantías (${tasas.intereses_ces || 1}%)`, valor: Math.round(ibc * (tasas.intereses_ces || 1) / 100) },
+      { concepto: `Vacaciones (${tasas.vacaciones || 4.17}%)`, valor: Math.round(ibc * (tasas.vacaciones || 4.17) / 100) },
+    ]
+  } else if (otrosDescuentos > 0) {
+    deducciones = [{ concepto: 'Otros descuentos', valor: otrosDescuentos }]
+  }
+
+  const totalDeducciones = deducciones.reduce((a, d) => a + d.valor, 0)
+  const totalApropiaciones = apropiaciones.reduce((a, d) => a + d.valor, 0)
+  const neto = totalDevengado - totalDeducciones
+
+  return {
+    devengado, totalDevengado, ibc, deducciones, totalDeducciones, neto,
+    apropiaciones, totalApropiaciones, cargaTotal: totalDevengado + totalApropiaciones,
+    avisoPaisNoVerificado: !esCOL, avisoFsp,
+  }
 }
 
 // ── MODAL COLABORADOR (Formulario completo) ───────────────
@@ -1364,11 +1480,151 @@ function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onRelo
   )
 }
 
+// Fila de detalle Devengado/Deducciones con botón de ajuste manual opcional (solo antes de aprobar).
+function LineaAjustable({ concepto, valor, editable, onAjustar }: {
+  l: Record<string, unknown>; concepto: string; valor: number; editable: boolean; onAjustar: () => void
+}) {
+  return (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'11px', color:T.text, padding:'3px 0' }}>
+      <span>{concepto}</span>
+      <span style={{ display:'flex', alignItems:'center', gap:'6px' }}>
+        {fmt(valor)}
+        {editable && (
+          <button onClick={onAjustar} title="Ajuste manual" style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'10px', padding:0 }}>✏️</button>
+        )}
+      </span>
+    </div>
+  )
+}
+
+// ── MODAL DETALLE DE SOLICITUD ─────────────────────────────
+// RRHH debe poder ver toda la información (y el documento adjunto, si lo hay) antes de aprobar
+// o rechazar — aprobar sin revisar el soporte de una incapacidad, por ejemplo, es exactamente
+// el tipo de error que puede terminar en una liquidación mal hecha o un reclamo.
+function ModalDetalleSolicitud({ s, onClose, onAprobar, onRechazar }: {
+  s: Record<string, unknown>; onClose: () => void
+  onAprobar: () => void; onRechazar: () => void
+}) {
+  const supabase = createClient()
+  const esNovedad = ['vacaciones', 'incapacidad', 'auxilio'].includes(String(s.tipo))
+  const label = TIPOS_NOVEDAD.flatMap(c => c.items).find(it => it.v === s.tipo)?.l
+  const soportePath = ((s.docs_urls as Record<string, string>) || {}).soporte
+  const [soporteUrl, setSoporteUrl] = useState('')
+  const [cargando, setCargando] = useState(!!soportePath)
+
+  useEffect(() => {
+    if (!soportePath) { setCargando(false); return }
+    supabase.storage.from('documentos-nomina').createSignedUrl(soportePath, 600).then(({ data, error: err }) => {
+      if (!err && data?.signedUrl) setSoporteUrl(data.signedUrl)
+      setCargando(false)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soportePath])
+
+  const esImagen = /\.(png|jpe?g|gif|webp)$/i.test(soportePath || '')
+  const campos = (s.campos as Record<string, unknown>) || {}
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'20px' }} onClick={onClose}>
+      <div style={{ width:'min(560px,100%)', maxHeight:'90vh', overflowY:'auto', background:T.card, border:`1px solid ${T.border}`, borderRadius:'14px', padding:'22px' }} onClick={e => e.stopPropagation()}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div>
+            <div style={{ fontSize:'15px', fontWeight:'700', color:T.text }}>{String(s.nombres)} {String(s.apellidos)}</div>
+            {esNovedad && <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'4px', background:`${T.yellow}20`, color:T.yellow }}>{label}</span>}
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'18px' }}>✕</button>
+        </div>
+
+        <div style={{ marginTop:'16px', display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))', gap:'10px', fontSize:'12px' }}>
+          {esNovedad ? (
+            <>
+              {(s.fecha_inicio as string) && <div><span style={{ color:T.muted }}>Fecha inicio: </span>{String(s.fecha_inicio)}</div>}
+              {(s.fecha_fin as string) && <div><span style={{ color:T.muted }}>Fecha fin: </span>{String(s.fecha_fin)}</div>}
+              {campos.subtipo != null && <div><span style={{ color:T.muted }}>Subtipo: </span>{String(campos.subtipo)}</div>}
+              {campos.descripcion ? <div style={{ gridColumn:'1 / -1' }}><span style={{ color:T.muted }}>Descripción: </span>{String(campos.descripcion)}</div> : null}
+            </>
+          ) : (
+            <>
+              <div><span style={{ color:T.muted }}>Documento: </span>{String(s.tipo_doc)} {String(s.numero_doc)}</div>
+              <div><span style={{ color:T.muted }}>Celular: </span>{String(s.celular)}</div>
+              <div><span style={{ color:T.muted }}>Correo: </span>{String(s.email)}</div>
+              <div><span style={{ color:T.muted }}>País: </span>{String(s.pais_code || '—')}</div>
+              <div><span style={{ color:T.muted }}>Ciudad: </span>{String(s.ciudad || '—')}</div>
+              <div><span style={{ color:T.muted }}>Nivel de formación: </span>{String(s.nivel_formacion || '—')}</div>
+              <div><span style={{ color:T.muted }}>Estado civil: </span>{String(s.estado_civil || '—')}</div>
+            </>
+          )}
+        </div>
+
+        {soportePath && (
+          <div style={{ marginTop:'18px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:T.blue, marginBottom:'8px' }}>📎 DOCUMENTO ADJUNTO</div>
+            {cargando ? (
+              <div style={{ fontSize:'12px', color:T.muted }}>Cargando documento...</div>
+            ) : soporteUrl ? (
+              <div>
+                {esImagen ? (
+                  <img src={soporteUrl} alt="Soporte adjunto" style={{ maxWidth:'100%', maxHeight:'360px', borderRadius:'8px', border:`1px solid ${T.border}` }} />
+                ) : (
+                  <iframe src={soporteUrl} style={{ width:'100%', height:'360px', border:`1px solid ${T.border}`, borderRadius:'8px' }} title="Documento adjunto" />
+                )}
+                <a href={soporteUrl} target="_blank" rel="noreferrer" style={{ display:'inline-block', marginTop:'8px', fontSize:'11px', color:T.blue }}>Abrir en pestaña nueva ↗</a>
+              </div>
+            ) : (
+              <div style={{ fontSize:'12px', color:T.red }}>No se pudo cargar el documento.</div>
+            )}
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:'8px', marginTop:'22px' }}>
+          <button onClick={onAprobar} style={{ flex:1, padding:'10px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>✓ Aprobar</button>
+          <button onClick={onRechazar} style={{ flex:1, padding:'10px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'8px', color:T.red, cursor:'pointer', fontSize:'13px' }}>✕ Rechazar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── MODAL AJUSTE MANUAL DE LIQUIDACIÓN ─────────────────────
+// Cuando el cálculo automático no entiende un acuerdo especial, RRHH puede corregir una línea
+// puntual dejando motivo y usuario en `ajustes_manuales` (auditoría) sin perder el valor que
+// calculó el sistema originalmente.
+function ModalAjuste({ concepto, valorSistema, onClose, onGuardar }: {
+  concepto: string; valorSistema: number; onClose: () => void
+  onGuardar: (valorAjustado: number, motivo: string) => void
+}) {
+  const [valor, setValor] = useState(valorSistema)
+  const [motivo, setMotivo] = useState('')
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'20px' }}>
+      <div style={{ width:'min(400px,100%)', background:T.card, border:`1px solid ${T.border}`, borderRadius:'14px', padding:'22px' }}>
+        <div style={{ fontSize:'14px', fontWeight:'700', color:T.text, marginBottom:'4px' }}>✏️ Ajuste manual</div>
+        <div style={{ fontSize:'12px', color:T.muted, marginBottom:'14px' }}>{concepto}</div>
+        <label style={lbl}>Valor calculado por el sistema</label>
+        <div style={{ fontSize:'13px', color:T.muted, marginBottom:'10px' }}>{fmt(valorSistema)}</div>
+        <label style={lbl}>Valor ajustado</label>
+        <InputMiles value={valor} onChange={setValor} />
+        <label style={{ ...lbl, marginTop:'10px' }}>Motivo del ajuste *</label>
+        <textarea style={{ ...inp, minHeight:'60px', resize:'vertical' }} value={motivo} onChange={e => setMotivo(e.target.value)} placeholder="Ej: acuerdo especial con el colaborador, corrección de novedad no capturada..." />
+        <div style={{ display:'flex', gap:'8px', marginTop:'16px' }}>
+          <button onClick={onClose} style={{ flex:1, padding:'9px', background:'none', border:`1px solid ${T.border}`, borderRadius:'8px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>Cancelar</button>
+          <button
+            onClick={() => { if (!motivo.trim()) { alert('El motivo es obligatorio'); return }; if (!confirm(`¿Confirmar ajuste de ${fmt(valorSistema)} a ${fmt(valor)}?`)) return; onGuardar(valor, motivo) }}
+            style={{ flex:1, padding:'9px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>
+            Guardar ajuste
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function NominaPage() {
   const supabase = createClient()
   const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'procesos'|'indicadores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
   const [solicitudes, setSolicitudes] = useState<Array<Record<string, unknown>>>([])
+  const [detalleSolicitud, setDetalleSolicitud] = useState<Record<string, unknown> | null>(null)
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
@@ -1388,11 +1644,24 @@ export default function NominaPage() {
   // Novedades
   const [novedad, setNovedad] = useState({ empleado_id:'', tipo:'', campos:{} as Record<string,string|number> })
   const [novedades, setNovedades] = useState<Array<Record<string,unknown>>>([])
+  const [soporteNovedad, setSoporteNovedad] = useState<File | null>(null)
+  const [guardandoNovedad, setGuardandoNovedad] = useState(false)
 
   // Tasas edición
   const [editTasa, setEditTasa] = useState(false)
   const [pagandoNomina, setPagandoNomina] = useState(false)
   const [formTasa, setFormTasa] = useState<Partial<TasaHistorico>>(TASAS_COL_2025)
+
+  // Liquidación
+  const [esquemaNomina, setEsquemaNomina] = useState<'mensual' | 'quincenal'>('mensual')
+  const [periodoLiquidacion, setPeriodoLiquidacion] = useState(() => new Date().toISOString().slice(0, 7) + '-01')
+  const [liquidaciones, setLiquidaciones] = useState<Array<Record<string, unknown>>>([])
+  const [calculandoLiquidacion, setCalculandoLiquidacion] = useState(false)
+  const [expandidoLiq, setExpandidoLiq] = useState<string | null>(null)
+  const [ajusteEdit, setAjusteEdit] = useState<{ liqId: string; concepto: string; valorSistema: number } | null>(null)
+  const [colillasSeleccionadas, setColillasSeleccionadas] = useState<Set<string>>(new Set())
+  const [enviandoColillas, setEnviandoColillas] = useState(false)
+  const [empresa, setEmpresa] = useState<{ nombre: string; nit: string | null; moneda: string }>({ nombre: '', nit: null, moneda: 'COP' })
 
   async function loadData() {
     setLoading(true)
@@ -1402,15 +1671,16 @@ export default function NominaPage() {
     if (!profile?.tenant_id) { setLoading(false); return }
     setTenantId(profile.tenant_id)
 
-    const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }, { data: sols }, { data: cargs }, { data: inds }, { data: meds }] = await Promise.all([
+    const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }, { data: sols }, { data: cargs }, { data: inds }, { data: meds }, { data: tenant }] = await Promise.all([
       supabase.from('colaboradores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombres'),
       supabase.from('nomina_procesos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('orden'),
-      supabase.from('nomina_novedades_tipos').select('*').eq('activo', true),
+      supabase.from('nomina_novedades').select('*').eq('tenant_id', profile.tenant_id).order('created_at', { ascending: false }),
       supabase.from('nomina_tasas_historico').select('*').eq('tenant_id', profile.tenant_id).eq('anio_fiscal', anioFiscal).eq('estado', 'activo').single(),
       supabase.from('nomina_solicitudes').select('*').eq('tenant_id', profile.tenant_id).eq('estado', 'pendiente').order('created_at', { ascending: false }),
       supabase.from('nomina_cargos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
       supabase.from('nomina_indicadores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
       supabase.from('nomina_indicador_mediciones').select('*').eq('tenant_id', profile.tenant_id).order('fecha', { ascending: false }),
+      supabase.from('tenants').select('esquema_nomina, nombre, nit, moneda').eq('id', profile.tenant_id).single(),
     ])
 
     setColaboradores((cols || []) as Colaborador[])
@@ -1421,12 +1691,58 @@ export default function NominaPage() {
     setCargos((cargs || []) as Cargo[])
     setIndicadores((inds || []) as Indicador[])
     setMediciones((meds || []) as Medicion[])
+    if (tenant?.esquema_nomina) setEsquemaNomina(tenant.esquema_nomina as 'mensual' | 'quincenal')
+    if (tenant) setEmpresa({ nombre: tenant.nombre || '', nit: tenant.nit || null, moneda: tenant.moneda || 'COP' })
     setLoading(false)
   }
 
+  async function guardarNit(nit: string) {
+    await supabase.from('tenants').update({ nit }).eq('id', tenantId)
+    setEmpresa(e => ({ ...e, nit }))
+  }
+
+  async function cargarLiquidaciones(periodo: string, tid: string) {
+    const { data } = await supabase.from('nomina_liquidaciones_snapshot')
+      .select('*').eq('tenant_id', tid).eq('periodo', periodo).order('created_at')
+    setLiquidaciones(data || [])
+  }
+
+  useEffect(() => {
+    if (tenantId) cargarLiquidaciones(periodoLiquidacion, tenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, periodoLiquidacion])
+
   async function aprobarSolicitud(s: Record<string, unknown>) {
-    if (!confirm(`¿Convertir la solicitud de ${s.nombres} ${s.apellidos} en colaborador activo?`)) return
+    const esNovedad = ['vacaciones', 'incapacidad', 'auxilio'].includes(String(s.tipo))
     const { data: { user } } = await supabase.auth.getUser()
+
+    if (esNovedad) {
+      if (!confirm(`¿Aprobar la solicitud de ${s.nombres} ${s.apellidos}?`)) return
+      const campos = (s.campos as Record<string, unknown>) || {}
+      const soporte_url = ((s.docs_urls as Record<string, string>) || {}).soporte || null
+      const { error: err } = await supabase.from('nomina_novedades').insert({
+        tenant_id: tenantId,
+        colaborador_id: s.colaborador_id,
+        tipo: s.tipo,
+        campos,
+        valor: 0,
+        fecha_inicio: s.fecha_inicio || null,
+        fecha_fin: s.fecha_fin || null,
+        periodo: new Date().toISOString().slice(0, 10),
+        soporte_url,
+        origen: 'colaborador',
+        estado: 'aprobada',
+        created_by: user?.id,
+      })
+      if (err) { alert(`Error al aprobar: ${err.message}`); return }
+      await supabase.from('nomina_solicitudes')
+        .update({ estado: 'aprobado', aprobado_por: user?.id, revisado_por: user?.id, revisado_en: new Date().toISOString() })
+        .eq('id', s.id as string)
+      loadData()
+      return
+    }
+
+    if (!confirm(`¿Convertir la solicitud de ${s.nombres} ${s.apellidos} en colaborador activo?`)) return
     const { error: err } = await supabase.from('colaboradores').insert({
       tenant_id: tenantId,
       nombres: s.nombres, apellidos: s.apellidos, tipo_doc: s.tipo_doc, num_doc: s.numero_doc,
@@ -1438,14 +1754,25 @@ export default function NominaPage() {
       fecha_ingreso: new Date().toISOString().slice(0, 10), activo: true, carga_total_mes: 0,
     })
     if (err) { alert(`Error al aprobar: ${err.message}`); return }
-    await supabase.from('nomina_solicitudes').update({ estado: 'aprobado', aprobado_por: user?.id }).eq('id', s.id as string)
+    await supabase.from('nomina_solicitudes')
+      .update({ estado: 'aprobado', aprobado_por: user?.id, revisado_por: user?.id, revisado_en: new Date().toISOString() })
+      .eq('id', s.id as string)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      fetch('/api/nomina/notificar-solicitud', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ tenantId, email: s.email, nombres: s.nombres, decision: 'aprobado' }),
+      }).catch(() => {})
+    })
     alert('Colaborador creado — completa su información laboral y salarial desde "Colaboradores".')
     loadData()
   }
 
   async function rechazarSolicitud(id: string) {
     if (!confirm('¿Rechazar esta solicitud?')) return
-    await supabase.from('nomina_solicitudes').update({ estado: 'rechazado' }).eq('id', id)
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('nomina_solicitudes')
+      .update({ estado: 'rechazado', revisado_por: user?.id, revisado_en: new Date().toISOString() })
+      .eq('id', id)
     loadData()
   }
 
@@ -1453,6 +1780,36 @@ export default function NominaPage() {
     const url = `${window.location.origin}/registro-colaborador/${tenantId}`
     navigator.clipboard.writeText(url)
     alert(`Link copiado:\n${url}`)
+  }
+
+  function copiarLinkSolicitudes(colaboradorId: string) {
+    const url = `${window.location.origin}/mis-solicitudes/${colaboradorId}`
+    navigator.clipboard.writeText(url)
+    alert(`Link personal copiado:\n${url}`)
+  }
+
+  async function verSoporteNovedad(path: string) {
+    if (!path) return
+    const { data, error: err } = await supabase.storage.from('documentos-nomina').createSignedUrl(path, 300)
+    if (err || !data?.signedUrl) { alert('No se pudo generar el link del soporte'); return }
+    window.open(data.signedUrl, '_blank')
+  }
+
+  async function aprobarNovedad(n: Record<string, unknown>) {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('nomina_novedades')
+      .update({ estado: 'aprobada', revisado_por: user?.id, revisado_en: new Date().toISOString() })
+      .eq('id', n.id as string)
+    loadData()
+  }
+
+  async function rechazarNovedad(id: string) {
+    if (!confirm('¿Rechazar esta novedad?')) return
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('nomina_novedades')
+      .update({ estado: 'rechazada', revisado_por: user?.id, revisado_en: new Date().toISOString() })
+      .eq('id', id)
+    loadData()
   }
 
   useEffect(() => { loadData() }, [anioFiscal])
@@ -1492,27 +1849,158 @@ export default function NominaPage() {
   }
 
   // Conexión real → Libro de Caja (módulo P&G) — registro agregado de la nómina pagada
-  async function pagarNominaDelMes() {
+  async function calcularLiquidacionPeriodo() {
     if (!tenantId || colaboradores.length === 0) return
+    setCalculandoLiquidacion(true)
+    // No se recalculan liquidaciones ya aprobadas/pagadas de este periodo — evita borrar el
+    // rastro de auditoría (aprobado_por/pagado_por) de un colaborador ya cerrado si RRHH vuelve
+    // a presionar "Calcular" tras agregar una novedad para otro colaborador del mismo periodo.
+    const yaCerradas = new Set(liquidaciones.filter(l => ['aprobada', 'pagada'].includes(String(l.estado))).map(l => l.colaborador_id as string))
+    const colabsACalcular = colaboradores.filter(c => !yaCerradas.has(c.id))
+    const filas = colabsACalcular.map(c => {
+      const r = calcularLiquidacion(c, novedades, tasas, esquemaNomina)
+      return {
+        tenant_id: tenantId, colaborador_id: c.id, periodo: periodoLiquidacion,
+        tipo_contrato: c.tipo_contrato, salario_base: c.salario_base,
+        devengados: r.totalDevengado, deducciones: r.totalDeducciones, neto_pagar: r.neto,
+        total_ss_emp: r.totalApropiaciones, carga_total: r.cargaTotal,
+        proceso_id: c.proceso_id || null,
+        estado: 'calculada', ajustes_manuales: [],
+        snapshot: { devengado: r.devengado, deducciones: r.deducciones, apropiaciones: r.apropiaciones, ibc: r.ibc, avisoPaisNoVerificado: r.avisoPaisNoVerificado, avisoFsp: r.avisoFsp, esquema: esquemaNomina },
+      }
+    })
+    if (filas.length > 0) {
+      const { error: err } = await supabase.from('nomina_liquidaciones_snapshot')
+        .upsert(filas, { onConflict: 'tenant_id,colaborador_id,periodo' })
+      if (err) { setCalculandoLiquidacion(false); alert(`Error al calcular la liquidación: ${err.message}`); return }
+    }
+    setCalculandoLiquidacion(false)
+    if (yaCerradas.size > 0) {
+      alert(`${yaCerradas.size} liquidación(es) ya aprobada(s)/pagada(s) de este periodo no se recalcularon.`)
+    }
+    cargarLiquidaciones(periodoLiquidacion, tenantId)
+  }
+
+  async function revisarLiquidacion(liq: Record<string, unknown>) {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('nomina_liquidaciones_snapshot')
+      .update({ estado: 'revisada', revisado_por: user?.id, revisado_en: new Date().toISOString() })
+      .eq('id', liq.id as string)
+    cargarLiquidaciones(periodoLiquidacion, tenantId)
+  }
+
+  async function aprobarLiquidacion(liq: Record<string, unknown>) {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('nomina_liquidaciones_snapshot')
+      .update({ estado: 'aprobada', aprobado: true, aprobado_por: user?.id })
+      .eq('id', liq.id as string)
+    cargarLiquidaciones(periodoLiquidacion, tenantId)
+  }
+
+  async function pagarLiquidacionesDelPeriodo() {
+    const aprobadas = liquidaciones.filter(l => l.estado === 'aprobada')
+    if (aprobadas.length === 0) { alert('No hay liquidaciones aprobadas para pagar en este periodo.'); return }
+    if (!confirm(`¿Pagar ${aprobadas.length} liquidación(es) aprobada(s) de este periodo?`)) return
     setPagandoNomina(true)
-    const totalNeto = colaboradores.reduce((acc, c) => {
-      const salud_trab = Math.round(c.salario_base * (Number(tasas.salud_trab) || 4) / 100)
-      const pension_trab = Math.round(c.salario_base * (Number(tasas.pension_trab) || 4) / 100)
-      const heExtra = (novedades as Array<Record<string,unknown>>)
-        .filter(n => n.colaborador_id === c.id && String(n.tipo || '').startsWith('he_'))
-        .reduce((a, n) => a + Number(n.valor || 0), 0)
-      const deducciones = salud_trab + pension_trab
-      return acc + c.salario_base + (c.aux_transporte || 0) + heExtra - deducciones
-    }, 0)
-    const hoy = new Date().toISOString().slice(0,10)
+    const { data: { user } } = await supabase.auth.getUser()
+    const totalNeto = aprobadas.reduce((a, l) => a + Number(l.neto_pagar || 0), 0)
+    const hoy = new Date().toISOString().slice(0, 10)
     await supabase.from('libro_caja').insert({
       tenant_id: tenantId, fecha: hoy,
-      concepto: `Nómina del mes — ${colaboradores.length} colaborador(es)`,
+      concepto: `Nómina ${periodoLiquidacion} — ${aprobadas.length} colaborador(es)`,
       tipo: 'salida', valor: Math.round(totalNeto), origen: 'nomina',
       categoria_flujo: 'operativo',
     })
+    await supabase.from('nomina_liquidaciones_snapshot')
+      .update({ estado: 'pagada', pagado_por: user?.id, pagado_en: new Date().toISOString() })
+      .in('id', aprobadas.map(l => l.id as string))
     setPagandoNomina(false)
-    alert(`Nómina registrada: ${fmt(Math.round(totalNeto))} en Libro de Caja (módulo P&G)`)
+    alert(`Nómina pagada: ${fmt(Math.round(totalNeto))} registrada en Libro de Caja (módulo P&G)`)
+    cargarLiquidaciones(periodoLiquidacion, tenantId)
+  }
+
+  async function guardarAjusteManual(liq: Record<string, unknown>, concepto: string, valorSistema: number, valorAjustado: number, motivo: string) {
+    const { data: { user } } = await supabase.auth.getUser()
+    const ajustesPrevios = (liq.ajustes_manuales as Array<Record<string, unknown>>) || []
+    const delta = valorAjustado - valorSistema
+    const ajustes = [...ajustesPrevios, { concepto, valor_sistema: valorSistema, valor_ajustado: valorAjustado, motivo, usuario: user?.id, fecha: new Date().toISOString() }]
+    const nuevoNeto = Number(liq.neto_pagar || 0) + delta
+    const { error: err } = await supabase.from('nomina_liquidaciones_snapshot')
+      .update({ ajustes_manuales: ajustes, neto_pagar: nuevoNeto })
+      .eq('id', liq.id as string)
+    if (err) { alert(`Error al guardar el ajuste: ${err.message}`); return }
+    cargarLiquidaciones(periodoLiquidacion, tenantId)
+  }
+
+  function exportarExcelLiquidacion() {
+    const filas = liquidaciones.map(l => {
+      const col = colaboradores.find(c => c.id === l.colaborador_id)
+      return {
+        Colaborador: col ? `${col.nombres} ${col.apellidos}` : '—',
+        Cargo: col?.cargo || '—',
+        'Salario Base': l.salario_base,
+        Devengado: l.devengados,
+        Deducciones: l.deducciones,
+        'Neto a Pagar': l.neto_pagar,
+        'Carga Total Empleador': l.carga_total,
+        Estado: l.estado,
+      }
+    })
+    const ws = XLSX.utils.json_to_sheet(filas)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Liquidación')
+    XLSX.writeFile(wb, `liquidacion_${periodoLiquidacion}.xlsx`)
+  }
+
+  function datosColillaDe(l: Record<string, unknown>, col: Colaborador) {
+    const snap = (l.snapshot as Record<string, unknown>) || {}
+    return {
+      empresaNombre: empresa.nombre, empresaNit: empresa.nit,
+      colaboradorNombre: `${col.nombres} ${col.apellidos}`, colaboradorDoc: `${col.tipo_doc} ${col.num_doc}`,
+      cargo: col.cargo || '—', periodo: periodoLiquidacion, esquema: esquemaNomina,
+      devengado: (snap.devengado as LineaLiquidacion[]) || [], totalDevengado: Number(l.devengados || 0),
+      deducciones: (snap.deducciones as LineaLiquidacion[]) || [], totalDeducciones: Number(l.deducciones || 0),
+      neto: Number(l.neto_pagar || 0),
+      banco: col.banco, tipoCuenta: col.tipo_cuenta, numCuenta: col.num_cuenta,
+      moneda: empresa.moneda,
+    }
+  }
+
+  function descargarColillaPDF(l: Record<string, unknown>) {
+    const col = colaboradores.find(c => c.id === l.colaborador_id)
+    if (!col) return
+    const doc = construirColillaPDF(datosColillaDe(l, col))
+    doc.save(`colilla_${col.nombres}_${col.apellidos}_${periodoLiquidacion}.pdf`)
+  }
+
+  async function enviarColillasSeleccionadas() {
+    if (colillasSeleccionadas.size === 0) return
+    setEnviandoColillas(true)
+    const { data: { session } } = await supabase.auth.getSession()
+    const colillas = liquidaciones
+      .filter(l => colillasSeleccionadas.has(String(l.id)))
+      .map(l => {
+        const col = colaboradores.find(c => c.id === l.colaborador_id)
+        if (!col) return null
+        return { email: col.email || col.correo_personal, nombre: col.nombres, datos: datosColillaDe(l, col) }
+      })
+      .filter(Boolean)
+
+    const res = await fetch('/api/nomina/enviar-colilla', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+      body: JSON.stringify({ tenantId, colillas }),
+    })
+    const data = await res.json().catch(() => ({}))
+    setEnviandoColillas(false)
+    if (!res.ok) { alert(`Error al enviar colillas: ${data.error || res.statusText}`); return }
+    const fallidas = (data.resultados || []).filter((r: { ok: boolean }) => !r.ok)
+    if (fallidas.length > 0) {
+      alert(`Enviadas ${data.resultados.length - fallidas.length} de ${data.resultados.length}. Fallaron: ${fallidas.map((f: { email: string; error: string }) => `${f.email || '(sin correo)'}: ${f.error}`).join('; ')}`)
+    } else {
+      alert(`✅ ${data.resultados.length} colilla(s) enviada(s) por correo.`)
+    }
+    setColillasSeleccionadas(new Set())
   }
 
   const colsFiltrados = colaboradores.filter(c =>
@@ -1692,6 +2180,7 @@ export default function NominaPage() {
                         <td style={{ padding:'8px 12px' }}>
                           <div style={{ display:'flex', gap:'6px' }}>
                             <button onClick={() => { setEditData(c); setShowModal(true) }} style={{ padding:'4px 8px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'5px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>✏️</button>
+                            <button onClick={() => copiarLinkSolicitudes(c.id)} title="Copiar link personal de solicitudes" style={{ padding:'4px 8px', background:`${T.yellow}15`, border:`1px solid ${T.yellow}30`, borderRadius:'5px', color:T.yellow, cursor:'pointer', fontSize:'10px' }}>🔗</button>
                             <button onClick={() => eliminarColaborador(c.id)} style={{ padding:'4px 8px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'5px', color:T.red, cursor:'pointer', fontSize:'10px' }}>🗑</button>
                           </div>
                         </td>
@@ -1710,7 +2199,7 @@ export default function NominaPage() {
       {tab === 'solicitudes' && (
         <div>
           <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}20`, borderRadius:'8px', padding:'10px 14px', marginBottom:'14px', fontSize:'11px', color:T.muted }}>
-            Comparte el link de registro con el nuevo colaborador — al enviar el formulario aparece aquí para tu aprobación.
+            Comparte el link de registro con el nuevo colaborador, o el link personal de solicitudes con un colaborador activo — al enviar el formulario aparece aquí para tu aprobación.
           </div>
           {solicitudes.length === 0 ? (
             <div style={{ textAlign:'center', padding:'48px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }}>
@@ -1720,20 +2209,44 @@ export default function NominaPage() {
             </div>
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-              {solicitudes.map(s => (
-                <div key={String(s.id)} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-                  <div>
-                    <div style={{ fontSize:'13px', fontWeight:'700', color:T.text }}>{String(s.nombres)} {String(s.apellidos)}</div>
-                    <div style={{ fontSize:'11px', color:T.muted }}>{String(s.tipo_doc)} {String(s.numero_doc)} · {String(s.email)} · {String(s.celular)}</div>
-                    <div style={{ fontSize:'10px', color:T.muted, marginTop:'2px' }}>{s.ciudad ? `${s.ciudad}, ` : ''}{String(s.pais_code || '')}</div>
+              {solicitudes.map(s => {
+                const esNovedad = ['vacaciones', 'incapacidad', 'auxilio'].includes(String(s.tipo))
+                const label = TIPOS_NOVEDAD.flatMap(c => c.items).find(it => it.v === s.tipo)?.l
+                const soporte = ((s.docs_urls as Record<string, string>) || {}).soporte
+                return (
+                  <div key={String(s.id)} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+                    <div>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:T.text }}>
+                        {String(s.nombres)} {String(s.apellidos)}
+                        {esNovedad && <span style={{ marginLeft:'8px', fontSize:'10px', padding:'2px 7px', borderRadius:'4px', background:`${T.yellow}20`, color:T.yellow }}>{label}</span>}
+                        {soporte && <span style={{ marginLeft:'6px', fontSize:'10px', color:T.blue }}>📎</span>}
+                      </div>
+                      {esNovedad ? (
+                        <div style={{ fontSize:'11px', color:T.muted }}>
+                          {s.fecha_inicio ? `${String(s.fecha_inicio)} → ${String(s.fecha_fin || s.fecha_inicio)}` : ''}
+                        </div>
+                      ) : (
+                        <>
+                          <div style={{ fontSize:'11px', color:T.muted }}>{String(s.tipo_doc)} {String(s.numero_doc)} · {String(s.email)} · {String(s.celular)}</div>
+                          <div style={{ fontSize:'10px', color:T.muted, marginTop:'2px' }}>{s.ciudad ? `${s.ciudad}, ` : ''}{String(s.pais_code || '')}</div>
+                        </>
+                      )}
+                    </div>
+                    <div style={{ display:'flex', gap:'8px' }}>
+                      <button onClick={() => setDetalleSolicitud(s)} style={{ padding:'7px 14px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'8px', color:T.blue, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>👁 Ver detalle</button>
+                    </div>
                   </div>
-                  <div style={{ display:'flex', gap:'8px' }}>
-                    <button onClick={() => aprobarSolicitud(s)} style={{ padding:'7px 14px', background:T.green, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>✓ Aprobar</button>
-                    <button onClick={() => rechazarSolicitud(String(s.id))} style={{ padding:'7px 14px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'8px', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕ Rechazar</button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
+          )}
+          {detalleSolicitud && (
+            <ModalDetalleSolicitud
+              s={detalleSolicitud}
+              onClose={() => setDetalleSolicitud(null)}
+              onAprobar={() => { aprobarSolicitud(detalleSolicitud); setDetalleSolicitud(null) }}
+              onRechazar={() => { rechazarSolicitud(String(detalleSolicitud.id)); setDetalleSolicitud(null) }}
+            />
           )}
         </div>
       )}
@@ -1771,44 +2284,86 @@ export default function NominaPage() {
                   {TIPOS_NOVEDAD.flatMap(c => c.items).find(i => i.v === novedad.tipo)?.l}
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'8px' }}>
-                  {(TIPOS_NOVEDAD.flatMap(c => c.items).find(i => i.v === novedad.tipo)?.campos || []).map(campo => (
-                    <div key={campo}>
-                      <label style={lbl}>{campo.replace(/_/g,' ')}</label>
-                      <input
-                        style={inp}
-                        type={campo.includes('fecha') ? 'date' : campo.includes('monto') || campo.includes('valor') || campo.includes('horas') || campo.includes('cuota') || campo.includes('dias') || campo.includes('num') ? 'number' : 'text'}
-                        value={(novedad.campos[campo] as string) || ''}
-                        onChange={e => setNovedad(n => ({ ...n, campos: { ...n.campos, [campo]: e.target.value } }))}
-                      />
-                    </div>
-                  ))}
+                  {(TIPOS_NOVEDAD.flatMap(c => c.items).find(i => i.v === novedad.tipo)?.campos || []).map(campo => {
+                    const esMoneda = ['valor','valor_monto','monto_total','valor_cuota'].includes(campo)
+                    return (
+                      <div key={campo}>
+                        <label style={lbl}>{campo.replace(/_/g,' ')}</label>
+                        {esMoneda ? (
+                          <InputMiles
+                            value={Number(novedad.campos[campo] || 0)}
+                            onChange={v => setNovedad(n => ({ ...n, campos: { ...n.campos, [campo]: v } }))}
+                          />
+                        ) : (
+                          <input
+                            style={inp}
+                            type={campo.includes('fecha') ? 'date' : campo.includes('horas') || campo.includes('cuota') || campo.includes('dias') || campo.includes('num') ? 'number' : 'text'}
+                            value={(novedad.campos[campo] as string) || ''}
+                            onChange={e => setNovedad(n => ({ ...n, campos: { ...n.campos, [campo]: e.target.value } }))}
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+                <div style={{ marginTop:'10px' }}>
+                  <label style={lbl}>Soporte (PDF/imagen) — opcional</label>
+                  <input
+                    type="file" accept=".pdf,image/*"
+                    onChange={e => setSoporteNovedad(e.target.files?.[0] || null)}
+                    style={{ fontSize:'11px', color:T.muted }}
+                  />
                 </div>
                 <button
+                  disabled={guardandoNovedad}
                   onClick={async () => {
                     if (!novedad.empleado_id || !novedad.tipo) return
                     const col = colaboradores.find(c => c.id === novedad.empleado_id)
                     if (!col) return
+                    setGuardandoNovedad(true)
                     let valor = 0
                     const horas = parseFloat(String(novedad.campos.cantidad_horas || 0))
                     const valHora = col.salario_base / 240
-                    const pcts: Record<string,number> = { he_diurna:1.25, he_nocturna:1.75, he_dom_diurna:2, he_dom_nocturna:2.5, recargo_noc:1.35, recargo_dom:1.75 }
+                    const pcts: Record<string,number> = { he_diurna:1.25, he_nocturna:1.75, he_dom_diurna:2, he_dom_nocturna:2.5, recargo_noc:1.35, recargo_dom:1.75, recargo_noc_dom:2.10 }
                     if (horas > 0 && pcts[novedad.tipo]) valor = Math.round(horas * valHora * pcts[novedad.tipo])
-                    else valor = parseFloat(String(novedad.campos.valor || novedad.campos.valor_monto || 0))
-                    await supabase.from('nomina_novedades').insert({
+                    else valor = Number(novedad.campos.valor || novedad.campos.valor_monto || novedad.campos.monto_total || 0)
+
+                    let soporte_url: string | null = null
+                    if (soporteNovedad) {
+                      if (soporteNovedad.size > 5 * 1024 * 1024) {
+                        alert('El soporte supera el máximo de 5MB'); setGuardandoNovedad(false); return
+                      }
+                      const path = `nomina-novedades/${tenantId}/${Date.now()}_${novedad.empleado_id}_${soporteNovedad.name}`
+                      const { error: upErr } = await supabase.storage.from('documentos-nomina')
+                        .upload(path, soporteNovedad, { contentType: soporteNovedad.type || 'application/pdf' })
+                      if (upErr) { alert(`Error al subir el soporte: ${upErr.message}`); setGuardandoNovedad(false); return }
+                      soporte_url = path
+                    }
+
+                    const { data: { user } } = await supabase.auth.getUser()
+                    const { error: err } = await supabase.from('nomina_novedades').insert({
                       tenant_id: tenantId,
                       colaborador_id: novedad.empleado_id,
                       tipo: novedad.tipo,
                       campos: novedad.campos,
                       valor,
-                      fecha: new Date().toISOString().slice(0,10),
-                      estado: 'pendiente',
+                      fecha_inicio: novedad.campos.fecha_inicio || novedad.campos.fecha || null,
+                      fecha_fin: novedad.campos.fecha_fin || null,
+                      periodo: new Date().toISOString().slice(0,10),
+                      soporte_url,
+                      origen: 'rrhh',
+                      estado: 'aprobada',
+                      created_by: user?.id,
                     })
+                    if (err) { alert(`Error al registrar la novedad: ${err.message}`); setGuardandoNovedad(false); return }
                     setNovedad({ empleado_id:'', tipo:'', campos:{} })
+                    setSoporteNovedad(null)
+                    setGuardandoNovedad(false)
                     loadData()
                   }}
-                  style={{ marginTop:'12px', padding:'9px 20px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}
+                  style={{ marginTop:'12px', padding:'9px 20px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: guardandoNovedad?'wait':'pointer', fontSize:'13px', opacity: guardandoNovedad?0.7:1 }}
                 >
-                  ✅ Registrar novedad
+                  {guardandoNovedad ? 'Guardando...' : '✅ Registrar novedad'}
                 </button>
               </div>
             )}
@@ -1828,7 +2383,7 @@ export default function NominaPage() {
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                   <thead>
                     <tr style={{ background:'#060E1C' }}>
-                      {['Colaborador','Tipo','Valor','Fecha','Estado'].map(h => (
+                      {['Colaborador','Tipo','Valor','Periodo','Soporte','Estado','Acciones'].map(h => (
                         <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', borderBottom:`1px solid ${T.border}` }}>{h}</th>
                       ))}
                     </tr>
@@ -1836,16 +2391,32 @@ export default function NominaPage() {
                   <tbody>
                     {(novedades as Array<Record<string,unknown>>).map((n, i) => {
                       const col = colaboradores.find(c => c.id === n.colaborador_id)
+                      const estado = String(n.estado || 'aprobada')
+                      const badgeColor = estado === 'aprobada' ? T.green : estado === 'rechazada' ? T.red : T.yellow
+                      const label = TIPOS_NOVEDAD.flatMap(c => c.items).find(it => it.v === n.tipo)?.l || String(n.tipo || '—')
                       return (
-                        <tr key={i} style={{ borderBottom:`1px solid ${T.border}` }}>
+                        <tr key={String(n.id ?? i)} style={{ borderBottom:`1px solid ${T.border}` }}>
                           <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text }}>{col ? `${col.nombres} ${col.apellidos}` : '—'}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'11px', color:T.yellow }}>{String(n.tipo || '—')}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'11px', color:T.yellow }}>{label}</td>
                           <td style={{ padding:'8px 12px', fontSize:'12px', color:T.accent, fontWeight:'600' }}>{fmt(Number(n.valor || 0))}</td>
-                          <td style={{ padding:'8px 12px', fontSize:'11px', color:T.muted }}>{String(n.fecha || '—')}</td>
+                          <td style={{ padding:'8px 12px', fontSize:'11px', color:T.muted }}>{String(n.periodo || '—')}</td>
                           <td style={{ padding:'8px 12px' }}>
-                            <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'4px', background:`${T.green}20`, color:T.green }}>
-                              {String(n.estado || 'pendiente')}
+                            {n.soporte_url ? (
+                              <button onClick={() => verSoporteNovedad(String(n.soporte_url))} style={{ background:'none', border:'none', color:T.blue, cursor:'pointer', fontSize:'11px', padding:0 }}>📎 Ver</button>
+                            ) : <span style={{ fontSize:'11px', color:T.muted }}>—</span>}
+                          </td>
+                          <td style={{ padding:'8px 12px' }}>
+                            <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'4px', background:`${badgeColor}20`, color:badgeColor }}>
+                              {estado}
                             </span>
+                          </td>
+                          <td style={{ padding:'8px 12px' }}>
+                            {estado === 'pendiente' && (
+                              <div style={{ display:'flex', gap:'6px' }}>
+                                <button onClick={() => aprobarNovedad(n)} style={{ padding:'4px 9px', background:T.green, border:'none', borderRadius:'6px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'10px' }}>✓</button>
+                                <button onClick={() => rechazarNovedad(String(n.id))} style={{ padding:'4px 9px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'6px', color:T.red, cursor:'pointer', fontSize:'10px' }}>✕</button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )
@@ -1859,58 +2430,208 @@ export default function NominaPage() {
       )}
 
       {/* ══ LIQUIDACIÓN ══ */}
-      {tab === 'liquidacion' && (
-        <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'20px' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:T.green }}>💵 LIQUIDACIÓN DE NÓMINA</div>
-            {colaboradores.length > 0 && (
-              <button onClick={pagarNominaDelMes} disabled={pagandoNomina}
-                style={{ padding:'8px 16px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: pagandoNomina?'not-allowed':'pointer', fontSize:'12px', opacity: pagandoNomina?0.6:1 }}>
-                {pagandoNomina ? 'Registrando...' : '💰 Pagar nómina del mes'}
-              </button>
-            )}
-          </div>
-          {colaboradores.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'40px', color:T.muted }}>No hay colaboradores para liquidar</div>
-          ) : (
-            <div style={{ overflowX:'auto' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse' }}>
-                <thead>
-                  <tr style={{ background:'#060E1C' }}>
-                    {['Colaborador','Salario Base','Aux. Transporte','Horas Extra','Deducciones','NETO A PAGAR'].map(h => (
-                      <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', borderBottom:`1px solid ${T.border}`, whiteSpace:'nowrap' }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {colaboradores.map((c, i) => {
-                    const salud_trab = Math.round(c.salario_base * (Number(tasas.salud_trab) || 4) / 100)
-                    const pension_trab = Math.round(c.salario_base * (Number(tasas.pension_trab) || 4) / 100)
-                    const heExtra = (novedades as Array<Record<string,unknown>>)
-                      .filter(n => n.colaborador_id === c.id && String(n.tipo || '').startsWith('he_'))
-                      .reduce((a, n) => a + Number(n.valor || 0), 0)
-                    const deducciones = salud_trab + pension_trab
-                    const neto = c.salario_base + (c.aux_transporte || 0) + heExtra - deducciones
-                    return (
-                      <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':'#080F1C' }}>
-                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text, fontWeight:'500' }}>{c.nombres} {c.apellidos}</td>
-                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text }}>{fmt(c.salario_base, c.pais_code)}</td>
-                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.muted }}>{fmt(c.aux_transporte || 0, c.pais_code)}</td>
-                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.yellow }}>{fmt(heExtra, c.pais_code)}</td>
-                        <td style={{ padding:'8px 12px', fontSize:'12px', color:T.red }}>-{fmt(deducciones, c.pais_code)}</td>
-                        <td style={{ padding:'8px 12px', fontSize:'13px', fontWeight:'700', color:T.green }}>{fmt(neto, c.pais_code)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              <div style={{ marginTop:'10px', fontSize:'11px', color:T.muted }}>
-                Al pagar, se registra como salida en el Libro de Caja (módulo P&G) — categoría operativo.
+      {tab === 'liquidacion' && (() => {
+        const porProcesoLiq = procesos.map(p => ({
+          ...p,
+          carga: liquidaciones.filter(l => l.proceso_id === p.id).reduce((a, l) => a + Number(l.carga_total || 0), 0),
+        })).filter(p => p.carga > 0)
+        const aprobadasCount = liquidaciones.filter(l => l.estado === 'aprobada').length
+        const paisesNoCol = colaboradores.some(c => c.pais_code !== 'COL')
+        return (
+        <div>
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', padding:'16px', marginBottom:'16px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px' }}>
+              <div>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:T.green, marginBottom:'6px' }}>💵 LIQUIDACIÓN DE NÓMINA</div>
+                <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                  <label style={{ ...lbl, marginBottom:0 }}>Mes</label>
+                  <input type="month" style={{ ...inp, width:'140px' }} value={periodoLiquidacion.slice(0,7)}
+                    onChange={e => setPeriodoLiquidacion(`${e.target.value}-${periodoLiquidacion.slice(8,10) === '16' ? '16' : '01'}`)} />
+                  {esquemaNomina === 'quincenal' && (
+                    <select style={{ ...inp, width:'150px', appearance:'none' as React.CSSProperties['appearance'] }}
+                      value={periodoLiquidacion.slice(8,10) === '16' ? '16' : '01'}
+                      onChange={e => setPeriodoLiquidacion(`${periodoLiquidacion.slice(0,7)}-${e.target.value}`)}>
+                      <option value="01">1ª quincena (1-15)</option>
+                      <option value="16">2ª quincena (16-fin)</option>
+                    </select>
+                  )}
+                  <span style={{ fontSize:'10px', padding:'3px 8px', borderRadius:'4px', background:`${T.blue}20`, color:T.blue }}>{esquemaNomina === 'quincenal' ? 'Quincenal' : 'Mensual'}</span>
+                  <label style={{ ...lbl, marginBottom:0, marginLeft:'8px' }}>NIT empresa</label>
+                  <input style={{ ...inp, width:'130px' }} defaultValue={empresa.nit || ''} placeholder="Para colillas" onBlur={e => { if (e.target.value !== (empresa.nit || '')) guardarNit(e.target.value) }} />
+                </div>
+              </div>
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                <button onClick={calcularLiquidacionPeriodo} disabled={calculandoLiquidacion || colaboradores.length === 0}
+                  style={{ padding:'9px 16px', background:T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:'700', cursor: calculandoLiquidacion?'wait':'pointer', fontSize:'12px', opacity: calculandoLiquidacion?0.7:1 }}>
+                  {calculandoLiquidacion ? 'Calculando...' : '🧮 Calcular liquidación del periodo'}
+                </button>
+                {liquidaciones.length > 0 && (
+                  <button onClick={exportarExcelLiquidacion} style={{ padding:'9px 16px', background:'none', border:`1px solid ${T.border}`, borderRadius:'8px', color:T.text, cursor:'pointer', fontSize:'12px' }}>
+                    📊 Excel
+                  </button>
+                )}
+                {colillasSeleccionadas.size > 0 && (
+                  <button onClick={enviarColillasSeleccionadas} disabled={enviandoColillas}
+                    style={{ padding:'9px 16px', background:T.yellow, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: enviandoColillas?'wait':'pointer', fontSize:'12px', opacity: enviandoColillas?0.7:1 }}>
+                    {enviandoColillas ? 'Enviando...' : `✉️ Enviar ${colillasSeleccionadas.size} colilla(s)`}
+                  </button>
+                )}
+                {aprobadasCount > 0 && (
+                  <button onClick={pagarLiquidacionesDelPeriodo} disabled={pagandoNomina}
+                    style={{ padding:'9px 16px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: pagandoNomina?'not-allowed':'pointer', fontSize:'12px', opacity: pagandoNomina?0.6:1 }}>
+                    {pagandoNomina ? 'Pagando...' : `💰 Pagar ${aprobadasCount} aprobada(s)`}
+                  </button>
+                )}
               </div>
             </div>
+            {paisesNoCol && (
+              <div style={{ marginTop:'10px', fontSize:'11px', color:T.yellow, background:`${T.yellow}10`, border:`1px solid ${T.yellow}20`, borderRadius:'6px', padding:'8px 10px' }}>
+                ⚠️ Hay colaboradores fuera de Colombia — su liquidación usa tasas configurables genéricas. Verifica con tu asesor legal local antes de pagar.
+              </div>
+            )}
+          </div>
+
+          {porProcesoLiq.length > 0 && (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:'10px', marginBottom:'16px' }}>
+              {porProcesoLiq.map(p => (
+                <div key={p.id} style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'12px' }}>
+                  <div style={{ fontSize:'11px', color:T.purple, fontWeight:'600' }}>{p.nombre}</div>
+                  <div style={{ fontSize:'15px', fontWeight:'700', color:T.accent, marginTop:'4px' }}>{fmt(p.carga)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', overflow:'hidden' }}>
+            {liquidaciones.length === 0 ? (
+              <div style={{ textAlign:'center', padding:'40px', color:T.muted, fontSize:'13px' }}>
+                No hay liquidación calculada para este periodo — usa &quot;Calcular liquidación del periodo&quot;.
+              </div>
+            ) : (
+              <div style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ background:'#060E1C' }}>
+                      <th style={{ padding:'10px 12px', borderBottom:`1px solid ${T.border}` }}>
+                        <input type="checkbox"
+                          checked={liquidaciones.some(l => ['aprobada','pagada'].includes(String(l.estado))) && liquidaciones.filter(l => ['aprobada','pagada'].includes(String(l.estado))).every(l => colillasSeleccionadas.has(String(l.id)))}
+                          onChange={e => {
+                            const elegibles = liquidaciones.filter(l => ['aprobada','pagada'].includes(String(l.estado))).map(l => String(l.id))
+                            setColillasSeleccionadas(e.target.checked ? new Set(elegibles) : new Set())
+                          }} />
+                      </th>
+                      {['','Colaborador','Devengado','Deducciones','NETO A PAGAR','Carga Empleador','Estado','Acciones'].map(h => (
+                        <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', borderBottom:`1px solid ${T.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {liquidaciones.map((l, i) => {
+                      const col = colaboradores.find(c => c.id === l.colaborador_id)
+                      const snap = (l.snapshot as Record<string, unknown>) || {}
+                      const expandido = expandidoLiq === l.id
+                      const estado = String(l.estado || 'calculada')
+                      const estadoColor = estado === 'pagada' ? T.green : estado === 'aprobada' ? T.blue : estado === 'revisada' ? T.purple : T.yellow
+                      return (
+                        <Fragment key={String(l.id)}>
+                          <tr style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':'#080F1C', cursor:'pointer' }}
+                            onClick={() => setExpandidoLiq(expandido ? null : String(l.id))}>
+                            <td style={{ padding:'8px 12px' }} onClick={e => e.stopPropagation()}>
+                              {['aprobada','pagada'].includes(estado) && (
+                                <input type="checkbox" checked={colillasSeleccionadas.has(String(l.id))}
+                                  onChange={e => setColillasSeleccionadas(prev => {
+                                    const next = new Set(prev)
+                                    if (e.target.checked) next.add(String(l.id)); else next.delete(String(l.id))
+                                    return next
+                                  })} />
+                              )}
+                            </td>
+                            <td style={{ padding:'8px 12px', fontSize:'11px', color:T.muted }}>{expandido ? '▾' : '▸'}</td>
+                            <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text, fontWeight:'500' }}>{col ? `${col.nombres} ${col.apellidos}` : '—'}</td>
+                            <td style={{ padding:'8px 12px', fontSize:'12px', color:T.text }}>{fmt(Number(l.devengados || 0))}</td>
+                            <td style={{ padding:'8px 12px', fontSize:'12px', color:T.red }}>-{fmt(Number(l.deducciones || 0))}</td>
+                            <td style={{ padding:'8px 12px', fontSize:'13px', fontWeight:'700', color:T.green }}>{fmt(Number(l.neto_pagar || 0))}</td>
+                            <td style={{ padding:'8px 12px', fontSize:'12px', color:T.accent }}>{fmt(Number(l.carga_total || 0))}</td>
+                            <td style={{ padding:'8px 12px' }}>
+                              <span style={{ fontSize:'10px', padding:'2px 7px', borderRadius:'4px', background:`${estadoColor}20`, color:estadoColor }}>{estado}</span>
+                            </td>
+                            <td style={{ padding:'8px 12px' }} onClick={e => e.stopPropagation()}>
+                              <div style={{ display:'flex', gap:'6px' }}>
+                                {estado === 'calculada' && <button onClick={() => revisarLiquidacion(l)} style={{ padding:'4px 9px', background:`${T.purple}15`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>Revisar</button>}
+                                {estado === 'revisada' && <button onClick={() => aprobarLiquidacion(l)} style={{ padding:'4px 9px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'6px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>Aprobar</button>}
+                                {(estado === 'aprobada' || estado === 'pagada') && <button onClick={() => descargarColillaPDF(l)} style={{ padding:'4px 9px', background:`${T.green}15`, border:`1px solid ${T.green}30`, borderRadius:'6px', color:T.green, cursor:'pointer', fontSize:'10px' }}>📄 Colilla</button>}
+                              </div>
+                            </td>
+                          </tr>
+                          {expandido && (
+                            <tr key={`${String(l.id)}-detalle`} style={{ background:'#050B16' }}>
+                              <td colSpan={9} style={{ padding:'14px 20px' }}>
+                                {(snap.avisoPaisNoVerificado as boolean) && (
+                                  <div style={{ fontSize:'11px', color:T.yellow, marginBottom:'10px' }}>⚠️ País fuera de Colombia — tasas genéricas, verificar con asesor local.</div>
+                                )}
+                                {(snap.avisoFsp as boolean) && (
+                                  <div style={{ fontSize:'11px', color:T.yellow, marginBottom:'10px' }}>⚠️ Este colaborador supera 4 SMMLV — verifica el tramo exacto del Fondo de Solidaridad Pensional con tu contador.</div>
+                                )}
+                                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'18px' }}>
+                                  <div>
+                                    <div style={{ fontSize:'11px', fontWeight:'700', color:T.green, marginBottom:'6px' }}>DEVENGADO</div>
+                                    {((snap.devengado as LineaLiquidacion[]) || []).map((d, di) => (
+                                      <LineaAjustable key={di} l={l} concepto={d.concepto} valor={d.valor} editable={estado === 'calculada' || estado === 'revisada'} onAjustar={() => setAjusteEdit({ liqId: String(l.id), concepto: d.concepto, valorSistema: d.valor })} />
+                                    ))}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize:'11px', fontWeight:'700', color:T.red, marginBottom:'6px' }}>DEDUCCIONES</div>
+                                    {((snap.deducciones as LineaLiquidacion[]) || []).map((d, di) => (
+                                      <LineaAjustable key={di} l={l} concepto={d.concepto} valor={d.valor} editable={estado === 'calculada' || estado === 'revisada'} onAjustar={() => setAjusteEdit({ liqId: String(l.id), concepto: d.concepto, valorSistema: d.valor })} />
+                                    ))}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize:'11px', fontWeight:'700', color:T.accent, marginBottom:'6px' }}>APROPIACIONES (carga empleador)</div>
+                                    {((snap.apropiaciones as LineaLiquidacion[]) || []).map((d, di) => (
+                                      <div key={di} style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:T.muted, padding:'3px 0' }}>
+                                        <span>{d.concepto}</span><span>{fmt(d.valor)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                                {((l.ajustes_manuales as Array<Record<string, unknown>>) || []).length > 0 && (
+                                  <div style={{ marginTop:'12px', fontSize:'10.5px', color:T.muted }}>
+                                    <div style={{ fontWeight:'700', marginBottom:'4px' }}>Ajustes manuales:</div>
+                                    {((l.ajustes_manuales as Array<Record<string, unknown>>)).map((a, ai) => (
+                                      <div key={ai}>• {String(a.concepto)}: {fmt(Number(a.valor_sistema))} → {fmt(Number(a.valor_ajustado))} ({String(a.motivo)})</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <div style={{ marginTop:'10px', fontSize:'11px', color:T.muted }}>
+            Flujo: Calcular → Revisar → Aprobar → Pagar. Al pagar, se registra como salida en el Libro de Caja (módulo P&G).
+          </div>
+
+          {ajusteEdit && (
+            <ModalAjuste
+              concepto={ajusteEdit.concepto}
+              valorSistema={ajusteEdit.valorSistema}
+              onClose={() => setAjusteEdit(null)}
+              onGuardar={(valorAjustado, motivo) => {
+                const liq = liquidaciones.find(l => String(l.id) === ajusteEdit.liqId)
+                if (liq) guardarAjusteManual(liq, ajusteEdit.concepto, ajusteEdit.valorSistema, valorAjustado, motivo)
+                setAjusteEdit(null)
+              }}
+            />
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ══ TASAS ══ */}
       {tab === 'tasas' && (
