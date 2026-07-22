@@ -2,6 +2,17 @@
 -- DIZGO.APP — Schema completo v1.0
 -- Pegar en: Supabase → SQL Editor → New Query → Run
 -- ============================================================
+--
+-- ⚠️ DESACTUALIZADO — NO es la fuente de verdad del esquema real.
+-- Este archivo quedó congelado en la v1.0 (11 tablas) y nunca se actualizó
+-- cuando el proyecto creció a 70+ tablas con columnas distintas en varios
+-- casos (ej. pedidos.cliente_telefono aquí figura como cliente_tel).
+-- La base de datos real vive en Supabase y su historial de cambios
+-- verdadero son las migraciones aplicadas vía Supabase MCP — para ver el
+-- esquema actual, usa `list_tables`/`list_migrations` del MCP de Supabase
+-- en vez de confiar en este archivo. Se conserva solo como referencia
+-- histórica del arranque del proyecto.
+-- ============================================================
 
 -- ── EXTENSIONES ─────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";

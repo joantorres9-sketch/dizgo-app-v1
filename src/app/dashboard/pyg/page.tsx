@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import * as XLSX from 'xlsx'
 
 type Producto = {
   id:string; nombre:string; pvp_final:number; costo_proveedor:number; costo_flete:number
@@ -230,12 +231,10 @@ export default function PYGPage() {
       ['Pasivo corriente', pasivoCorriente], ['Pasivo largo plazo', saldoCreditosLP], ['Pasivo total', pasivoTotal],
       ['Patrimonio', patrimonio],
     ]
-    const csv = filas.map(r => r.join(',')).join('\n')
-    const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url; a.download = `DIZGO_PyG_${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
+    const ws = XLSX.utils.aoa_to_sheet(filas)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'P&G')
+    XLSX.writeFile(wb, `DIZGO_PyG_${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
   if (loading) return (
