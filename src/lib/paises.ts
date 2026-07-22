@@ -135,3 +135,15 @@ const CONFIG_RH_GENERICO: PaisConfigRH = {
 export function configRHPorPais(paisCode: string): PaisConfigRH {
   return CONFIG_RH_BASE[paisCode] || CONFIG_RH_GENERICO
 }
+
+// Varios módulos (Precio, Productos, Pedidos, Costos, Contact Center) eligen el país para
+// moneda/benchmarks vía localStorage('dizgo_pais'), pero nunca se sembraba desde el país real
+// del tenant — dos módulos podían mostrar países distintos para el mismo negocio. Este helper
+// siembra localStorage con el país real del tenant SOLO la primera vez (si el usuario ya eligió
+// un país manualmente en algún módulo, esa preferencia se respeta y no se sobreescribe).
+export function inicializarPaisTenant(paisTenant: string | null | undefined) {
+  if (typeof window === 'undefined' || !paisTenant) return
+  if (!localStorage.getItem('dizgo_pais')) {
+    localStorage.setItem('dizgo_pais', paisTenant)
+  }
+}

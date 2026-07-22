@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { inicializarPaisTenant } from '@/lib/paises'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -103,14 +104,17 @@ export default function PrecioPage() {
     const iniMes = `${periodo.slice(0,7)}-01`
     const finMes = new Date(hoy.getFullYear(), hoy.getMonth()+1, 0).toISOString().slice(0,10)
 
-    const [{ data: prods }, { data: metaData }, { data: pautaData }, { data: costosData }, { data: colabsData }, pedidosMesRes] = await Promise.all([
+    const [{ data: prods }, { data: metaData }, { data: pautaData }, { data: costosData }, { data: colabsData }, pedidosMesRes, { data: tenant }] = await Promise.all([
       supabase.from('productos').select('*').eq('tenant_id', tid).eq('tipo', 'producto').order('nombre'),
       supabase.from('metas').select('meta_pedidos').eq('tenant_id', tid).eq('periodo', periodo).single(),
       supabase.from('pauta').select('inversion, resultados').eq('tenant_id', tid).gte('fecha', iniMes).lte('fecha', finMes),
       supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', periodo).eq('activo', true),
       supabase.from('colaboradores').select('salario_base, activo').eq('tenant_id', tid).eq('activo', true),
-      supabase.from('pedidos').select('id', { count:'exact', head:true }).eq('tenant_id', tid).eq('estado','ENTREGADO').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
+      supabase.from('pedidos').select('id', { count:'exact', head:true }).eq('tenant_id', tid).eq('estado','entregado').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
+      supabase.from('tenants').select('pais').eq('id', tid).single(),
     ])
+    inicializarPaisTenant(tenant?.pais)
+    setPais(getPais())
 
     setProductos((prods||[]) as Producto[])
     setPeMetaPedidos(Number((metaData as { meta_pedidos?: number }|null)?.meta_pedidos) || 0)

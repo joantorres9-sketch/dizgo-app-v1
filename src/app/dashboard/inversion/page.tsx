@@ -187,7 +187,7 @@ export default function InversionPage() {
       supabase.from('pauta').select('inversion, resultados').eq('tenant_id', tid)
         .gte('fecha', ini3m).lte('fecha', finMes),
       supabase.from('colaboradores').select('cargo, activo').eq('tenant_id', tid).eq('activo', true),
-      supabase.from('productos').select('pvp, costo_proveedor, costo_flete_envio, costo_fulfillment, pct_publicidad, pct_comision, pct_popup, pct_pasarela').eq('tenant_id', tid).eq('estado', 'activo'),
+      supabase.from('productos').select('pvp_final, costo_proveedor, costo_flete, costo_fulfillment, pct_publicidad, pct_com_plataforma, pct_desc_popup, pct_pasarela').eq('tenant_id', tid).eq('estado', 'activo'),
     ])
 
     // País / moneda
@@ -207,32 +207,32 @@ export default function InversionPage() {
 
     // TC/TD/TE desde pedidos 3 meses
     const p3m = (pedidos3m || []) as { estado:string; ganancia:number; pvp:number }[]
-    const enFlujo = ['CONFIRMADO','DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION']
+    const enFlujo = ['confirmado','despachado','en_transito','entregado','novedad','devolucion']
     const conf3  = p3m.filter(p => enFlujo.includes(p.estado)).length
-    const desp3  = p3m.filter(p => ['DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION'].includes(p.estado)).length
-    const entr3  = p3m.filter(p => p.estado === 'ENTREGADO').length
-    const devs3  = p3m.filter(p => p.estado === 'DEVOLUCION').length
+    const desp3  = p3m.filter(p => ['despachado','en_transito','entregado','novedad','devolucion'].includes(p.estado)).length
+    const entr3  = p3m.filter(p => p.estado === 'entregado').length
+    const devs3  = p3m.filter(p => p.estado === 'devolucion').length
     setTcReal(safe(pct(conf3, p3m.length)))
     setTdReal(safe(pct(desp3, conf3)))
     setTeReal(safe(pct(entr3, desp3)))
     setDevReal(safe(pct(devs3, entr3 + devs3)))
 
     // Utilidad promedio 3 meses
-    const utilTotal = p3m.filter(p => p.estado === 'ENTREGADO').reduce((a,p) => a + Number(p.ganancia||0), 0)
+    const utilTotal = p3m.filter(p => p.estado === 'entregado').reduce((a,p) => a + Number(p.ganancia||0), 0)
     setUtilidadProm3m(Math.round(utilTotal / 3))
 
     // Margen real promedio
-    const pvpTotal = p3m.filter(p => p.estado === 'ENTREGADO').reduce((a,p) => a + Number(p.pvp||0), 0)
+    const pvpTotal = p3m.filter(p => p.estado === 'entregado').reduce((a,p) => a + Number(p.pvp||0), 0)
     const margenAvg = pvpTotal > 0 ? safe(Math.round(utilTotal / pvpTotal * 100)) : 0
     setMargenReal(margenAvg)
 
     // Ganancia por pedido (desde productos activos)
-    const prods = (prodsData || []) as { pvp:number; costo_proveedor:number; costo_flete_envio:number; costo_fulfillment:number; pct_publicidad:number; pct_comision:number; pct_popup:number; pct_pasarela:number }[]
+    const prods = (prodsData || []) as { pvp_final:number; costo_proveedor:number; costo_flete:number; costo_fulfillment:number; pct_publicidad:number; pct_com_plataforma:number; pct_desc_popup:number; pct_pasarela:number }[]
     if (prods.length > 0) {
       const ganProm = prods.reduce((a, p) => {
-        const cv = Number(p.costo_proveedor) + Number(p.costo_flete_envio) + Number(p.costo_fulfillment) +
-          (Number(p.pvp) * (Number(p.pct_publicidad) + Number(p.pct_comision) + Number(p.pct_popup) + Number(p.pct_pasarela)) / 100)
-        return a + (Number(p.pvp) - cv)
+        const cv = Number(p.costo_proveedor) + Number(p.costo_flete) + Number(p.costo_fulfillment) +
+          (Number(p.pvp_final) * (Number(p.pct_publicidad) + Number(p.pct_com_plataforma) + Number(p.pct_desc_popup) + Number(p.pct_pasarela)) / 100)
+        return a + (Number(p.pvp_final) - cv)
       }, 0) / prods.length
       setGananciaPedido(Math.round(ganProm))
     }

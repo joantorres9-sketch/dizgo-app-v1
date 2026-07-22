@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { inicializarPaisTenant } from '@/lib/paises'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -223,6 +224,7 @@ export default function CostosPage() {
   const [costosFijos, setCostosFijos] = useState<CF[]>([])
   const [costosVar, setCostosVar] = useState<CV[]>([])
   const [nominalNomina, setNominalNomina] = useState(0)
+  const [desgloseProcesoNomina, setDesgloseProcesoNomina] = useState<Array<{ nombre: string; valor: number }>>([])
   const [pedidosMes, setPedidosMes] = useState(0)
   const [modeloTienda, setModeloTienda] = useState('dropshipping')
   const [catPersonalizadas, setCatPersonalizadas] = useState<string[]>([])
@@ -260,7 +262,8 @@ export default function CostosPage() {
     setTenantId(profile.tenant_id)
 
     // Tenant modelo tienda
-    const {data:tenant} = await supabase.from('tenants').select('dropi_pais').eq('id',profile.tenant_id).single()
+    const {data:tenant} = await supabase.from('tenants').select('dropi_pais, pais').eq('id',profile.tenant_id).single()
+    inicializarPaisTenant(tenant?.pais)
 
     // CF
     const {data:cf} = await supabase.from('costos_fijos').select('*').eq('tenant_id',profile.tenant_id).eq('activo',true).order('categoria')
@@ -270,9 +273,25 @@ export default function CostosPage() {
     const {data:cv} = await supabase.from('costos_variables').select('*').eq('tenant_id',profile.tenant_id).eq('activo',true).order('tipo')
     setCostosVar((cv||[]) as CV[])
 
-    // Nómina
-    const {data:colab} = await supabase.from('colaboradores').select('carga_total_mes').eq('tenant_id',profile.tenant_id).eq('activo',true)
-    setNominalNomina(colab?.reduce((a:number,c:any)=>a+(c.carga_total_mes||0),0)||0)
+    // Nómina — si el periodo actual ya tiene liquidaciones calculadas (Fase 4), se usa el
+    // desglose real por proceso; si no, se cae al total estático de colaboradores.carga_total_mes
+    // (comportamiento previo, para tenants que aún no han usado el flujo de Liquidación).
+    const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0,0,0,0)
+    const periodoStr = inicioMes.toISOString().slice(0,10)
+    const {data:liqs} = await supabase.from('nomina_liquidaciones_snapshot').select('carga_total,proceso_id').eq('tenant_id',profile.tenant_id).eq('periodo',periodoStr)
+    if (liqs && liqs.length > 0) {
+      const {data:nprocs} = await supabase.from('nomina_procesos').select('id,nombre').eq('tenant_id',profile.tenant_id)
+      const porProceso = (nprocs||[]).map((p:any)=>({
+        nombre: p.nombre,
+        valor: liqs.filter((l:any)=>l.proceso_id===p.id).reduce((a:number,l:any)=>a+(l.carga_total||0),0),
+      })).filter((p:any)=>p.valor>0)
+      setDesgloseProcesoNomina(porProceso)
+      setNominalNomina(liqs.reduce((a:number,l:any)=>a+(l.carga_total||0),0))
+    } else {
+      setDesgloseProcesoNomina([])
+      const {data:colab} = await supabase.from('colaboradores').select('carga_total_mes').eq('tenant_id',profile.tenant_id).eq('activo',true)
+      setNominalNomina(colab?.reduce((a:number,c:any)=>a+(c.carga_total_mes||0),0)||0)
+    }
 
     // Pedidos mes
     const ini = new Date(); ini.setDate(1); ini.setHours(0,0,0,0)
@@ -408,10 +427,21 @@ export default function CostosPage() {
 
       {/* Alerta nómina conectada */}
       {nominalNomina > 0 && (
-        <div style={{background:`${T.green}10`,border:`1px solid ${T.green}30`,borderRadius:'9px',padding:'9px 14px',marginBottom:'12px',display:'flex',alignItems:'center',gap:'10px',fontSize:'12px',color:T.green}}>
-          <span>👥</span>
-          <span>Nómina conectada: <strong>{fmt(nominalNomina)}</strong> incluidos en CF Personal</span>
-          <a href="/dashboard/nomina" style={{marginLeft:'auto',color:T.green,fontSize:'11px',textDecoration:'underline'}}>Ver nómina →</a>
+        <div style={{background:`${T.green}10`,border:`1px solid ${T.green}30`,borderRadius:'9px',padding:'9px 14px',marginBottom:'12px',fontSize:'12px',color:T.green}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
+            <span>👥</span>
+            <span>Nómina conectada: <strong>{fmt(nominalNomina)}</strong> incluidos en CF Personal{desgloseProcesoNomina.length > 0 ? ' — liquidación del periodo actual' : ''}</span>
+            <a href="/dashboard/nomina" style={{marginLeft:'auto',color:T.green,fontSize:'11px',textDecoration:'underline'}}>Ver nómina →</a>
+          </div>
+          {desgloseProcesoNomina.length > 0 && (
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}}>
+              {desgloseProcesoNomina.map(p => (
+                <span key={p.nombre} style={{fontSize:'10.5px',padding:'3px 9px',borderRadius:'5px',background:`${T.green}15`,color:T.green}}>
+                  {p.nombre}: {fmt(p.valor)}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

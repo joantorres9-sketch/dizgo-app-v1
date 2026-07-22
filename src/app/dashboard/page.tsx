@@ -177,7 +177,8 @@ Como Super Agente Gerencial de DIZGO, analiza esta situación y genera:
 Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de línea claros.`
 
     try {
-      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt:contexto}) })
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session?.access_token}`}, body:JSON.stringify({prompt:contexto}) })
       const data = await res.json()
       setSuperAnalisis(data.texto||'')
       if (tenantId) {

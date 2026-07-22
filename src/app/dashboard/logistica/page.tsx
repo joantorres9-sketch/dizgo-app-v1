@@ -66,7 +66,7 @@ export default function LogisticaPage() {
   useEffect(() => { loadData() }, [loadData])
 
   const pedidosPais = pedidos.filter(p => p.pais === pais)
-  const transPaisInfo = transData.filter(t => (t as Transportadora & {pais_codigo?:string}).pais_codigo === pais || true)
+  const transPaisInfo = transData.filter(t => (t as Transportadora & {pais_codigo?:string}).pais_codigo === pais)
 
   // ── FLUJO DE CAJA POR ETAPA — $ y días, no solo cantidad ──────
   const enConfirmacion = pedidosPais.filter(p => !['cancelado','CANCELADO'].includes(p.estado) && !p.fecha_despacho)

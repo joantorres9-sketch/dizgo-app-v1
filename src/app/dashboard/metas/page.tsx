@@ -126,9 +126,9 @@ export default function MetasPage() {
       { data: colabsData }, { data: peConfig },
     ] = await Promise.all([
       supabase.from('metas').select('*').eq('tenant_id', tid).eq('periodo', periodoKey).single(),
-      supabase.from('pedidos').select('estado, pvp, ganancia, cliente_tel').eq('tenant_id', tid)
+      supabase.from('pedidos').select('estado, pvp, ganancia, cliente_telefono').eq('tenant_id', tid)
         .gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
-      supabase.from('pedidos').select('cliente_tel, estado').eq('tenant_id', tid)
+      supabase.from('pedidos').select('cliente_telefono, estado').eq('tenant_id', tid)
         .gte('fecha_pedido', ini3m).lte('fecha_pedido', finMes+'T23:59:59'),
       supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', periodoKey).eq('activo', true),
       supabase.from('pauta').select('inversion, resultados, cpa').eq('tenant_id', tid)
@@ -174,12 +174,12 @@ export default function MetasPage() {
     }
 
     // ── Embudo del mes ────────────────────────────────────
-    const peds = (pedidosMes || []) as { estado:string; pvp:number; ganancia:number; cliente_tel:string }[]
-    const enFlujo = ['CONFIRMADO','DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION']
+    const peds = (pedidosMes || []) as { estado:string; pvp:number; ganancia:number; cliente_telefono:string }[]
+    const enFlujo = ['confirmado','despachado','en_transito','entregado','novedad','devolucion']
     const conf = peds.filter(p => enFlujo.includes(p.estado))
-    const desp = peds.filter(p => ['DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION'].includes(p.estado))
-    const entregados = peds.filter(p => p.estado === 'ENTREGADO')
-    const devs = peds.filter(p => p.estado === 'DEVOLUCION')
+    const desp = peds.filter(p => ['despachado','en_transito','entregado','novedad','devolucion'].includes(p.estado))
+    const entregados = peds.filter(p => p.estado === 'entregado')
+    const devs = peds.filter(p => p.estado === 'devolucion')
 
     setShopifyActuales(peds.length)
     setConfActuales(conf.length)
@@ -197,8 +197,8 @@ export default function MetasPage() {
     setMargenReal(pvpTotal>0 ? safe(Math.round(utilTotal/pvpTotal*100)) : 0)
 
     // ── Recompra (3 meses, mismo teléfono) ─────────────────
-    const p3m = (pedidos3m || []) as { cliente_tel:string; estado:string }[]
-    const telsValidos = p3m.filter(p => p.cliente_tel && p.estado === 'ENTREGADO').map(p => p.cliente_tel)
+    const p3m = (pedidos3m || []) as { cliente_telefono:string; estado:string }[]
+    const telsValidos = p3m.filter(p => p.cliente_telefono && p.estado === 'entregado').map(p => p.cliente_telefono)
     const conteoTel: Record<string, number> = {}
     telsValidos.forEach(t => { conteoTel[t] = (conteoTel[t]||0) + 1 })
     const totalClientesUnicos = Object.keys(conteoTel).length
@@ -249,7 +249,7 @@ export default function MetasPage() {
       const { data: pedHist } = await supabase.from('pedidos').select('pvp, ganancia, estado')
         .eq('tenant_id', tid).gte('fecha_pedido', ini).lte('fecha_pedido', fin+'T23:59:59')
       const rows = (pedHist||[]) as { pvp:number; ganancia:number; estado:string }[]
-      const entr = rows.filter(r=>r.estado==='ENTREGADO')
+      const entr = rows.filter(r=>r.estado==='entregado')
       const confH = rows.filter(r=>enFlujo.includes(r.estado))
       const tcH = safe(pct(confH.length, rows.length))
       const pvpH = entr.reduce((a,r)=>a+Number(r.pvp||0),0)

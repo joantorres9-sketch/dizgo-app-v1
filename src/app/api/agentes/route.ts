@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { getSupabaseAdmin } from '@/lib/apiAuth'
 
 export async function POST(req: NextRequest) {
   try {
+    // Endpoint abierto anteriormente: cualquiera con la URL podía gastar el
+    // ANTHROPIC_API_KEY del dueño. Ahora exige una sesión válida de DIZGO —
+    // no se restringe a un tenant específico porque este endpoint no toca datos.
+    const token = req.headers.get('authorization')?.replace('Bearer ', '')
+    if (!token) return NextResponse.json({ error: 'No autenticado' }, { status: 401 })
+    const { data: { user }, error: authErr } = await getSupabaseAdmin().auth.getUser(token)
+    if (authErr || !user) return NextResponse.json({ error: 'Sesión inválida' }, { status: 401 })
+
     const { prompt, max_tokens } = await req.json()
     if (!prompt) return NextResponse.json({ error: 'Prompt requerido' }, { status: 400 })
 

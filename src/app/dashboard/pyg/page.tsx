@@ -80,13 +80,13 @@ export default function PYGPage() {
       supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', periodo).eq('activo', true),
       supabase.from('wallet_transacciones').select('tipo, monto').eq('tenant_id', tid),
       supabase.from('pedidos').select('pvp').eq('tenant_id', tid).gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59')
-        .not('estado', 'in', '(entregado,ENTREGADO,cancelado,CANCELADO,devolucion,DEVOLUCION)'),
+        .not('estado', 'in', '(entregado,cancelado,devolucion)'),
       supabase.from('inversiones_activos').select('valor').eq('tenant_id', tid).eq('activo', true),
       supabase.from('inversiones_creditos').select('cuota_mensual, monto, plazo_meses').eq('tenant_id', tid).eq('estado','activo'),
       supabase.from('cuentas_por_pagar').select('*').eq('tenant_id', tid).order('fecha_vencimiento', { ascending:true }),
       supabase.from('libro_caja').select('*').eq('tenant_id', tid).gte('fecha', ini30.slice(0,10)).order('fecha', { ascending:false }),
       supabase.from('pedidos').select('producto_id, pvp, ganancia, estado').eq('tenant_id', tid)
-        .eq('estado','ENTREGADO').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
+        .eq('estado','entregado').gte('fecha_pedido', iniMes).lte('fecha_pedido', finMes+'T23:59:59'),
     ])
 
     setProductos((prodsData||[]) as Producto[])
@@ -129,7 +129,7 @@ export default function PYGPage() {
       const fin = new Date(fecha.getFullYear(), fecha.getMonth()+1, 0).toISOString().slice(0,10)
       const per = `${fecha.getFullYear()}-${String(fecha.getMonth()+1).padStart(2,'0')}-01`
       const [{ data: pedHist }, { data: cfHist }] = await Promise.all([
-        supabase.from('pedidos').select('pvp, ganancia').eq('tenant_id', tid).eq('estado','ENTREGADO').gte('fecha_pedido', ini).lte('fecha_pedido', fin+'T23:59:59'),
+        supabase.from('pedidos').select('pvp, ganancia').eq('tenant_id', tid).eq('estado','entregado').gte('fecha_pedido', ini).lte('fecha_pedido', fin+'T23:59:59'),
         supabase.from('costos_fijos').select('total').eq('tenant_id', tid).eq('periodo', per).eq('activo', true),
       ])
       const rows = (pedHist||[]) as { pvp:number; ganancia:number }[]

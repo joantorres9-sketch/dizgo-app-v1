@@ -16,10 +16,10 @@ type Modo = 'minimo' | 'rentabilidad' | 'tiburon'
 type Tab  = 'tiempo_real' | 'escenarios' | 'capacidad'
 
 interface ProductoPE {
-  id: string; nombre: string; pvp: number
-  costo_proveedor: number; costo_flete_envio: number
+  id: string; nombre: string; pvp_final: number
+  costo_proveedor: number; costo_flete: number
   costo_fulfillment: number; pct_publicidad: number
-  pct_comision: number; pct_popup: number; pct_pasarela: number
+  pct_com_plataforma: number; pct_desc_popup: number; pct_pasarela: number
   ganancia_neta: number; participacion: number
 }
 
@@ -46,9 +46,9 @@ const pct  = (a: number, b: number) => b > 0 ? Math.round((a / b) * 100) : 0
 const safe = (n: number) => isNaN(n) || !isFinite(n) ? 0 : n
 
 function calcGanancia(p: ProductoPE): number {
-  const cv = p.costo_proveedor + p.costo_flete_envio + p.costo_fulfillment +
-    (p.pvp * (p.pct_publicidad + p.pct_comision + p.pct_popup + p.pct_pasarela) / 100)
-  return Math.round(p.pvp - cv)
+  const cv = p.costo_proveedor + p.costo_flete + p.costo_fulfillment +
+    (p.pvp_final * (p.pct_publicidad + p.pct_com_plataforma + p.pct_desc_popup + p.pct_pasarela) / 100)
+  return Math.round(p.pvp_final - cv)
 }
 
 // ── CONSTANTES ────────────────────────────────────────────────
@@ -150,10 +150,10 @@ export default function EquilibrioPage() {
 
     // ── Embudo del mes (TC/TD/TE) ─────────────────────────────
     const ped = (pedidosMes || []) as { estado: string }[]
-    const enFlujo   = ['CONFIRMADO','DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION']
+    const enFlujo   = ['confirmado','despachado','en_transito','entregado','novedad','devolucion']
     const confStats = ped.filter(p => enFlujo.includes(p.estado)).length
-    const despStats = ped.filter(p => ['DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION'].includes(p.estado)).length
-    const entrStats = ped.filter(p => p.estado === 'ENTREGADO').length
+    const despStats = ped.filter(p => ['despachado','en_transito','entregado','novedad','devolucion'].includes(p.estado)).length
+    const entrStats = ped.filter(p => p.estado === 'entregado').length
     setDatosLive({ shopify: ped.length, confirmados: confStats, despachados: despStats, entregados: entrStats })
 
     // ── Embudo de HOY ─────────────────────────────────────────
@@ -161,8 +161,8 @@ export default function EquilibrioPage() {
     setDatosHoy({
       shopify:     h.length,
       confirmados: h.filter(p => enFlujo.includes(p.estado)).length,
-      despachados: h.filter(p => ['DESPACHADO','EN_TRANSITO','ENTREGADO','NOVEDAD','DEVOLUCION'].includes(p.estado)).length,
-      entregados:  h.filter(p => p.estado === 'ENTREGADO').length,
+      despachados: h.filter(p => ['despachado','en_transito','entregado','novedad','devolucion'].includes(p.estado)).length,
+      entregados:  h.filter(p => p.estado === 'entregado').length,
     })
 
     // ── Tasas reales del mes ──────────────────────────────────
@@ -175,13 +175,13 @@ export default function EquilibrioPage() {
     const total = rawProds.length || 1
     const prodsConPE = rawProds.map(p => ({
       ...p,
-      pvp:           Number(p.pvp),
+      pvp_final:     Number(p.pvp_final),
       costo_proveedor: Number(p.costo_proveedor),
-      costo_flete_envio: Number(p.costo_flete_envio),
+      costo_flete:    Number(p.costo_flete),
       costo_fulfillment: Number(p.costo_fulfillment),
       pct_publicidad: Number(p.pct_publicidad),
-      pct_comision:   Number(p.pct_comision),
-      pct_popup:      Number(p.pct_popup),
+      pct_com_plataforma: Number(p.pct_com_plataforma),
+      pct_desc_popup: Number(p.pct_desc_popup),
       pct_pasarela:   Number(p.pct_pasarela),
       ganancia_neta:  0,
       participacion:  Math.round(100 / total),
@@ -242,15 +242,15 @@ export default function EquilibrioPage() {
 
   // ── CÁLCULOS CENTRALES ─────────────────────────────────────
   const prodsEfectivos = productos.length > 0 ? productos : [
-    { id:'1', nombre:'Producto Demo', pvp:69900, costo_proveedor:18000, costo_flete_envio:5000,
-      costo_fulfillment:3000, pct_publicidad:20, pct_comision:3, pct_popup:5, pct_pasarela:0,
+    { id:'1', nombre:'Producto Demo', pvp_final:69900, costo_proveedor:18000, costo_flete:5000,
+      costo_fulfillment:3000, pct_publicidad:20, pct_com_plataforma:3, pct_desc_popup:5, pct_pasarela:0,
       ganancia_neta:9920, participacion:100 } as ProductoPE,
   ]
 
   const gananciaPond = safe(Math.round(
     prodsEfectivos.reduce((s, p) => s + (p.ganancia_neta * p.participacion / 100), 0)
   ))
-  const pvpPond  = safe(Math.round(prodsEfectivos.reduce((s, p) => s + (p.pvp * p.participacion / 100), 0)))
+  const pvpPond  = safe(Math.round(prodsEfectivos.reduce((s, p) => s + (p.pvp_final * p.participacion / 100), 0)))
   const cfReal   = cfMes > 0 ? cfMes : 1159000
   const pautaReal = pautaMes > 0 ? pautaMes : 1500000
   const totalCF  = cfReal + pautaReal
@@ -303,7 +303,7 @@ export default function EquilibrioPage() {
     const shopify    = embudo > 0 ? Math.ceil(pedidos / embudo) : 0
     const inversion  = config.cpa_referencia > 0 ? shopify * config.cpa_referencia : pautaReal
     const stock      = pedidos * prodsEfectivos.reduce((s, p) => s + p.costo_proveedor * p.participacion / 100, 0)
-    const fletes     = pedidos * prodsEfectivos.reduce((s, p) => s + (p.costo_flete_envio + p.costo_fulfillment) * p.participacion / 100, 0)
+    const fletes     = pedidos * prodsEfectivos.reduce((s, p) => s + (p.costo_flete + p.costo_fulfillment) * p.participacion / 100, 0)
     const capital    = inversion + stock + fletes + cfReal
     const utilidad   = pedidos * gananciaPond - totalCF
     const walletPct  = walletSaldo > 0 ? Math.min(Math.round((walletSaldo / capital) * 100), 100) : 0

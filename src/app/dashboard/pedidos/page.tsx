@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { inicializarPaisTenant } from '@/lib/paises'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -152,10 +153,10 @@ function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=
     try {
       // ── Cliente: historial real por teléfono ──────────────
       const { data: historialCliente } = await supabase.from('pedidos')
-        .select('estado').eq('tenant_id', tenantId).eq('cliente_tel', form.cliente_telefono)
+        .select('estado').eq('tenant_id', tenantId).eq('cliente_telefono', form.cliente_telefono)
       const previos = historialCliente || []
       const totalPedidosCliente = previos.length
-      const devolucionesCliente = previos.filter((p:{estado:string}) => p.estado === 'DEVOLUCION' || p.estado === 'devolucion').length
+      const devolucionesCliente = previos.filter((p:{estado:string}) => p.estado === 'devolucion').length
       const tipoCliente = clasificarCliente(totalPedidosCliente)
 
       // ── Zona: buscar si existe, si no, queda neutral ──────
@@ -395,7 +396,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
     setIaActivo(nuevo)
     await supabase.from('pedidos').update({ia_modo:nuevo}).eq('id',pedido.id)
     await supabase.from('order_timeline_logs').insert({
-      pedido_id:pedido.id, tenant_id:pedido.id,
+      pedido_id:pedido.id, tenant_id:pedido.tenant_id,
       action_type:'mode_change', trigger_by:'human_user',
       description:`Modo cambiado a: ${nuevo?'IA':'Humano'}`,
     })
@@ -614,10 +615,14 @@ export default function PedidosPage() {
     const {data:profile} = await supabase.from('profiles').select('tenant_id').eq('id',user.id).single()
     if (!profile?.tenant_id) { setLoading(false); return }
     setTenantId(profile.tenant_id)
-    const {data} = await supabase.from('pedidos').select('*')
-      .eq('tenant_id',profile.tenant_id)
-      .order('created_at',{ascending:false})
-      .limit(200)
+    const [{data}, {data:tenant}] = await Promise.all([
+      supabase.from('pedidos').select('*')
+        .eq('tenant_id',profile.tenant_id)
+        .order('created_at',{ascending:false})
+        .limit(200),
+      supabase.from('tenants').select('pais').eq('id',profile.tenant_id).single(),
+    ])
+    inicializarPaisTenant(tenant?.pais)
     const lista = (data||[]) as Pedido[]
 
     // Recalcular SLA real para pedidos abiertos (no entregados/cancelados/devueltos)

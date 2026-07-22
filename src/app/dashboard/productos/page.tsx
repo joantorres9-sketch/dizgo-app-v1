@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { inicializarPaisTenant } from '@/lib/paises'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -369,6 +370,7 @@ function analizarIA(nombre: string, costo: number, pvp: number): { margenSug: nu
 
 // ── MODAL IA CHAT ─────────────────────────────────────────
 function ModalIAChat({ onClose }: { onClose: () => void }) {
+  const supabase = createClient()
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState([
     { role: 'ia', text: '¡Hola! Soy el asistente IA de catálogo DIZGO 🤖\n\nPuedo ayudarte con:\n• Tendencias de productos por país\n• Benchmarks de margen por categoría\n• Alertas de saturación de mercado\n• Recomendaciones de precio\n\n¿Qué quieres saber?' },
@@ -389,20 +391,17 @@ function ModalIAChat({ onClose }: { onClose: () => void }) {
     setMsgs((m) => [...m, { role: 'user', text: p }])
     setLoading(true)
     try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/agentes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
           max_tokens: 400,
-          messages: [{
-            role: 'user',
-            content: `Eres experto en e-commerce y dropshipping para LATAM (Colombia, Ecuador, México, Perú, Chile). Responde en español, máximo 120 palabras, con datos específicos. Pregunta: "${p}"`,
-          }],
+          prompt: `Eres experto en e-commerce y dropshipping para LATAM (Colombia, Ecuador, México, Perú, Chile). Responde en español, máximo 120 palabras, con datos específicos. Pregunta: "${p}"`,
         }),
       })
       const data = await res.json()
-      const texto = data.content?.[0]?.text || 'No pude procesar eso.'
+      const texto = data.texto || data.error || 'No pude procesar eso.'
       setMsgs((m) => [...m, { role: 'ia', text: texto }])
     } catch {
       setMsgs((m) => [...m, { role: 'ia', text: 'Error de conexión. Intenta de nuevo.' }])
@@ -1023,7 +1022,11 @@ export default function ProductosPage() {
     const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
     if (!profile?.tenant_id) { setLoading(false); return }
     setTenantId(profile.tenant_id)
-    const { data } = await supabase.from('productos').select('*').eq('tenant_id', profile.tenant_id).order('created_at', { ascending: false })
+    const [{ data }, { data: tenant }] = await Promise.all([
+      supabase.from('productos').select('*').eq('tenant_id', profile.tenant_id).order('created_at', { ascending: false }),
+      supabase.from('tenants').select('pais').eq('id', profile.tenant_id).single(),
+    ])
+    inicializarPaisTenant(tenant?.pais)
     setProductos((data || []) as Producto[])
     setLoading(false)
   }

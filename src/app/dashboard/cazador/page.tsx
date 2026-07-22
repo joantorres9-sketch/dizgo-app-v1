@@ -268,9 +268,10 @@ Un informe estructurado, claro y accionable que permita tomar decisiones estrat√
 en el negocio de dropshipping para ${producto.mercado}.`
 
     try {
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/agentes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ prompt, max_tokens: 2000 }),
       })
       const data = await res.json()

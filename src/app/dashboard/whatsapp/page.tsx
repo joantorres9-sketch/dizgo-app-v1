@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { inicializarPaisTenant, paisPorCodigo } from '@/lib/paises'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -134,14 +135,16 @@ export default function WhatsAppPage() {
     const hoy = new Date()
     const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
 
-    const [{ data: pedsData }, { data: chatsData }, { data: plantData }, { data: ctxData }, { data: metaData }] = await Promise.all([
+    const [{ data: pedsData }, { data: chatsData }, { data: plantData }, { data: ctxData }, { data: metaData }, { data: tenant }] = await Promise.all([
       supabase.from('pedidos').select('id, numero_pedido, cliente_nombre, cliente_telefono, cliente_ciudad, producto_nombre, producto_id, pvp, estado, numero_guia, anticipo_valor, dias_transito, created_at')
         .eq('tenant_id', tid).order('created_at', { ascending:false }).limit(150),
       supabase.from('whatsapp_chat_control').select('*').eq('tenant_id', tid),
       supabase.from('whatsapp_templates_config').select('*').eq('tenant_id', tid),
       supabase.from('whatsapp_store_context').select('*').eq('tenant_id', tid).single(),
       supabase.from('metas').select('meta_cpa, meta_pedidos').eq('tenant_id', tid).eq('periodo', periodo).single(),
+      supabase.from('tenants').select('pais').eq('id', tid).single(),
     ])
+    inicializarPaisTenant(tenant?.pais)
 
     const peds = (pedsData || []) as Pedido[]
     setPedidos(peds)
@@ -219,7 +222,8 @@ export default function WhatsAppPage() {
     }
     const mensaje = llenarVariables(pl.contenido, vars)
     const tel = (p.cliente_telefono||'').replace(/\D/g,'')
-    const prefijo = tel.startsWith('57') ? '' : '57'
+    const codigoPais = (paisPorCodigo(getPais())?.codigoTel || '+57').replace(/\D/g,'')
+    const prefijo = tel.startsWith(codigoPais) ? '' : codigoPais
     window.open(`https://wa.me/${prefijo}${tel}?text=${encodeURIComponent(mensaje)}`, '_blank')
 
     const chat = chats[p.id]

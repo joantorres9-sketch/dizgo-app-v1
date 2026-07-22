@@ -63,9 +63,9 @@ export default function AgentesPage() {
       { data: cxpData }, { data: walletData }, { data: logsData },
     ] = await Promise.all([
       supabase.from('pedidos').select('id,numero_pedido,cliente_nombre,cliente_telefono,producto_nombre,pvp,estado,fecha_pedido')
-        .eq('tenant_id', tid).eq('estado','NUEVO').lt('fecha_pedido', limite2h).limit(20),
+        .eq('tenant_id', tid).eq('estado','ingresado').lt('fecha_pedido', limite2h).limit(20),
       supabase.from('pedidos').select('id,numero_pedido,cliente_nombre,cliente_telefono,producto_nombre,pvp,estado,fecha_pedido,novedad_tipo')
-        .eq('tenant_id', tid).eq('estado','NOVEDAD').lt('fecha_pedido', limite24h).limit(20),
+        .eq('tenant_id', tid).eq('estado','novedad').lt('fecha_pedido', limite24h).limit(20),
       supabase.from('cuentas_por_pagar').select('id,tercero,concepto,valor,fecha_vencimiento')
         .eq('tenant_id', tid).eq('estado','pendiente').lt('fecha_vencimiento', hoy).order('fecha_vencimiento'),
       supabase.from('wallet_transacciones').select('tipo,monto').eq('tenant_id', tid),
@@ -210,9 +210,10 @@ Sé directo, usa números reales, sin rodeos.`
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession()
       const res = await fetch('/api/agentes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({ prompt }),
       })
       const data = await res.json()
@@ -468,7 +469,8 @@ Sé directo, usa números reales, sin rodeos.`
                     setCorriendo('campanas'); setResultado(null)
                     const prompt = `Eres el Agente de Campañas de DIZGO. Analiza esta campaña y da una recomendación concreta.\n\nCAMPAÑA: ${p.campana}\nPlataforma: ${p.plataforma}\nInversión: $${Math.round(p.inversion/1000)}K\nResultados: ${p.resultados}\nROAS: ${p.roas}x\nCPA: $${Math.round(p.cpa)}\nCTR: ${p.ctr}%\nCPA máximo del negocio: $18.000\n\nDiagnóstico en máximo 5 líneas:\n1. ¿Qué está pasando en esta campaña?\n2. ¿Cuál es la causa probable?\n3. Acción inmediata (pausar, escalar, cambiar creative, ajustar audiencia)\n4. Proyección si se aplica la acción\n\nSé directo, usa los números reales.`
                     try {
-                      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) })
+                      const { data: { session } } = await supabase.auth.getSession()
+                      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session?.access_token}`}, body:JSON.stringify({prompt}) })
                       const data = await res.json()
                       setResultado({ agente:'campanas', texto:data.texto||'' })
                       if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'campanas', trigger_tipo:'manual', input_resumen:p.campana, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
@@ -514,7 +516,8 @@ Sé directo, usa números reales, sin rodeos.`
                   setCorriendo('inventario'); setResultado(null)
                   const prompt = `Eres el Agente de Inventario de DIZGO. Analiza esta situación de stock y da una recomendación concreta.\n\nPRODUCTO (ID): ${item.producto_id}\nStock disponible: ${item.cantidad_disponible} unidades\nStock mínimo configurado: ${item.stock_minimo} unidades\nDéficit: ${item.stock_minimo - item.cantidad_disponible} unidades\n\nCONTEXTO DEL NEGOCIO:\n- Tasa de entrega actual: 70%\n- Ritmo de ventas: ~80-100 pedidos/mes\n\nDiagnóstico en máximo 5 líneas:\n1. Urgencia del quiebre (días restantes de stock)\n2. Impacto en ventas si no se actúa\n3. Acción inmediata: ¿traslado desde otra bodega o compra nueva?\n4. Cantidad mínima a reponer para 30 días de operación\n\nSé directo y usa los números reales.`
                   try {
-                    const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) })
+                    const { data: { session } } = await supabase.auth.getSession()
+                    const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session?.access_token}`}, body:JSON.stringify({prompt}) })
                     const data = await res.json()
                     setResultado({ agente:'inventario', texto:data.texto||'' })
                     if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'inventario', trigger_tipo:'manual', input_resumen:`Stock bajo: ${item.cantidad_disponible}/${item.stock_minimo}`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
@@ -565,7 +568,8 @@ Sé directo, usa números reales, sin rodeos.`
                     setCorriendo('logistico'); setResultado(null)
                     const prompt = `Eres el Agente Logístico de DIZGO. Analiza el rendimiento de esta transportadora.\n\nTRANSPORTADORA: ${t.transportadora}\nTotal pedidos (30 días): ${t.total}\nEntregados: ${t.entregados}\nTasa de entrega: ${t.tasa}%\nBenchmark Colombia: 75%-82%\n\nDiagnóstico en máximo 5 líneas:\n1. Evaluación del rendimiento vs benchmark\n2. Impacto económico de la tasa actual en el negocio\n3. Causa probable del bajo/alto rendimiento\n4. Acción recomendada (mantener, renegociar, cambiar, escalar)\n5. Ciudades o zonas donde puede estar el problema\n\nSé directo y usa los números reales.`
                     try {
-                      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({prompt}) })
+                      const { data: { session } } = await supabase.auth.getSession()
+                      const res = await fetch('/api/agentes', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${session?.access_token}`}, body:JSON.stringify({prompt}) })
                       const data = await res.json()
                       setResultado({ agente:'logistico', texto:data.texto||'' })
                       if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'logistico', trigger_tipo:'manual', input_resumen:`${t.transportadora}: ${t.tasa}% tasa entrega`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })

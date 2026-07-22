@@ -391,6 +391,22 @@ export default function AdminPage() {
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString('es-CO')} — ${msg}`, ...prev.slice(0, 49)])
 
+  // El sembrador insertaba datos sin revisar si Supabase devolvía error, así que un insert que
+  // fallara (columna inexistente, NOT NULL sin valor...) igual reportaba "✅ cargado" — pasó con
+  // PQRSF y Pauta. Este helper centraliza insert + verificación + log real para cada paso.
+  async function insertarPaso(tabla: string, filas: Record<string, unknown>[], pasoKey: string, mensajeExito: string) {
+    if (filas.length === 0) return true
+    const { error } = await supabase.from(tabla).insert(filas)
+    if (error) {
+      addLog(`❌ ${tabla}: ${error.message}`)
+      setProgreso(p => ({ ...p, [pasoKey]: 'error' }))
+      return false
+    }
+    setProgreso(p => ({ ...p, [pasoKey]: 'ok' }))
+    addLog(mensajeExito)
+    return true
+  }
+
   const loadEstado = useCallback(async () => {
     setLoading(true)
     const { data: { user } } = await supabase.auth.getUser()
@@ -426,8 +442,21 @@ export default function AdminPage() {
       supabase.from('libro_caja').delete().eq('tenant_id', tenantId),
       supabase.from('metas').delete().eq('tenant_id', tenantId),
       supabase.from('bodegas').delete().eq('tenant_id', tenantId),
+      supabase.from('inventario').delete().eq('tenant_id', tenantId),
       supabase.from('pqrsf').delete().eq('tenant_id', tenantId),
       supabase.from('alertas').delete().eq('tenant_id', tenantId),
+      supabase.from('colaboradores').delete().eq('tenant_id', tenantId),
+      supabase.from('nomina_tasas_historico').delete().eq('tenant_id', tenantId),
+      supabase.from('nomina_procesos').delete().eq('tenant_id', tenantId),
+      supabase.from('inversiones_activos').delete().eq('tenant_id', tenantId),
+      supabase.from('inversiones_creditos').delete().eq('tenant_id', tenantId),
+      supabase.from('inversiones_capital').delete().eq('tenant_id', tenantId),
+      supabase.from('inversiones_socios').delete().eq('tenant_id', tenantId),
+      supabase.from('cuentas_por_pagar').delete().eq('tenant_id', tenantId),
+      supabase.from('metas_seguimiento_diario').delete().eq('tenant_id', tenantId),
+      supabase.from('pe_configuraciones').delete().eq('tenant_id', tenantId),
+      supabase.from('whatsapp_store_context').delete().eq('tenant_id', tenantId),
+      supabase.from('whatsapp_templates_config').delete().eq('tenant_id', tenantId),
     ])
     addLog('✅ Datos eliminados. Listo para nueva carga.')
     loadEstado()
@@ -515,14 +544,15 @@ export default function AdminPage() {
           cfRows.push({ tenant_id: tenantId, periodo, categoria: cf.categoria, concepto: cf.concepto, cantidad: 1, valor_unitario: cf.valor, activo: true })
         }
       }
-      await supabase.from('costos_fijos').insert(cfRows)
-      setProgreso(p => ({ ...p, costos: 'ok' }))
-      addLog(`✅ ${cfRows.length} registros de costos fijos`)
+      const { error: cfErr } = await supabase.from('costos_fijos').insert(cfRows)
+      if (cfErr) { addLog(`❌ Costos fijos: ${cfErr.message}`); setProgreso(p => ({ ...p, costos: 'error' })) }
+      else { setProgreso(p => ({ ...p, costos: 'ok' })); addLog(`✅ ${cfRows.length} registros de costos fijos`) }
 
       // ── PEDIDOS ───────────────────────────────────────────────
       setProgreso(p => ({ ...p, pedidos: 'cargando' }))
       addLog('📦 Generando pedidos 6 meses...')
       let totalPedidos = 0
+      let huboErrorPedidos = false
       for (let mes = 5; mes >= 0; mes--) {
         const fecha = new Date(hoy.getFullYear(), hoy.getMonth() - mes, 1)
         const volumen = 60 + ((5 - mes) * 8)
@@ -530,9 +560,9 @@ export default function AdminPage() {
         for (let i = 0; i < volumen; i++) {
           const prod = prodIds[rndInt(0, prodIds.length - 1)]
           const rand = Math.random()
-          const estado = rand < 0.72 ? 'ENTREGADO' : rand < 0.90 ? 'CANCELADO' : 'DEVOLUCION'
+          const estado = rand < 0.72 ? 'entregado' : rand < 0.90 ? 'cancelado' : 'devolucion'
           const margenBruto = (prod.pvp - prod.costo) / prod.pvp
-          const ganancia = estado === 'ENTREGADO' ? Math.round(prod.pvp * margenBruto * 0.55) : 0
+          const ganancia = estado === 'entregado' ? Math.round(prod.pvp * margenBruto * 0.55) : 0
           const dia = rndInt(1, 28)
           const hora = rndInt(8, 20)
           const fecha_pedido = new Date(fecha.getFullYear(), fecha.getMonth(), dia, hora, rndInt(0, 59))
@@ -551,11 +581,11 @@ export default function AdminPage() {
             transportadora: String(rnd(cfg.transportadoras)),
           })
         }
-        await supabase.from('pedidos').insert(pedidosBatch)
+        const { error: pedErr } = await supabase.from('pedidos').insert(pedidosBatch)
+        if (pedErr) { addLog(`❌ Pedidos: ${pedErr.message}`); setProgreso(p => ({ ...p, pedidos: 'error' })); huboErrorPedidos = true; break }
         totalPedidos += pedidosBatch.length
       }
-      setProgreso(p => ({ ...p, pedidos: 'ok' }))
-      addLog(`✅ ${totalPedidos} pedidos generados`)
+      if (!huboErrorPedidos) { setProgreso(p => ({ ...p, pedidos: 'ok' })); addLog(`✅ ${totalPedidos} pedidos generados`) }
 
       // ── PAUTA ─────────────────────────────────────────────────
       setProgreso(p => ({ ...p, pauta: 'cargando' }))
@@ -577,12 +607,11 @@ export default function AdminPage() {
           cpm: Math.round(inversion / impresiones * 1000),
           cpc: Math.round(inversion / clics),
           cpa: Math.round(inversion / resultados),
-          roas: Math.round(resultados * cfg.productos[mes % 3].pvp / inversion * 100) / 100,
         })
       }
-      await supabase.from('pauta').insert(pautaRows)
-      setProgreso(p => ({ ...p, pauta: 'ok' }))
-      addLog(`✅ ${pautaRows.length} campañas cargadas`)
+      const { error: pautaErr } = await supabase.from('pauta').insert(pautaRows)
+      if (pautaErr) { addLog(`❌ Pauta: ${pautaErr.message}`); setProgreso(p => ({ ...p, pauta: 'error' })) }
+      else { setProgreso(p => ({ ...p, pauta: 'ok' })); addLog(`✅ ${pautaRows.length} campañas cargadas`) }
 
       // ── WALLET ────────────────────────────────────────────────
       setProgreso(p => ({ ...p, wallet: 'cargando' }))
@@ -607,9 +636,7 @@ export default function AdminPage() {
           })
         }
       }
-      await supabase.from('wallet_transacciones').insert(walletRows)
-      setProgreso(p => ({ ...p, wallet: 'ok' }))
-      addLog(`✅ ${walletRows.length} movimientos de wallet`)
+      await insertarPaso('wallet_transacciones', walletRows, 'wallet', `✅ ${walletRows.length} movimientos de wallet`)
 
       // ── LIBRO DE CAJA ─────────────────────────────────────────
       setProgreso(p => ({ ...p, libro_caja: 'cargando' }))
@@ -627,9 +654,7 @@ export default function AdminPage() {
           { tenant_id: tenantId, fecha: ult, concepto: `Costos fijos mes ${6 - mes}`, tipo: 'salida', valor: cfTotal, origen: 'costos_fijos', categoria_flujo: 'operativo' },
         )
       }
-      await supabase.from('libro_caja').insert(cajaRows)
-      setProgreso(p => ({ ...p, libro_caja: 'ok' }))
-      addLog(`✅ ${cajaRows.length} movimientos en libro de caja`)
+      await insertarPaso('libro_caja', cajaRows, 'libro_caja', `✅ ${cajaRows.length} movimientos en libro de caja`)
 
       // ── METAS ─────────────────────────────────────────────────
       setProgreso(p => ({ ...p, metas: 'cargando' }))
@@ -648,60 +673,64 @@ export default function AdminPage() {
           descripcion: `Meta ${fecha.toLocaleString('es-CO', { month: 'long', year: 'numeric' })}`,
         })
       }
-      await supabase.from('metas').insert(metasRows)
-      setProgreso(p => ({ ...p, metas: 'ok' }))
-      addLog(`✅ ${metasRows.length} metas creadas`)
+      await insertarPaso('metas', metasRows, 'metas', `✅ ${metasRows.length} metas creadas`)
 
       // ── BODEGAS ───────────────────────────────────────────────
       setProgreso(p => ({ ...p, bodegas: 'cargando' }))
       addLog('🏭 Creando bodegas e inventario...')
-      const { data: bodegasData } = await supabase.from('bodegas').insert([
+      const { data: bodegasData, error: bodErr } = await supabase.from('bodegas').insert([
         { tenant_id: tenantId, nombre: `Bodega General ${cfg.nombre}`, tipo: 'general', pais_codigo: paisCodigo, ciudad: cfg.capital, orden_flujo: 2, activa: true },
         { tenant_id: tenantId, nombre: `Bodega ${cfg.capital}`, tipo: 'ciudad', pais_codigo: paisCodigo, ciudad: cfg.capital, orden_flujo: 3, activa: true },
       ]).select()
-      if (bodegasData && prodIds.length > 0) {
-        const invRows = []
-        for (const bod of bodegasData) {
-          for (const prod of prodIds) {
-            invRows.push({ tenant_id: tenantId, producto_id: prod.id, bodega_id: bod.id, cantidad_disponible: rndInt(15, 80), cantidad_reservada: rndInt(0, 5), cantidad_dañada: rndInt(0, 2), stock_minimo: 10 })
+      if (bodErr) { addLog(`❌ Bodegas: ${bodErr.message}`); setProgreso(p => ({ ...p, bodegas: 'error' })) }
+      else {
+        if (bodegasData && prodIds.length > 0) {
+          const invRows = []
+          for (const bod of bodegasData) {
+            for (const prod of prodIds) {
+              invRows.push({ tenant_id: tenantId, producto_id: prod.id, bodega_id: bod.id, cantidad_disponible: rndInt(15, 80), cantidad_reservada: rndInt(0, 5), cantidad_dañada: rndInt(0, 2), stock_minimo: 10 })
+            }
           }
+          const { error: invErr } = await supabase.from('inventario').insert(invRows)
+          if (invErr) addLog(`❌ Inventario: ${invErr.message}`)
         }
-        await supabase.from('inventario').insert(invRows)
+        setProgreso(p => ({ ...p, bodegas: 'ok' }))
+        addLog(`✅ 2 bodegas + inventario inicial`)
       }
-      setProgreso(p => ({ ...p, bodegas: 'ok' }))
-      addLog(`✅ 2 bodegas + inventario inicial`)
 
       // ── PQRSF ─────────────────────────────────────────────────
+      // Mismo formato que crearNueva() en pqrsf/page.tsx: tipo es P/Q/R/S/F, numero_radicado
+      // es obligatorio (DZ-YYYYMM-#####), estado es RECIBIDO/EN_GESTION/RESPONDIDO/CERRADO.
       setProgreso(p => ({ ...p, pqrsf: 'cargando' }))
       addLog('📬 Generando casos PQRSF...')
-      const tipos = ['pregunta', 'queja', 'reclamo', 'sugerencia', 'felicitacion']
+      const tiposPqrsf: Array<'P'|'Q'|'R'|'S'|'F'> = ['P', 'Q', 'R', 'S', 'F']
       const asuntos = ['¿Cuándo llega mi pedido?', 'Producto llegó dañado', 'No he recibido mi pedido', 'El producto no funciona', 'Quiero cambiar mi dirección', 'El producto es excelente', 'Demoran mucho en confirmar', 'Quiero devolver el producto']
       const pqrsfRows = Array.from({ length: 15 }, (_, i) => {
-        const tipo = tipos[i % tipos.length]
+        const tipo = tiposPqrsf[i % tiposPqrsf.length]
         const diasAtras = rndInt(1, 45)
         const fechaCreacion = new Date(Date.now() - diasAtras * 86400000)
         return {
           tenant_id: tenantId,
+          numero_radicado: `DZ-${fechaCreacion.getFullYear()}${String(fechaCreacion.getMonth() + 1).padStart(2, '0')}-${String(10000 + i)}`,
           tipo,
           asunto: asuntos[i % asuntos.length],
           descripcion: `Caso de demostración: ${asuntos[i % asuntos.length]}`,
-          cliente_nombre: `${rnd(cfg.nombres)} ${rnd(cfg.apellidos)}`,
-          cliente_email: `cliente${i + 1}@demo.com`,
-          cliente_telefono: `3${rndInt(1, 3)}${String(rndInt(1000000, 9999999))}`,
-          estado: i < 10 ? 'abierto' : 'cerrado',
-          prioridad: i < 3 ? 'alta' : i < 8 ? 'media' : 'baja',
-          fecha_creacion: fechaCreacion.toISOString(),
+          nombre_cliente: `${rnd(cfg.nombres)} ${rnd(cfg.apellidos)}`,
+          email_cliente: `cliente${i + 1}@demo.com`,
+          telefono: `3${rndInt(1, 3)}${String(rndInt(1000000, 9999999))}`,
+          estado: i < 10 ? 'RECIBIDO' : 'CERRADO',
+          created_at: fechaCreacion.toISOString(),
           fecha_limite: new Date(fechaCreacion.getTime() + 5 * 86400000).toISOString(),
         }
       })
-      await supabase.from('pqrsf').insert(pqrsfRows)
-      setProgreso(p => ({ ...p, pqrsf: 'ok' }))
-      addLog(`✅ 15 casos PQRSF generados`)
+      const { error: pqrsfErr } = await supabase.from('pqrsf').insert(pqrsfRows)
+      if (pqrsfErr) { addLog(`❌ PQRSF: ${pqrsfErr.message}`); setProgreso(p => ({ ...p, pqrsf: 'error' })) }
+      else { setProgreso(p => ({ ...p, pqrsf: 'ok' })); addLog(`✅ 15 casos PQRSF generados`) }
 
       // ── ALERTAS ───────────────────────────────────────────────
       setProgreso(p => ({ ...p, alertas: 'cargando' }))
       addLog('🚨 Generando alertas de demostración...')
-      await supabase.from('alertas').insert([
+      await insertarPaso('alertas', [
         { tenant_id: tenantId, tipo: 'critico', categoria: 'operativa', titulo: 'CPA por encima del máximo', mensaje: `CPA real supera el CPA máximo configurado en ${cfg.productos[0].nombre}. Revisa el módulo Precio & Costeo.`, modulo: 'PAUTA', icono: '🔴', accion: 'Revisar campaña y ajustar CPA máximo' },
         { tenant_id: tenantId, tipo: 'atencion', categoria: 'operativa', titulo: 'Tasa de entrega por debajo del 75%', mensaje: 'La tasa de entrega del mes es 70%. El benchmark Colombia es 75%-82%. Revisar confirmaciones y novedades.', modulo: 'PEDIDOS', icono: '🟡', accion: 'Activar confirmación previa al despacho' },
         { tenant_id: tenantId, tipo: 'critico', categoria: 'financiera', titulo: 'Stock crítico detectado', mensaje: `${cfg.productos[0].nombre} tiene menos de 10 unidades disponibles en ${cfg.capital}. Riesgo de quiebre.`, modulo: 'BODEGA', icono: '🚨', accion: 'Ordenar reposición urgente o traslado desde bodega general' },
@@ -710,9 +739,7 @@ export default function AdminPage() {
         { tenant_id: tenantId, tipo: 'atencion', categoria: 'financiera', titulo: 'Margen neto por debajo del 15%', mensaje: 'El margen neto del mes es 12%. El mínimo recomendado para sostenibilidad es 15%. Revisar estructura de costos.', modulo: 'P&G', icono: '📊', accion: 'Revisar costos fijos y renegociar con proveedor' },
         { tenant_id: tenantId, tipo: 'critico', categoria: 'operativa', titulo: 'Transportadora con bajo rendimiento', mensaje: `${cfg.transportadoras[1]} tiene tasa de entrega del 65% en el último mes. Impacto directo en rentabilidad.`, modulo: 'LOGÍSTICA', icono: '🚚', accion: 'Redirigir pedidos a otra transportadora temporalmente' },
         { tenant_id: tenantId, tipo: 'atencion', categoria: 'financiera', titulo: 'Meta del mes en riesgo', mensaje: 'Vas al 68% de la meta de ventas con el 75% del mes transcurrido. Necesitas acelerar para cumplir.', modulo: 'METAS', icono: '🎯', accion: 'Aumentar inversión en pauta los últimos días del mes' },
-      ])
-      setProgreso(p => ({ ...p, alertas: 'ok' }))
-      addLog(`✅ 8 alertas de demostración creadas`)
+      ], 'alertas', `✅ 8 alertas de demostración creadas`)
 
       // ── NÓMINA — colaboradores + tasas por país ───────────────
       setProgreso(p => ({ ...p, nomina: 'cargando' }))
@@ -741,7 +768,7 @@ export default function AdminPage() {
       const hoyStr = new Date().toISOString().slice(0, 10)
       const ingresoDate = new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10)
 
-      await supabase.from('colaboradores').insert([
+      const { error: colabErr } = await supabase.from('colaboradores').insert([
         {
           tenant_id: tenantId,
           nombres: cfg.nombres[0], apellidos: cfg.apellidos[0],
@@ -773,7 +800,7 @@ export default function AdminPage() {
       ])
 
       // Tasas de nómina por país
-      await supabase.from('nomina_tasas_historico').upsert({
+      const { error: tasasErr } = await supabase.from('nomina_tasas_historico').upsert({
         tenant_id: tenantId, pais_code: paisCodigo,
         anio_fiscal: hoy.getFullYear(),
         vigencia_inicio: `${hoy.getFullYear()}-01-01`,
@@ -786,8 +813,13 @@ export default function AdminPage() {
         salud_trab: 4, pension_trab: 4, tope_exoneracion: 10,
       }, { onConflict: 'tenant_id,pais_code,anio_fiscal' })
 
-      setProgreso(p => ({ ...p, nomina: 'ok' }))
-      addLog('✅ 2 colaboradores + tasas de nómina cargadas')
+      if (colabErr || tasasErr) {
+        addLog(`❌ Nómina: ${colabErr?.message || tasasErr?.message}`)
+        setProgreso(p => ({ ...p, nomina: 'error' }))
+      } else {
+        setProgreso(p => ({ ...p, nomina: 'ok' }))
+        addLog('✅ 2 colaboradores + tasas de nómina cargadas')
+      }
 
       // ── INVERSIÓN — activos fijos + crédito ───────────────────
       setProgreso(p => ({ ...p, inversion: 'cargando' }))
@@ -797,14 +829,14 @@ export default function AdminPage() {
       const precioCelQ = cfg.productos[0].pvp * 4
       const precioRouterQ = cfg.productos[0].pvp * 2
 
-      await supabase.from('inversiones_activos').insert([
+      const { error: activosErr } = await supabase.from('inversiones_activos').insert([
         { tenant_id: tenantId, nombre: 'Computador portátil', tipo: 'hardware', valor: Math.round(precioCompuQ), vida_util_meses: 36, fecha_compra: new Date(hoy.getFullYear(), hoy.getMonth() - 5, 15).toISOString().slice(0, 10), activo: true },
         { tenant_id: tenantId, nombre: 'Celular para operaciones', tipo: 'hardware', valor: Math.round(precioCelQ), vida_util_meses: 24, fecha_compra: new Date(hoy.getFullYear(), hoy.getMonth() - 3, 10).toISOString().slice(0, 10), activo: true },
         { tenant_id: tenantId, nombre: 'Router WiFi y equipos de red', tipo: 'hardware', valor: Math.round(precioRouterQ), vida_util_meses: 48, fecha_compra: new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10), activo: true },
       ])
 
       const montoCreditoQ = cfg.productos[0].pvp * 30
-      await supabase.from('inversiones_creditos').insert({
+      const { error: creditoErr } = await supabase.from('inversiones_creditos').insert({
         tenant_id: tenantId,
         nombre: 'Capital de trabajo inicial',
         monto: Math.round(montoCreditoQ),
@@ -816,8 +848,13 @@ export default function AdminPage() {
         estado: 'activo',
       })
 
-      setProgreso(p => ({ ...p, inversion: 'ok' }))
-      addLog('✅ 3 activos fijos + 1 crédito de capital de trabajo')
+      if (activosErr || creditoErr) {
+        addLog(`❌ Inversión: ${activosErr?.message || creditoErr?.message}`)
+        setProgreso(p => ({ ...p, inversion: 'error' }))
+      } else {
+        setProgreso(p => ({ ...p, inversion: 'ok' }))
+        addLog('✅ 3 activos fijos + 1 crédito de capital de trabajo')
+      }
 
       // ── CUENTAS POR PAGAR ────────────────────────────────────
       setProgreso(p => ({ ...p, cxp: 'cargando' }))
@@ -828,16 +865,13 @@ export default function AdminPage() {
       const fechaVenc28 = new Date(hoy.getFullYear(), hoy.getMonth(), 28).toISOString().slice(0, 10)
       const fechaVencPast = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 28).toISOString().slice(0, 10)
 
-      await supabase.from('cuentas_por_pagar').insert([
+      await insertarPaso('cuentas_por_pagar', [
         { tenant_id: tenantId, tercero: cfg.transportadoras[0], tipo_tercero: 'proveedor', concepto: 'Fletes pendientes de pago', valor: Math.round(cfg.productos[0].pvp * 2.5), fecha_emision: hoyStr, fecha_vencimiento: fechaVenc15, estado: 'pendiente', categoria_flujo: 'operativo' },
         { tenant_id: tenantId, tercero: `${cfg.nombres[0]} ${cfg.apellidos[0]}`, tipo_tercero: 'nomina', concepto: 'Salario Confirmador de Pedidos', valor: Math.round(sal.sm), fecha_emision: hoyStr, fecha_vencimiento: fechaVenc5, estado: 'pendiente', categoria_flujo: 'operativo' },
         { tenant_id: tenantId, tercero: 'Meta Ads', tipo_tercero: 'proveedor', concepto: 'Inversión en pauta mes actual', valor: Math.round(cfg.productos[0].pvp * 7), fecha_emision: hoyStr, fecha_vencimiento: fechaVenc28, estado: 'pendiente', categoria_flujo: 'operativo' },
         { tenant_id: tenantId, tercero: 'Shopify / WooCommerce', tipo_tercero: 'prestador_servicios', concepto: 'Membresía plataforma e-commerce', valor: cfg.cf_conceptos[0].valor, fecha_emision: hoyStr, fecha_vencimiento: fechaVenc5, estado: 'pendiente', categoria_flujo: 'operativo' },
         { tenant_id: tenantId, tercero: cfg.transportadoras[1], tipo_tercero: 'proveedor', concepto: 'Fletes mes anterior pendientes', valor: Math.round(cfg.productos[0].pvp * 1.8), fecha_emision: fechaVencPast, fecha_vencimiento: fechaVencPast, estado: 'pendiente', categoria_flujo: 'operativo' },
-      ])
-
-      setProgreso(p => ({ ...p, cxp: 'ok' }))
-      addLog('✅ 5 cuentas por pagar (1 vencida para demo)')
+      ], 'cxp', '✅ 5 cuentas por pagar (1 vencida para demo)')
 
       // ── METAS SEGUIMIENTO DIARIO — 30 días ───────────────────
       setProgreso(p => ({ ...p, metas_diarias: 'cargando' }))
@@ -870,37 +904,38 @@ export default function AdminPage() {
           alerta_nivel: nivelPct >= 100 ? 'verde' : nivelPct >= 70 ? 'amarillo' : 'rojo',
         })
       }
-      await supabase.from('metas_seguimiento_diario').insert(metasDiarias)
-      setProgreso(p => ({ ...p, metas_diarias: 'ok' }))
-      addLog(`✅ 30 días de seguimiento diario cargados`)
+      await insertarPaso('metas_seguimiento_diario', metasDiarias, 'metas_diarias', `✅ 30 días de seguimiento diario cargados`)
 
       // ── NÓMINA — procesos organizacionales ───────────────────
       setProgreso(p => ({ ...p, nomina_procesos: 'cargando' }))
       addLog('🏢 Cargando procesos organizacionales...')
-      await supabase.from('nomina_procesos').insert([
+      await insertarPaso('nomina_procesos', [
         { tenant_id: tenantId, nombre: 'Operaciones', descripcion: 'Confirmación, despacho y seguimiento de pedidos', orden: 1, activo: true },
         { tenant_id: tenantId, nombre: 'Administración', descripcion: 'Gestión financiera, contable y administrativa', orden: 2, activo: true },
         { tenant_id: tenantId, nombre: 'Marketing', descripcion: 'Pauta, creativos y estrategia digital', orden: 3, activo: true },
-      ])
-      setProgreso(p => ({ ...p, nomina_procesos: 'ok' }))
-      addLog('✅ 3 procesos organizacionales creados')
+      ], 'nomina_procesos', '✅ 3 procesos organizacionales creados')
 
       // ── INVERSIÓN — capital propio + socios ──────────────────
       setProgreso(p => ({ ...p, inversion_capital: 'cargando' }))
       addLog('💼 Cargando capital propio e inversión de socios...')
       const capitalInicial = Math.round(cfg.productos[0].pvp * 20)
-      await supabase.from('inversiones_capital').insert([
+      const { error: capitalErr } = await supabase.from('inversiones_capital').insert([
         { tenant_id: tenantId, concepto: 'Capital inicial de trabajo', categoria: 'capital_trabajo', valor: capitalInicial, tipo: 'propio', activo: true, notas: 'Aporte inicial para arranque de operaciones' },
         { tenant_id: tenantId, concepto: 'Inversión en infraestructura tecnológica', categoria: 'activo_fijo', valor: Math.round(capitalInicial * 0.3), tipo: 'propio', activo: true, notas: 'Computador, celular, router y software' },
       ])
-      await supabase.from('inversiones_socios').insert({
+      const { error: sociosErr } = await supabase.from('inversiones_socios').insert({
         tenant_id: tenantId, nombre: 'Socio Fundador', tipo_aporte: 'dinero',
         valor_aporte: capitalInicial, pct_participacion: 100,
         fecha_aporte: new Date(hoy.getFullYear(), hoy.getMonth() - 5, 1).toISOString().slice(0, 10),
         activo: true,
       })
-      setProgreso(p => ({ ...p, inversion_capital: 'ok' }))
-      addLog('✅ Capital propio + socio fundador registrados')
+      if (capitalErr || sociosErr) {
+        addLog(`❌ Capital/socios: ${capitalErr?.message || sociosErr?.message}`)
+        setProgreso(p => ({ ...p, inversion_capital: 'error' }))
+      } else {
+        setProgreso(p => ({ ...p, inversion_capital: 'ok' }))
+        addLog('✅ Capital propio + socio fundador registrados')
+      }
 
       // ── PUNTO DE EQUILIBRIO — configuración ──────────────────
       setProgreso(p => ({ ...p, equilibrio: 'cargando' }))
@@ -938,7 +973,7 @@ export default function AdminPage() {
         numero_contacto: `+${rndInt(10, 99)}${rndInt(1000000000, 9999999999)}`,
       }, { onConflict: 'tenant_id' })
 
-      await supabase.from('whatsapp_templates_config').insert([
+      await insertarPaso('whatsapp_templates_config', [
         {
           tenant_id: tenantId, tipo: 'confirmacion', nombre: 'Confirmar pedido',
           contenido: `Hola {{nombre}}, somos {{tienda}} 👋 Te confirmamos que recibimos tu pedido de {{producto}} por {{valor}}. ¿Confirmamos la dirección de entrega: {{direccion}}? Responde SÍ para procesar tu pedido 🚀`,
@@ -964,9 +999,7 @@ export default function AdminPage() {
           contenido: `¡Hola {{nombre}}! 🌟 Vimos que te encantó {{producto}}. Tenemos una oferta especial para ti: 15% de descuento en tu próxima compra. ¿Te interesa? Responde SÍ y te enviamos los detalles 🎁`,
           variables: ['nombre', 'producto'], activa: true,
         },
-      ])
-      setProgreso(p => ({ ...p, whatsapp: 'ok' }))
-      addLog('✅ 5 templates WhatsApp + contexto de tienda configurados')
+      ], 'whatsapp', '✅ 5 templates WhatsApp + contexto de tienda configurados')
 
       // ── LOGÍSTICA — transportadoras + novedades IA ────────────
       setProgreso(p => ({ ...p, logistica: 'cargando' }))
@@ -1008,8 +1041,9 @@ export default function AdminPage() {
       const { count: transExist } = await supabase.from('transportadoras_pais')
         .select('id', { count: 'exact', head: true }).eq('pais_codigo', paisCodigo)
       if (!transExist || transExist === 0) {
-        await supabase.from('transportadoras_pais').insert(transportadorasRows)
-        addLog(`✅ ${transportadorasRows.length} transportadoras de ${cfg.nombre}`)
+        const { error: transErr } = await supabase.from('transportadoras_pais').insert(transportadorasRows)
+        if (transErr) addLog(`❌ Transportadoras: ${transErr.message}`)
+        else addLog(`✅ ${transportadorasRows.length} transportadoras de ${cfg.nombre}`)
       } else {
         addLog(`ℹ️ Transportadoras de ${cfg.nombre} ya existían — omitidas`)
       }
@@ -1018,7 +1052,7 @@ export default function AdminPage() {
       const { count: novExist } = await supabase.from('novedades_categorias_ia')
         .select('id', { count: 'exact', head: true })
       if (!novExist || novExist === 0) {
-        await supabase.from('novedades_categorias_ia').insert([
+        const { error: novErr } = await supabase.from('novedades_categorias_ia').insert([
           { categoria: 'direccion_incorrecta', nombre_visible: 'Dirección incorrecta', script_sugerido: 'Hola {{nombre}}, la transportadora reporta una novedad con tu dirección. ¿Puedes confirmarnos la dirección exacta de entrega? Necesitamos: calle, número, barrio y ciudad 📍', tono: 'empatico', tasa_exito_historica: 78, activo: true },
           { categoria: 'cliente_no_contesta', nombre_visible: 'Cliente no contesta', script_sugerido: 'Hola {{nombre}}, intentamos contactarte para tu pedido de {{producto}} pero no hemos podido comunicarnos. ¿Cuál es el mejor horario para llamarte? ⏰', tono: 'empatico', tasa_exito_historica: 65, activo: true },
           { categoria: 'coordinar_entrega', nombre_visible: 'Coordinar entrega', script_sugerido: 'Hola {{nombre}}, tu pedido de {{producto}} está listo para entrega. ¿En qué horario te encontramos en {{direccion}}? La transportadora puede ir en la mañana (8-12) o tarde (2-6) 📦', tono: 'profesional', tasa_exito_historica: 85, activo: true },
@@ -1027,7 +1061,8 @@ export default function AdminPage() {
           { categoria: 'devolucion_cliente', nombre_visible: 'Devolución por cliente', script_sugerido: 'Hola {{nombre}}, recibimos tu solicitud de devolución. ¿Puedes contarnos el motivo? Queremos mejorar y encontrar la mejor solución para ti 🤝', tono: 'empatico', tasa_exito_historica: 90, activo: true },
           { categoria: 'producto_dañado', nombre_visible: 'Producto dañado en tránsito', script_sugerido: 'Hola {{nombre}}, lamentamos que tu pedido llegó en mal estado. Vamos a gestionar el reenvío inmediatamente. ¿Puedes enviarnos una foto del producto recibido? 📸', tono: 'urgente', tasa_exito_historica: 95, activo: true },
         ])
-        addLog('✅ 7 scripts de novedades IA configurados')
+        if (novErr) addLog(`❌ Novedades IA: ${novErr.message}`)
+        else addLog('✅ 7 scripts de novedades IA configurados')
       } else {
         addLog('ℹ️ Scripts de novedades IA ya existían — omitidos')
       }
