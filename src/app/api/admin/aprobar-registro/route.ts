@@ -86,6 +86,7 @@ export async function POST(req: Request) {
 
   const { error: profileErr } = await supabase.from('profiles').upsert({
     id: authUser.id,
+    email: authUser.email,
     tenant_id: tenant.id,
     rol: 'owner',
     nombre: `${solicitud.nombres} ${solicitud.apellidos}`.trim(),
