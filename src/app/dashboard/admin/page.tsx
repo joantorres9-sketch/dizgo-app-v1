@@ -441,6 +441,38 @@ export default function AdminPage() {
 
   useEffect(() => { loadSolicitudes() }, [loadSolicitudes])
 
+  async function verDocRegistro(urlGuardada: string) {
+    if (!urlGuardada) return
+    // docs_urls guarda la URL pública completa, pero el bucket es privado — hay que extraer la
+    // ruta relativa y pedir un link firmado, igual que verDoc() en nomina/page.tsx.
+    const marcador = '/documentos-registro/'
+    const idx = urlGuardada.indexOf(marcador)
+    const path = idx >= 0 ? decodeURIComponent(urlGuardada.slice(idx + marcador.length)) : urlGuardada
+    const { data, error: err } = await supabase.storage.from('documentos-registro').createSignedUrl(path, 300)
+    if (err || !data?.signedUrl) { alert('No se pudo generar el link del documento'); return }
+    window.open(data.signedUrl, '_blank')
+  }
+
+  async function solicitarAjustes(solicitudId: string) {
+    const nota = prompt('¿Qué necesitas que ajuste el solicitante? (se le enviará por correo)')
+    if (!nota?.trim()) return
+    setProcesando(solicitudId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/solicitar-ajustes-registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ solicitudId, nota }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error solicitando ajustes')
+      addLog(`✏️ Ajustes solicitados y correo enviado`)
+      loadSolicitudes()
+    } catch (err: any) {
+      alert(err.message || 'Error solicitando ajustes')
+    } finally { setProcesando(null) }
+  }
+
   async function accionSolicitud(solicitudId: string, accion: 'aprobar' | 'rechazar') {
     if (accion === 'rechazar' && !confirm('¿Rechazar esta solicitud de registro?')) return
     setProcesando(solicitudId)
@@ -1141,29 +1173,54 @@ export default function AdminPage() {
               const esPago = s.plan_elegido && s.plan_elegido !== 'explorador'
               const pagado = s.pago_estado === 'pagado'
               const bloqueado = esPago && !pagado
+              const docs: Record<string, string> = s.docs_urls || {}
+              const DOC_LABELS: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: `📄 Doc. legal (${s.pais_matriz})` }
               return (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px', flexWrap: 'wrap' }}>
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#E8EDF5' }}>{s.nombre_tienda} <span style={{ color: '#5A6478', fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
-                    <div style={{ fontSize: '11px', color: '#8B96A8' }}>{s.email_personal} · {s.pais_matriz}</div>
-                  </div>
-                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: esPago ? 'rgba(232,160,32,0.15)' : 'rgba(74,158,245,0.15)', color: esPago ? '#E8A020' : '#4A9EF5', textTransform: 'uppercase' }}>
-                    {s.plan_elegido || 'explorador'}
-                  </span>
-                  {esPago && (
-                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: pagado ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: pagado ? '#2DD4A0' : '#F05C5C' }}>
-                      {pagado ? `✓ Pagado (${s.proveedor_pago})` : '✕ Sin pago'}
+                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#E8EDF5' }}>{s.nombre_tienda} <span style={{ color: '#5A6478', fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
+                      <div style={{ fontSize: '11px', color: '#8B96A8' }}>{s.email_personal} · {s.pais_matriz}</div>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: esPago ? 'rgba(232,160,32,0.15)' : 'rgba(74,158,245,0.15)', color: esPago ? '#E8A020' : '#4A9EF5', textTransform: 'uppercase' }}>
+                      {s.plan_elegido || 'explorador'}
                     </span>
+                    {esPago && (
+                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: pagado ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: pagado ? '#2DD4A0' : '#F05C5C' }}>
+                        {pagado ? `✓ Pagado (${s.proveedor_pago})` : '✕ Sin pago'}
+                      </span>
+                    )}
+                    <button onClick={() => solicitarAjustes(s.id)} disabled={procesando === s.id}
+                      style={{ padding: '7px 12px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: '7px', color: '#F5A623', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+                      ✏️ Solicitar ajustes
+                    </button>
+                    <button onClick={() => accionSolicitud(s.id, 'aprobar')} disabled={bloqueado || procesando === s.id}
+                      title={bloqueado ? 'No se puede aprobar hasta confirmar el pago' : ''}
+                      style={{ padding: '7px 14px', background: bloqueado ? 'rgba(45,212,160,0.08)' : '#2DD4A0', border: 'none', borderRadius: '7px', color: bloqueado ? '#2DD4A0' : '#0A0D14', fontWeight: '700', fontSize: '11px', cursor: bloqueado ? 'not-allowed' : 'pointer', opacity: bloqueado ? 0.5 : 1 }}>
+                      {procesando === s.id ? '...' : '✓ Aprobar'}
+                    </button>
+                    <button onClick={() => accionSolicitud(s.id, 'rechazar')} disabled={procesando === s.id}
+                      style={{ padding: '7px 14px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '7px', color: '#F05C5C', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+                      ✕ Rechazar
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '2px', borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: '2px' }}>
+                    {Object.keys(docs).length === 0 ? (
+                      <span style={{ fontSize: '10.5px', color: '#5A6478', paddingTop: '6px' }}>Sin documentos adjuntos</span>
+                    ) : Object.entries(docs).map(([key, url]) => (
+                      <button key={key} onClick={() => verDocRegistro(url)}
+                        style={{ marginTop: '6px', padding: '5px 10px', background: 'rgba(74,158,245,0.08)', border: '1px solid rgba(74,158,245,0.25)', borderRadius: '6px', color: '#4A9EF5', fontSize: '10.5px', fontWeight: '600', cursor: 'pointer' }}>
+                        {DOC_LABELS[key] || `📄 ${key.replace('doc_', '')}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {s.notas_admin && (
+                    <div style={{ fontSize: '10.5px', color: '#F5A623', background: 'rgba(245,166,35,0.06)', borderRadius: '6px', padding: '6px 10px' }}>
+                      ✏️ Última nota enviada: {s.notas_admin}
+                    </div>
                   )}
-                  <button onClick={() => accionSolicitud(s.id, 'aprobar')} disabled={bloqueado || procesando === s.id}
-                    title={bloqueado ? 'No se puede aprobar hasta confirmar el pago' : ''}
-                    style={{ padding: '7px 14px', background: bloqueado ? 'rgba(45,212,160,0.08)' : '#2DD4A0', border: 'none', borderRadius: '7px', color: bloqueado ? '#2DD4A0' : '#0A0D14', fontWeight: '700', fontSize: '11px', cursor: bloqueado ? 'not-allowed' : 'pointer', opacity: bloqueado ? 0.5 : 1 }}>
-                    {procesando === s.id ? '...' : '✓ Aprobar'}
-                  </button>
-                  <button onClick={() => accionSolicitud(s.id, 'rechazar')} disabled={procesando === s.id}
-                    style={{ padding: '7px 14px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '7px', color: '#F05C5C', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
-                    ✕ Rechazar
-                  </button>
                 </div>
               )
             })}
