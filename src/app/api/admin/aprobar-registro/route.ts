@@ -1,5 +1,28 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/apiAuth'
+import { paisPorCodigo } from '@/lib/paises'
+
+const DIACRITICOS = new RegExp('[̀-ͯ]', 'g')
+
+function slugBase(nombre: string): string {
+  return nombre
+    .normalize('NFD').replace(DIACRITICOS, '') // quita tildes
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'tienda'
+}
+
+async function slugUnico(supabase: ReturnType<typeof getSupabaseAdmin>, nombre: string): Promise<string> {
+  const base = slugBase(nombre)
+  let candidato = base
+  let intento = 1
+  while (true) {
+    const { data } = await supabase.from('tenants').select('id').eq('slug', candidato).maybeSingle()
+    if (!data) return candidato
+    intento += 1
+    candidato = `${base}-${intento}`
+  }
+}
 
 async function requiereSuperadmin(req: Request) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')
@@ -47,10 +70,14 @@ export async function POST(req: Request) {
   const licenciaVence = esPago
     ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
     : null
+  const slug = await slugUnico(supabase, solicitud.nombre_tienda)
+  const moneda = paisPorCodigo(solicitud.pais_matriz)?.moneda || 'COP'
 
   const { data: tenant, error: tenantErr } = await supabase.from('tenants').insert({
     nombre: solicitud.nombre_tienda,
+    slug,
     pais: solicitud.pais_matriz,
+    moneda,
     plan: solicitud.plan_elegido,
     licencia: 'activa',
     licencia_vence: licenciaVence,
@@ -60,7 +87,7 @@ export async function POST(req: Request) {
   const { error: profileErr } = await supabase.from('profiles').upsert({
     id: authUser.id,
     tenant_id: tenant.id,
-    rol: 'dueño',
+    rol: 'owner',
     nombre: `${solicitud.nombres} ${solicitud.apellidos}`.trim(),
   }, { onConflict: 'id' })
   if (profileErr) return NextResponse.json({ error: `Tenant creado pero falló el perfil: ${profileErr.message}` }, { status: 500 })
