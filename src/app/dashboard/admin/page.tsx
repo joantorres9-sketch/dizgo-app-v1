@@ -434,7 +434,7 @@ export default function AdminPage() {
 
   const loadSolicitudes = useCallback(async () => {
     setCargandoSolicitudes(true)
-    const { data } = await supabase.from('solicitudes_registro').select('*').eq('estado', 'pendiente').order('created_at', { ascending: false })
+    const { data } = await supabase.from('solicitudes_registro').select('*').order('created_at', { ascending: false }).limit(200)
     setSolicitudes(data || [])
     setCargandoSolicitudes(false)
   }, [supabase])
@@ -1141,6 +1141,9 @@ export default function AdminPage() {
     loadEstado()
   }
 
+  const solicitudesPendientes = solicitudes.filter(s => s.estado === 'pendiente')
+  const solicitudesResueltas = solicitudes.filter(s => s.estado !== 'pendiente')
+
   const cfg = CONFIG_PAIS[paisCodigo] || CONFIG_PAIS.COL
   const estadoColor = (e: string) => e === 'ok' ? '#2DD4A0' : e === 'error' ? '#F05C5C' : e === 'cargando' ? '#F5A623' : '#5A6478'
   const estadoIcon = (e: string) => e === 'ok' ? '✅' : e === 'error' ? '❌' : e === 'cargando' ? '⏳' : '⬜'
@@ -1161,15 +1164,15 @@ export default function AdminPage() {
       <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div style={{ fontSize: '12px', fontWeight: '700', color: '#F5A623' }}>📋 SOLICITUDES DE REGISTRO PENDIENTES</div>
-          {solicitudes.length > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: '#0A0D14', background: '#F5A623', borderRadius: '10px', padding: '2px 10px' }}>{solicitudes.length}</span>}
+          {solicitudesPendientes.length > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: '#0A0D14', background: '#F5A623', borderRadius: '10px', padding: '2px 10px' }}>{solicitudesPendientes.length}</span>}
         </div>
         {cargandoSolicitudes ? (
           <div style={{ fontSize: '12px', color: '#5A6478', padding: '12px 0' }}>Cargando solicitudes...</div>
-        ) : solicitudes.length === 0 ? (
+        ) : solicitudesPendientes.length === 0 ? (
           <div style={{ fontSize: '12px', color: '#5A6478', padding: '12px 0' }}>No hay solicitudes pendientes.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {solicitudes.map(s => {
+            {solicitudesPendientes.map(s => {
               const esPago = s.plan_elegido && s.plan_elegido !== 'explorador'
               const pagado = s.pago_estado === 'pagado'
               const bloqueado = esPago && !pagado
@@ -1227,6 +1230,53 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {solicitudesResueltas.length > 0 && (
+        <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: '#8B96A8', marginBottom: '12px' }}>🗂️ HISTORIAL DE SOLICITUDES ({solicitudesResueltas.length})</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {solicitudesResueltas.map(s => {
+              const aprobada = s.estado === 'aprobado'
+              const docs: Record<string, string> = s.docs_urls || {}
+              const DOC_LABELS: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: `📄 Doc. legal (${s.pais_matriz})` }
+              return (
+                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px', opacity: 0.9 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#E8EDF5' }}>{s.nombre_tienda} <span style={{ color: '#5A6478', fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
+                      <div style={{ fontSize: '11px', color: '#8B96A8' }}>
+                        {s.email_personal} · {s.celular ? `${s.codigo_pais_tel || ''} ${s.celular}` : ''} · {s.pais_matriz}
+                        {s.sitio_web ? ` · ${s.sitio_web}` : ''}
+                      </div>
+                    </div>
+                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: 'rgba(74,158,245,0.15)', color: '#4A9EF5', textTransform: 'uppercase' }}>
+                      {s.plan_elegido || 'explorador'}
+                    </span>
+                    {s.proveedor_pago && (
+                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: 'rgba(45,212,160,0.15)', color: '#2DD4A0' }}>
+                        ✓ Pagado ({s.proveedor_pago})
+                      </span>
+                    )}
+                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: aprobada ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: aprobada ? '#2DD4A0' : '#F05C5C' }}>
+                      {aprobada ? '✓ Aprobado' : '✕ Rechazado'} · {s.fecha_aprobacion ? new Date(s.fecha_aprobacion).toLocaleDateString('es-CO') : ''}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                    {Object.keys(docs).length === 0 ? (
+                      <span style={{ fontSize: '10.5px', color: '#5A6478' }}>Sin documentos adjuntos</span>
+                    ) : Object.entries(docs).map(([key, url]) => (
+                      <button key={key} onClick={() => verDocRegistro(url)}
+                        style={{ padding: '5px 10px', background: 'rgba(74,158,245,0.08)', border: '1px solid rgba(74,158,245,0.25)', borderRadius: '6px', color: '#4A9EF5', fontSize: '10.5px', fontWeight: '600', cursor: 'pointer' }}>
+                        {DOC_LABELS[key] || `📄 ${key.replace('doc_', '')}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '8px', marginBottom: '16px' }}>
         {[
