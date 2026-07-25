@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, use } from 'react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
 import Link from 'next/link'
 
 const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',blue:'#3D8EF0',green:'#2DD4A0',red:'#F05C5C',yellow:'#F5A623',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
@@ -7,8 +8,9 @@ const upfile: React.CSSProperties = { width:'100%', background:'#0A1628', border
 
 const DOC_LABELS: Record<string, string> = { id_a: 'Identidad — Lado A', id_b: 'Identidad — Lado B', doc_legal: 'Documento legal de la tienda' }
 
-export default function AjustarSolicitudPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+export default function AjustarSolicitudPage() {
+  const params = useParams()
+  const id = String(params.id || '')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [datos, setDatos] = useState<{ nombres: string; nombre_tienda: string; notas_admin: string | null } | null>(null)
