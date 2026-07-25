@@ -375,6 +375,43 @@ const PASOS_SEED = [
   { key: 'logistica',         label: '🚚 Logística',         desc: 'Transportadoras + 7 scripts novedades IA' },
 ]
 
+const DOC_LABELS_REGISTRO: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: '📄 Doc. legal' }
+
+function CamposFormulario({ s, onVerDoc }: { s: any; onVerDoc: (url: string) => void }) {
+  const docs: Record<string, string> = s.docs_urls || {}
+  const campos = [
+    { l: 'Documento', v: s.tipo_doc && s.numero_doc ? `${s.tipo_doc} ${s.numero_doc}` : '—' },
+    { l: 'Teléfono', v: s.celular ? `${s.codigo_pais_tel || ''} ${s.celular}`.trim() : '—' },
+    { l: 'Email personal', v: s.email_personal || '—' },
+    { l: 'Email tienda', v: s.email_tienda || '—' },
+    { l: 'Sitio web', v: s.sitio_web || '—' },
+    { l: 'País matriz', v: s.pais_matriz || '—' },
+    { l: 'Países operación', v: (s.paises_operacion && s.paises_operacion.length > 0) ? s.paises_operacion.join(', ') : '—' },
+  ]
+  return (
+    <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '6px 12px', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '7px' }}>
+        {campos.map(c => (
+          <div key={c.l}>
+            <div style={{ fontSize: '9.5px', color: '#5A6478', textTransform: 'uppercase', letterSpacing: '.3px' }}>{c.l}</div>
+            <div style={{ fontSize: '11.5px', color: '#E8EDF5' }}>{c.v}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {Object.keys(docs).length === 0 ? (
+          <span style={{ fontSize: '10.5px', color: '#5A6478' }}>Sin documentos adjuntos</span>
+        ) : Object.entries(docs).map(([key, url]) => (
+          <button key={key} onClick={() => onVerDoc(url)}
+            style={{ padding: '5px 10px', background: 'rgba(74,158,245,0.08)', border: '1px solid rgba(74,158,245,0.25)', borderRadius: '6px', color: '#4A9EF5', fontSize: '10.5px', fontWeight: '600', cursor: 'pointer' }}>
+            {DOC_LABELS_REGISTRO[key] || `📄 ${key.replace('doc_', '')}`}
+          </button>
+        ))}
+      </div>
+    </>
+  )
+}
+
 function rnd(arr: unknown[]) { return arr[Math.floor(Math.random() * arr.length)] }
 function rndInt(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min }
 
@@ -1176,8 +1213,6 @@ export default function AdminPage() {
               const esPago = s.plan_elegido && s.plan_elegido !== 'explorador'
               const pagado = s.pago_estado === 'pagado'
               const bloqueado = esPago && !pagado
-              const docs: Record<string, string> = s.docs_urls || {}
-              const DOC_LABELS: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: `📄 Doc. legal (${s.pais_matriz})` }
               return (
                 <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -1208,15 +1243,8 @@ export default function AdminPage() {
                     </button>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', paddingTop: '2px', borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: '2px' }}>
-                    {Object.keys(docs).length === 0 ? (
-                      <span style={{ fontSize: '10.5px', color: '#5A6478', paddingTop: '6px' }}>Sin documentos adjuntos</span>
-                    ) : Object.entries(docs).map(([key, url]) => (
-                      <button key={key} onClick={() => verDocRegistro(url)}
-                        style={{ marginTop: '6px', padding: '5px 10px', background: 'rgba(74,158,245,0.08)', border: '1px solid rgba(74,158,245,0.25)', borderRadius: '6px', color: '#4A9EF5', fontSize: '10.5px', fontWeight: '600', cursor: 'pointer' }}>
-                        {DOC_LABELS[key] || `📄 ${key.replace('doc_', '')}`}
-                      </button>
-                    ))}
+                  <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)', marginTop: '2px', paddingTop: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <CamposFormulario s={s} onVerDoc={verDocRegistro} />
                   </div>
 
                   {s.notas_admin && (
@@ -1237,8 +1265,6 @@ export default function AdminPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {solicitudesResueltas.map(s => {
               const aprobada = s.estado === 'aprobado'
-              const docs: Record<string, string> = s.docs_urls || {}
-              const DOC_LABELS: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: `📄 Doc. legal (${s.pais_matriz})` }
               return (
                 <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px', opacity: 0.9 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
@@ -1261,16 +1287,7 @@ export default function AdminPage() {
                       {aprobada ? '✓ Aprobado' : '✕ Rechazado'} · {s.fecha_aprobacion ? new Date(s.fecha_aprobacion).toLocaleDateString('es-CO') : ''}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {Object.keys(docs).length === 0 ? (
-                      <span style={{ fontSize: '10.5px', color: '#5A6478' }}>Sin documentos adjuntos</span>
-                    ) : Object.entries(docs).map(([key, url]) => (
-                      <button key={key} onClick={() => verDocRegistro(url)}
-                        style={{ padding: '5px 10px', background: 'rgba(74,158,245,0.08)', border: '1px solid rgba(74,158,245,0.25)', borderRadius: '6px', color: '#4A9EF5', fontSize: '10.5px', fontWeight: '600', cursor: 'pointer' }}>
-                        {DOC_LABELS[key] || `📄 ${key.replace('doc_', '')}`}
-                      </button>
-                    ))}
-                  </div>
+                  <CamposFormulario s={s} onVerDoc={verDocRegistro} />
                 </div>
               )
             })}
