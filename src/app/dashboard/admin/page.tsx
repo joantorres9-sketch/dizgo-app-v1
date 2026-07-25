@@ -388,6 +388,9 @@ export default function AdminPage() {
   const [log, setLog] = useState<string[]>([])
   const [yaHayDatos, setYaHayDatos] = useState(false)
   const [conteos, setConteos] = useState<Record<string, number>>({})
+  const [solicitudes, setSolicitudes] = useState<any[]>([])
+  const [cargandoSolicitudes, setCargandoSolicitudes] = useState(true)
+  const [procesando, setProcesando] = useState<string | null>(null)
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString('es-CO')} — ${msg}`, ...prev.slice(0, 49)])
 
@@ -428,6 +431,34 @@ export default function AdminPage() {
   }, [supabase])
 
   useEffect(() => { loadEstado() }, [loadEstado])
+
+  const loadSolicitudes = useCallback(async () => {
+    setCargandoSolicitudes(true)
+    const { data } = await supabase.from('solicitudes_registro').select('*').eq('estado', 'pendiente').order('created_at', { ascending: false })
+    setSolicitudes(data || [])
+    setCargandoSolicitudes(false)
+  }, [supabase])
+
+  useEffect(() => { loadSolicitudes() }, [loadSolicitudes])
+
+  async function accionSolicitud(solicitudId: string, accion: 'aprobar' | 'rechazar') {
+    if (accion === 'rechazar' && !confirm('¿Rechazar esta solicitud de registro?')) return
+    setProcesando(solicitudId)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/aprobar-registro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ solicitudId, accion }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error procesando la solicitud')
+      addLog(accion === 'aprobar' ? `✅ Solicitud aprobada — tenant creado` : `🚫 Solicitud rechazada`)
+      loadSolicitudes()
+    } catch (err: any) {
+      alert(err.message || 'Error procesando la solicitud')
+    } finally { setProcesando(null) }
+  }
 
   async function limpiarDatos() {
     if (!tenantId) return
@@ -1093,6 +1124,51 @@ export default function AdminPage() {
       <div style={{ marginBottom: '20px' }}>
         <h1 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '4px' }}>⚙️ Superadmin — Centro de Control</h1>
         <p style={{ fontSize: '13px', color: '#8B96A8' }}>Seed de datos por país · Simulación · Mantenimiento · Solo para administradores</p>
+      </div>
+
+      <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: '#F5A623' }}>📋 SOLICITUDES DE REGISTRO PENDIENTES</div>
+          {solicitudes.length > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: '#0A0D14', background: '#F5A623', borderRadius: '10px', padding: '2px 10px' }}>{solicitudes.length}</span>}
+        </div>
+        {cargandoSolicitudes ? (
+          <div style={{ fontSize: '12px', color: '#5A6478', padding: '12px 0' }}>Cargando solicitudes...</div>
+        ) : solicitudes.length === 0 ? (
+          <div style={{ fontSize: '12px', color: '#5A6478', padding: '12px 0' }}>No hay solicitudes pendientes.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {solicitudes.map(s => {
+              const esPago = s.plan_elegido && s.plan_elegido !== 'explorador'
+              const pagado = s.pago_estado === 'pagado'
+              const bloqueado = esPago && !pagado
+              return (
+                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '200px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: '#E8EDF5' }}>{s.nombre_tienda} <span style={{ color: '#5A6478', fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
+                    <div style={{ fontSize: '11px', color: '#8B96A8' }}>{s.email_personal} · {s.pais_matriz}</div>
+                  </div>
+                  <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: esPago ? 'rgba(232,160,32,0.15)' : 'rgba(74,158,245,0.15)', color: esPago ? '#E8A020' : '#4A9EF5', textTransform: 'uppercase' }}>
+                    {s.plan_elegido || 'explorador'}
+                  </span>
+                  {esPago && (
+                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: pagado ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: pagado ? '#2DD4A0' : '#F05C5C' }}>
+                      {pagado ? `✓ Pagado (${s.proveedor_pago})` : '✕ Sin pago'}
+                    </span>
+                  )}
+                  <button onClick={() => accionSolicitud(s.id, 'aprobar')} disabled={bloqueado || procesando === s.id}
+                    title={bloqueado ? 'No se puede aprobar hasta confirmar el pago' : ''}
+                    style={{ padding: '7px 14px', background: bloqueado ? 'rgba(45,212,160,0.08)' : '#2DD4A0', border: 'none', borderRadius: '7px', color: bloqueado ? '#2DD4A0' : '#0A0D14', fontWeight: '700', fontSize: '11px', cursor: bloqueado ? 'not-allowed' : 'pointer', opacity: bloqueado ? 0.5 : 1 }}>
+                    {procesando === s.id ? '...' : '✓ Aprobar'}
+                  </button>
+                  <button onClick={() => accionSolicitud(s.id, 'rechazar')} disabled={procesando === s.id}
+                    style={{ padding: '7px 14px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '7px', color: '#F05C5C', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+                    ✕ Rechazar
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '8px', marginBottom: '16px' }}>

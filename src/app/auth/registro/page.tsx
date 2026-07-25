@@ -1,10 +1,16 @@
 'use client'
-import { useState } from 'react'
+import { useState, Suspense } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',blue:'#3D8EF0',green:'#2DD4A0',red:'#F05C5C',yellow:'#F5A623',purple:'#9B6BFF',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
+
+const PLANES: Record<string, { nombre: string; precio: string; detalle: string }> = {
+  explorador:   { nombre: 'Explorador',   precio: 'Gratis',        detalle: 'Dashboard básico, 1 tienda' },
+  emprendedor:  { nombre: 'Emprendedor',  precio: '$89.000 COP/mes',  detalle: '1 tienda completa, Academia, Dropi, alertas' },
+  empresarial:  { nombre: 'Empresarial',  precio: '$249.000 COP/mes', detalle: 'Hasta 5 tiendas, usuarios ilimitados' },
+}
 
 const PAISES = [
   { code:'COL', nombre:'Colombia',  moneda:'COP', doc:'RUT',        flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/co.svg', tel:'+57' },
@@ -31,9 +37,14 @@ const stepH: React.CSSProperties = { display:'flex', alignItems:'center', gap:'1
 const stepN = (color: string): React.CSSProperties => ({ width:'26px', height:'26px', borderRadius:'50%', background: color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', color: T.card, flexShrink:0 })
 const upfile: React.CSSProperties = { width:'100%', background:'#0A1628', border:`1.5px dashed #1E3050`, borderRadius:'8px', padding:'12px 10px', fontSize:'11px', color:'#5A7A9A', textAlign:'center', cursor:'pointer', boxSizing:'border-box' }
 
-export default function RegistroPage() {
+function RegistroForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createClient()
+
+  const planParam = searchParams.get('plan')
+  const plan = (planParam && PLANES[planParam]) ? planParam : 'explorador'
+  const esPago = plan !== 'explorador'
 
   const [form, setForm] = useState({
     nombres:'', apellidos:'', tipo_doc:'CC', numero_doc:'',
@@ -45,6 +56,7 @@ export default function RegistroPage() {
   const [paisesOper, setPaisesOper] = useState<Set<string>>(new Set())
   const [uploading, setUploading] = useState<Record<string,boolean>>({})
   const [docUrls, setDocUrls] = useState<Record<string,string>>({})
+  const [metodoPago, setMetodoPago] = useState<'stripe'|'wompi'>('wompi')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -91,7 +103,7 @@ export default function RegistroPage() {
       if (authErr) throw authErr
 
       // 2. Guardar solicitud de registro
-      const { error: regErr } = await supabase.from('solicitudes_registro').insert({
+      const { data: solicitud, error: regErr } = await supabase.from('solicitudes_registro').insert({
         nombres:         form.nombres,
         apellidos:       form.apellidos,
         tipo_doc:        form.tipo_doc,
@@ -106,8 +118,24 @@ export default function RegistroPage() {
         paises_operacion: Array.from(paisesOper),
         estado:          'pendiente',
         docs_urls:       docUrls,
-      })
+        plan_elegido:    plan,
+        proveedor_pago:  esPago ? metodoPago : null,
+      }).select('id').single()
       if (regErr) throw regErr
+
+      // 3. Planes pagos: ir al checkout del proveedor elegido antes de "pendiente"
+      if (esPago && solicitud) {
+        const endpoint = metodoPago === 'stripe' ? '/api/billing/stripe/checkout' : '/api/billing/wompi/checkout'
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ solicitudId: solicitud.id, plan, email: form.email_personal }),
+        })
+        const data = await res.json()
+        if (!res.ok || !data.url) throw new Error(data.error || 'No se pudo iniciar el pago')
+        window.location.href = data.url
+        return
+      }
 
       router.push('/auth/pendiente')
     } catch (err: any) {
@@ -151,6 +179,13 @@ export default function RegistroPage() {
           <div style={{ padding:'18px 22px 14px', borderBottom:`1px solid ${T.border}` }}>
             <div style={{ fontSize:'14px', fontWeight:'700', color: T.text }}>Formulario de registro completo</div>
             <div style={{ fontSize:'11px', color: T.muted, marginTop:'2px' }}>Completa los 3 pasos — todo en una sola pantalla, sin sorpresas</div>
+            <div style={{ marginTop:'12px', display:'flex', alignItems:'center', justifyContent:'space-between', background: esPago ? `${T.accent}12` : `${T.blue}12`, border:`1px solid ${esPago ? T.accent : T.blue}30`, borderRadius:'9px', padding:'10px 14px' }}>
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color: esPago ? T.accent : T.blue }}>Plan {PLANES[plan].nombre}</div>
+                <div style={{ fontSize:'11px', color: T.muted }}>{PLANES[plan].detalle}</div>
+              </div>
+              <div style={{ fontSize:'13px', fontWeight:'700', color: T.text }}>{PLANES[plan].precio}</div>
+            </div>
           </div>
 
           <form onSubmit={handleSubmit} style={{ padding:'18px 22px' }}>
@@ -329,6 +364,30 @@ export default function RegistroPage() {
               )
             })}
 
+            {esPago && (
+              <>
+                <div style={{ height:'1px', background: T.border, margin:'14px 0 10px' }} />
+                <div style={{ fontSize:'11px', fontWeight:'600', color: T.accent, marginBottom:'8px' }}>Método de pago — {PLANES[plan].precio}</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'6px' }}>
+                  <button type="button" onClick={() => setMetodoPago('wompi')}
+                    style={{ background: metodoPago==='wompi' ? `${T.green}12` : '#0A1628', border:`1.5px solid ${metodoPago==='wompi' ? T.green : '#1E3050'}`, borderRadius:'8px', padding:'10px', cursor:'pointer', textAlign:'left' }}>
+                    <div style={{ fontSize:'12px', fontWeight:'600', color: T.text }}>🏦 PSE / Nequi / Tarjeta</div>
+                    <div style={{ fontSize:'10px', color: T.muted, marginTop:'2px' }}>Wompi · pago local en COP</div>
+                  </button>
+                  <button type="button" onClick={() => setMetodoPago('stripe')}
+                    style={{ background: metodoPago==='stripe' ? `${T.green}12` : '#0A1628', border:`1.5px solid ${metodoPago==='stripe' ? T.green : '#1E3050'}`, borderRadius:'8px', padding:'10px', cursor:'pointer', textAlign:'left' }}>
+                    <div style={{ fontSize:'12px', fontWeight:'600', color: T.text }}>💳 Tarjeta internacional</div>
+                    <div style={{ fontSize:'10px', color: T.muted, marginTop:'2px' }}>Stripe · renovación automática</div>
+                  </button>
+                </div>
+                {metodoPago === 'wompi' && (
+                  <div style={{ fontSize:'10.5px', color: T.yellow, marginBottom:'10px', lineHeight:1.5 }}>
+                    Con Wompi el primer pago es inmediato. Para que el plan se renueve solo cada mes vas a necesitar completar con tarjeta más adelante — si no, simplemente vuelves a pagar por Wompi cuando venza.
+                  </div>
+                )}
+              </>
+            )}
+
             <div style={{ height:'1px', background: T.border, margin:'14px 0' }} />
 
             {error && (
@@ -346,7 +405,7 @@ export default function RegistroPage() {
                 cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1
               }}
             >
-              {loading ? 'Enviando solicitud...' : '✉ Enviar solicitud de registro'}
+              {loading ? (esPago ? 'Redirigiendo al pago...' : 'Enviando solicitud...') : (esPago ? `💳 Continuar al pago — ${PLANES[plan].precio}` : '✉ Enviar solicitud de registro')}
             </button>
 
             <div style={{ textAlign:'center', marginTop:'10px' }}>
@@ -358,5 +417,13 @@ export default function RegistroPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function RegistroPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight:'100vh', background: T.bg }} />}>
+      <RegistroForm />
+    </Suspense>
   )
 }

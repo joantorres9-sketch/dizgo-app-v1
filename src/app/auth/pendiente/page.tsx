@@ -1,9 +1,13 @@
 'use client'
+import { Suspense } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 
-const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',green:'#2DD4A0',yellow:'#F5A623',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
+const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',green:'#2DD4A0',yellow:'#F5A623',red:'#F05C5C',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
 
-export default function PendientePage() {
+function PendienteContent() {
+  const searchParams = useSearchParams()
+  const pago = searchParams.get('pago')
   const radicado = `DIZGO-${Date.now().toString().slice(-6)}`
   return (
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
@@ -16,9 +20,13 @@ export default function PendientePage() {
           <div style={{ width:'56px', height:'56px', background:`${T.yellow}18`, borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px' }}>
             <span style={{ fontSize:'28px' }}>⏳</span>
           </div>
-          <div style={{ fontSize:'16px', fontWeight:'700', color: T.text, marginBottom:'8px' }}>Solicitud enviada</div>
+          <div style={{ fontSize:'16px', fontWeight:'700', color: T.text, marginBottom:'8px' }}>
+            {pago === 'ok' ? 'Pago recibido' : pago === 'cancelado' ? 'Pago no completado' : 'Solicitud enviada'}
+          </div>
           <div style={{ fontSize:'13px', color: T.muted, lineHeight:1.7, marginBottom:'20px' }}>
-            Tu solicitud está en revisión. El equipo DIZGO verificará tus documentos y activará tu cuenta en <strong style={{ color: T.text }}>1 a 2 días hábiles</strong>.
+            {pago === 'ok' && <>Recibimos tu pago. El equipo DIZGO revisa tus documentos y activa tu cuenta en <strong style={{ color: T.text }}>1 a 2 días hábiles</strong>.</>}
+            {pago === 'cancelado' && <>Tu solicitud quedó guardada, pero el pago no se completó. Escríbenos y te ayudamos a terminarlo.</>}
+            {!pago && <>Tu solicitud está en revisión. El equipo DIZGO verificará tus documentos y activará tu cuenta en <strong style={{ color: T.text }}>1 a 2 días hábiles</strong>.</>}
           </div>
 
           <div style={{ background:`${T.yellow}10`, border:`1px solid ${T.yellow}30`, borderRadius:'10px', padding:'12px 16px', marginBottom:'20px' }}>
@@ -55,5 +63,13 @@ export default function PendientePage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function PendientePage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight:'100vh', background: T.bg }} />}>
+      <PendienteContent />
+    </Suspense>
   )
 }

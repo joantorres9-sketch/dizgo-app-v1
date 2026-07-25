@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [analizando, setAnalizando] = useState(false)
   const [tenantId, setTenantId] = useState('')
   const [nombreTienda, setNombreTienda] = useState('Mi Tienda')
+  const [planInfo, setPlanInfo] = useState<{ plan: string; licencia: string; licencia_vence: string | null }>({ plan: 'explorador', licencia: 'activa', licencia_vence: null })
 
   const getMesesRango = useCallback(() => {
     const hoy = new Date()
@@ -75,8 +76,9 @@ export default function DashboardPage() {
     if (!profile?.tenant_id) { setLoading(false); return }
     const tid = profile.tenant_id
     setTenantId(tid)
-    const { data: tenant } = await supabase.from('tenants').select('nombre').eq('id', tid).single()
+    const { data: tenant } = await supabase.from('tenants').select('nombre, plan, licencia, licencia_vence').eq('id', tid).single()
     if (tenant?.nombre) setNombreTienda(tenant.nombre)
+    if (tenant) setPlanInfo({ plan: tenant.plan || 'explorador', licencia: tenant.licencia || 'activa', licencia_vence: tenant.licencia_vence })
 
     const hoy = new Date()
     const mesesAtras = getMesesRango()
@@ -234,6 +236,21 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
           .card-print { background:#f8f8f8!important; border:1px solid #ddd!important; }
         }
       `}</style>
+
+      {/* ── AVISO DE PLAN ── */}
+      {planInfo.plan !== 'explorador' && planInfo.licencia_vence && (() => {
+        const diasRestantes = Math.ceil((new Date(planInfo.licencia_vence).getTime() - Date.now()) / 86400000)
+        const vencido = planInfo.licencia !== 'activa' || diasRestantes < 0
+        if (!vencido && diasRestantes > 7) return null
+        return (
+          <div className="no-print" style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', background: vencido ? 'rgba(240,92,92,0.1)' : 'rgba(245,166,35,0.1)', border:`1px solid ${vencido ? C.rojo : C.amarillo}40`, borderRadius:'10px', padding:'10px 16px', marginBottom:'14px' }}>
+            <div style={{ fontSize:'12px', color: vencido ? C.rojo : C.amarillo, fontWeight:'600' }}>
+              {vencido ? `⚠️ Tu plan ${planInfo.plan} venció${planInfo.licencia_vence ? ` el ${new Date(planInfo.licencia_vence).toLocaleDateString('es-CO')}` : ''}` : `⏳ Tu plan ${planInfo.plan} vence el ${new Date(planInfo.licencia_vence).toLocaleDateString('es-CO')} (${diasRestantes} días)`}
+            </div>
+            <a href="https://www.dizgo.app/#precios" style={{ fontSize:'12px', fontWeight:'700', color: vencido ? C.rojo : C.amarillo, textDecoration:'underline' }}>Renovar plan →</a>
+          </div>
+        )
+      })()}
 
       {/* ── HEADER ── */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
