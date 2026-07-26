@@ -766,11 +766,10 @@ export default function AdminPage() {
         const pedidosMeta = 70 + (5 - mes) * 10
         metasRows.push({
           tenant_id: tenantId, periodo,
-          pedidos_meta: pedidosMeta,
-          ventas_meta: Math.round(cfg.productos[0].pvp * pedidosMeta * 0.72),
-          ganancia_meta: Math.round(cfg.productos[0].pvp * 0.18 * pedidosMeta * 0.72),
-          entregados_meta: Math.round(pedidosMeta * 0.75),
-          descripcion: `Meta ${fecha.toLocaleString('es-CO', { month: 'long', year: 'numeric' })}`,
+          meta_pedidos: Math.round(pedidosMeta * 0.75),
+          meta_ventas: Math.round(cfg.productos[0].pvp * pedidosMeta * 0.72),
+          meta_utilidad: Math.round(cfg.productos[0].pvp * 0.18 * pedidosMeta * 0.72),
+          meta_entrega: 78,
         })
       }
       await insertarPaso('metas', metasRows, 'metas', `✅ ${metasRows.length} metas creadas`)
