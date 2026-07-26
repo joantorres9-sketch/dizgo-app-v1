@@ -253,9 +253,9 @@ export default function InversionPage() {
     setCpaHistorico(resT > 0 ? Math.round(invT / resT) : 0)
 
     // Nómina
-    const cols = (colabsData || []) as { cargo:string }[]
-    setConfirmadores(cols.filter(c => c.cargo.toLowerCase().includes('confirmad')).length)
-    setEmpacadores(cols.filter(c => c.cargo.toLowerCase().includes('empacad')).length)
+    const cols = (colabsData || []) as { cargo:string|null }[]
+    setConfirmadores(cols.filter(c => (c.cargo||'').toLowerCase().includes('confirmad')).length)
+    setEmpacadores(cols.filter(c => (c.cargo||'').toLowerCase().includes('empacad')).length)
 
     setLoading(false)
   }, [supabase])

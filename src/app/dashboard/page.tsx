@@ -269,9 +269,9 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
           {periodo==='custom' && (
             <>
               <input type="date" value={fechaIni} onChange={e=>setFechaIni(e.target.value)}
-                style={{ background:'#0A0D14', border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px' }} />
+                style={{ background:'#0A0D14', border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme:'dark' }} />
               <input type="date" value={fechaFin} onChange={e=>setFechaFin(e.target.value)}
-                style={{ background:'#0A0D14', border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px' }} />
+                style={{ background:'#0A0D14', border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme:'dark' }} />
               <button onClick={loadData} style={{ padding:'7px 12px', background:C.azul, border:'none', borderRadius:'8px', color:'#fff', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Aplicar</button>
             </>
           )}

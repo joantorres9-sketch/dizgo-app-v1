@@ -234,8 +234,8 @@ export default function MetasPage() {
     setPqrsfResolucion24h(conRespuesta.length>0 ? safe(Math.round(en24h.length/conRespuesta.length*100)) : 100)
 
     // ── Nómina / capacidad ────────────────────────────────────
-    const cols = (colabsData||[]) as { cargo:string }[]
-    setConfirmadores(cols.filter(c=>c.cargo.toLowerCase().includes('confirmad')).length)
+    const cols = (colabsData||[]) as { cargo:string|null }[]
+    setConfirmadores(cols.filter(c=>(c.cargo||'').toLowerCase().includes('confirmad')).length)
 
     // ── PE Mínimo desde módulo Equilibrio ─────────────────────
     if (peConfig) setPeMinimo(0) // placeholder; PE real se calcula en su propio módulo

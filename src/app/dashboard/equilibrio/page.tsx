@@ -211,10 +211,10 @@ export default function EquilibrioPage() {
     }
 
     // ── Capacidad desde nómina ────────────────────────────────
-    const cols = (colabs || []) as { cargo: string; activo: boolean }[]
+    const cols = (colabs || []) as { cargo: string|null; activo: boolean }[]
     setCapacidad({
-      confirmadores:    cols.filter(c => c.cargo.toLowerCase().includes('confirmad')).length,
-      empacadores:      cols.filter(c => c.cargo.toLowerCase().includes('empacad')).length,
+      confirmadores:    cols.filter(c => (c.cargo||'').toLowerCase().includes('confirmad')).length,
+      empacadores:      cols.filter(c => (c.cargo||'').toLowerCase().includes('empacad')).length,
       wa_automatizado:  false,
       dropi_api_activa: false,
     })

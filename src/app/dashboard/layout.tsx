@@ -1,7 +1,8 @@
 'use client'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase/client'
 
 const NAV = [
   { group:'PLANEAR', color:'#3D8EF0', items:[
@@ -38,9 +39,18 @@ const NAV = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
+  const [saliendo, setSaliendo] = useState(false)
 
   useEffect(() => { setMenuOpen(false) }, [pathname])
+
+  async function cerrarSesion() {
+    setSaliendo(true)
+    await supabase.auth.signOut()
+    router.push('/auth/login')
+  }
 
   return (
     <div style={{ display:'flex', minHeight:'100vh', background:'#0A0D14', color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
@@ -74,7 +84,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
         <div style={{ padding:'12px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'8px', textAlign:'center' }}>DIZGO v2.0 · COP</div>
-          <Link href="/auth/login" style={{ display:'block', textAlign:'center', padding:'7px', background:'rgba(255,255,255,0.04)', borderRadius:'8px', color:'#5A6478', textDecoration:'none', fontSize:'12px' }}>Cerrar sesión</Link>
+          <button onClick={cerrarSesion} disabled={saliendo} style={{ width:'100%', display:'block', textAlign:'center', padding:'8px', background:'rgba(240,92,92,0.1)', border:'1px solid rgba(240,92,92,0.3)', borderRadius:'8px', color:'#F05C5C', fontWeight:'600', fontSize:'12px', cursor: saliendo ? 'wait' : 'pointer' }}>
+            {saliendo ? 'Cerrando sesión...' : '🚪 Cerrar sesión'}
+          </button>
         </div>
       </aside>
       <div className="dz-main" style={{ flex:1, display:'flex', flexDirection:'column', minWidth:0 }}>
