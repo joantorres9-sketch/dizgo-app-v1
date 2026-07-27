@@ -10,7 +10,7 @@ export type Pais = {
   docId: string
   locale: string
   decimales: number
-  /** Aproximado, para mostrar referencia informativa (no se usa para cobros reales) — cuántas unidades de esta moneda equivalen a 1 USD. */
+  /** Respaldo estático si /api/tasas (ver src/lib/tasas.ts) no responde — cuántas unidades de esta moneda equivalen a 1 USD. No se usa para cobros reales, solo referencia informativa. */
   usdAprox: number
 }
 
@@ -41,16 +41,6 @@ export function formatMoneda(valor: number, paisCode: string): string {
   const s = new Intl.NumberFormat(p.locale, { style:'currency', currency:p.moneda, minimumFractionDigits:p.decimales, maximumFractionDigits:p.decimales }).format(valor || 0)
   const m = s.match(/^([\d.,\s]+)\s*([^\d\s]+)$/) // símbolo quedó al final -> moverlo al inicio
   return m ? `${m[2]} ${m[1]}` : s
-}
-
-// Convierte un monto en COP (moneda base de facturación real) a un valor aproximado en la
-// moneda del país dado. Solo para mostrar referencia informativa en la web — el cobro real
-// siempre se hace en COP vía Stripe/Wompi, esto no cambia esa lógica.
-export function copAproxA(valorCOP: number, paisCode: string): number {
-  const p = paisPorCodigo(paisCode) || PAISES[0]
-  const colUsd = PAISES[0].usdAprox // COP por USD
-  if (!p.usdAprox) return 0 // sin tasa confiable (ej. Venezuela hiperinflación) -> no mostrar conversión
-  return (valorCOP / colUsd) * p.usdAprox
 }
 
 export function buscarPaises(query: string): Pais[] {

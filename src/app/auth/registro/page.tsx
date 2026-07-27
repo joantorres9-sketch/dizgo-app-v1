@@ -4,13 +4,15 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useGeoPais } from '@/lib/geo'
+import { useTasasCambio, copAUsdConTasas, copAMonedaConTasas } from '@/lib/tasas'
+import { paisPorCodigo, formatMoneda } from '@/lib/paises'
 
 const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',blue:'#3D8EF0',green:'#2DD4A0',red:'#F05C5C',yellow:'#F5A623',purple:'#9B6BFF',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
 
-const PLANES: Record<string, { nombre: string; precio: string; detalle: string }> = {
+const PLANES: Record<string, { nombre: string; precio: string; cop?: number; detalle: string }> = {
   explorador:   { nombre: 'Explorador',   precio: 'Gratis',        detalle: 'Dashboard básico, 1 tienda' },
-  emprendedor:  { nombre: 'Emprendedor',  precio: '$89.000 COP/mes',  detalle: '1 tienda completa, Academia, Dropi, alertas' },
-  empresarial:  { nombre: 'Empresarial',  precio: '$249.000 COP/mes', detalle: 'Hasta 5 tiendas, usuarios ilimitados' },
+  emprendedor:  { nombre: 'Emprendedor',  precio: '$89.000 COP/mes',  cop: 89000,  detalle: '1 tienda completa, Academia, Dropi, alertas' },
+  empresarial:  { nombre: 'Empresarial',  precio: '$249.000 COP/mes', cop: 249000, detalle: 'Hasta 5 tiendas, usuarios ilimitados' },
 }
 
 const PAISES = [
@@ -56,6 +58,7 @@ function RegistroForm() {
   const [paisMatriz, setPaisMatriz] = useState<string|null>(null)
   const [paisPreseleccionado, setPaisPreseleccionado] = useState(false)
   const { pais: paisDetectado, detectando: detectandoPais } = useGeoPais('')
+  const { tasas } = useTasasCambio()
   useEffect(() => {
     if (detectandoPais || paisMatriz) return
     const p = PAISES.find(x => x.code === paisDetectado)
@@ -154,6 +157,16 @@ function RegistroForm() {
 
   const docMatriz = PAISES.find(p=>p.code===paisMatriz)?.doc || 'Documento legal'
 
+  const planCop = PLANES[plan].cop
+  const monedaMatriz = paisMatriz ? paisPorCodigo(paisMatriz)?.moneda : null
+  const precioLocalRef = esPago && planCop && paisMatriz && monedaMatriz && monedaMatriz !== 'COP'
+    ? (() => {
+        const local = copAMonedaConTasas(planCop, paisMatriz, tasas)
+        const usd = Math.round(copAUsdConTasas(planCop, tasas))
+        return local !== null ? `~${formatMoneda(local, paisMatriz)} · ~$${usd} USD` : `~$${usd} USD`
+      })()
+    : null
+
   return (
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       <div className="dz-registro-flex" style={{ display:'flex', gap:'16px', alignItems:'flex-start', maxWidth:'820px', width:'100%' }}>
@@ -193,7 +206,12 @@ function RegistroForm() {
                 <div style={{ fontSize:'12px', fontWeight:'700', color: esPago ? T.accent : T.blue }}>Plan {PLANES[plan].nombre}</div>
                 <div style={{ fontSize:'11px', color: T.muted }}>{PLANES[plan].detalle}</div>
               </div>
-              <div style={{ fontSize:'13px', fontWeight:'700', color: T.text }}>{PLANES[plan].precio}</div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color: T.text }}>{PLANES[plan].precio}</div>
+                {precioLocalRef && (
+                  <div style={{ fontSize:'10.5px', color: T.muted, marginTop:'2px' }}>{precioLocalRef}</div>
+                )}
+              </div>
             </div>
           </div>
 
