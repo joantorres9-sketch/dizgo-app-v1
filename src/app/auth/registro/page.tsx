@@ -1,8 +1,9 @@
 'use client'
-import { useState, Suspense } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useGeoPais } from '@/lib/geo'
 
 const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',blue:'#3D8EF0',green:'#2DD4A0',red:'#F05C5C',yellow:'#F5A623',purple:'#9B6BFF',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
 
@@ -53,6 +54,14 @@ function RegistroForm() {
     pass:'', pass2:''
   })
   const [paisMatriz, setPaisMatriz] = useState<string|null>(null)
+  const [paisPreseleccionado, setPaisPreseleccionado] = useState(false)
+  const { pais: paisDetectado, detectando: detectandoPais } = useGeoPais('')
+  useEffect(() => {
+    if (detectandoPais || paisMatriz) return
+    const p = PAISES.find(x => x.code === paisDetectado)
+    if (p) { setPaisMatriz(p.code); setForm(f => ({ ...f, codigo_tel: p.tel })); setPaisPreseleccionado(true) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectandoPais, paisDetectado])
   const [paisesOper, setPaisesOper] = useState<Set<string>>(new Set())
   const [uploading, setUploading] = useState<Record<string,boolean>>({})
   const [docUrls, setDocUrls] = useState<Record<string,string>>({})
@@ -251,9 +260,14 @@ function RegistroForm() {
               País principal — Casa matriz
               <span style={{ fontSize:'10px', fontWeight:'600', padding:'1px 7px', borderRadius:'4px', background:`${T.red}18`, color: T.red }}>Obligatorio</span>
             </div>
+            {paisPreseleccionado && (
+              <div style={{ fontSize:'10.5px', color: T.blue, marginBottom:'8px' }}>
+                📍 Detectamos tu ubicación — cambia el país abajo si no es correcto.
+              </div>
+            )}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'6px', marginBottom:'12px' }}>
               {PAISES.map(p => (
-                <button type="button" key={p.code} onClick={() => { setPaisMatriz(p.code); setForm(f=>({...f,codigo_tel:p.tel})) }}
+                <button type="button" key={p.code} onClick={() => { setPaisMatriz(p.code); setForm(f=>({...f,codigo_tel:p.tel})); setPaisPreseleccionado(false) }}
                   style={{ background: paisMatriz===p.code ? `${T.accent}15` : '#0A1628', border:`1.5px solid ${paisMatriz===p.code ? T.accent : '#1E3050'}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
                   <img src={p.flag} alt={p.nombre} style={{ width:'20px', height:'14px', borderRadius:'2px', objectFit:'cover', flexShrink:0 }} />
                   <div style={{ textAlign:'left', minWidth:0 }}>

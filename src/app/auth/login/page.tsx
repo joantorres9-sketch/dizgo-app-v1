@@ -1,8 +1,9 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useGeoPais } from '@/lib/geo'
 
 const T = {
   bg:'#0D1E35', card:'#081426', accent:'#F58720',
@@ -38,6 +39,14 @@ export default function LoginPage() {
   const supabase = createClient()
 
   const [paisSel, setPaisSel] = useState<string|null>(null)
+  const [paisPreseleccionado, setPaisPreseleccionado] = useState(false)
+  const { pais: paisDetectado, detectando: detectandoPais } = useGeoPais('')
+  useEffect(() => {
+    if (detectandoPais || paisSel) return
+    const p = PAISES.find(x => x.code === paisDetectado)
+    if (p) { setPaisSel(p.code); setPaisPreseleccionado(true) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detectandoPais, paisDetectado])
   const [email, setEmail]     = useState('')
   const [pass, setPass]       = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -99,7 +108,7 @@ export default function LoginPage() {
                 {PAISES.map(p => (
                   <button
                     key={p.code}
-                    onClick={() => setPaisSel(p.code)}
+                    onClick={() => { setPaisSel(p.code); setPaisPreseleccionado(false) }}
                     style={{
                       background: paisSel===p.code ? `${T.accent}15` : '#0D1E35',
                       border: `1.5px solid ${paisSel===p.code ? T.accent : '#1E3050'}`,
@@ -122,7 +131,7 @@ export default function LoginPage() {
                   display:'flex', alignItems:'center', gap:'6px'
                 }}>
                   <img src={PAISES.find(p=>p.code===paisSel)?.flag} alt="" style={{ width:'18px', height:'12px', borderRadius:'2px', objectFit:'cover' }} />
-                  <span>{PAISES.find(p=>p.code===paisSel)?.nombre} · {PAISES.find(p=>p.code===paisSel)?.moneda}</span>
+                  <span>{PAISES.find(p=>p.code===paisSel)?.nombre} · {PAISES.find(p=>p.code===paisSel)?.moneda}{paisPreseleccionado ? ' · detectado por tu ubicación' : ''}</span>
                 </div>
               )}
             </div>

@@ -8,25 +8,49 @@ export type Pais = {
   codigoTel: string
   flag: string
   docId: string
+  locale: string
+  decimales: number
+  /** Aproximado, para mostrar referencia informativa (no se usa para cobros reales) — cuántas unidades de esta moneda equivalen a 1 USD. */
+  usdAprox: number
 }
 
 export const PAISES: Pais[] = [
-  { code:'COL', nombre:'Colombia',    moneda:'COP', codigoTel:'+57',  docId:'CC/CE', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/co.svg' },
-  { code:'ECU', nombre:'Ecuador',     moneda:'USD', codigoTel:'+593', docId:'CI',    flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ec.svg' },
-  { code:'MEX', nombre:'México',      moneda:'MXN', codigoTel:'+52',  docId:'CURP',  flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/mx.svg' },
-  { code:'PER', nombre:'Perú',        moneda:'PEN', codigoTel:'+51',  docId:'DNI',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/pe.svg' },
-  { code:'CHL', nombre:'Chile',       moneda:'CLP', codigoTel:'+56',  docId:'RUN',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/cl.svg' },
-  { code:'ARG', nombre:'Argentina',   moneda:'ARS', codigoTel:'+54',  docId:'DNI',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ar.svg' },
-  { code:'CRI', nombre:'Costa Rica',  moneda:'CRC', codigoTel:'+506', docId:'Cédula',flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/cr.svg' },
-  { code:'PRY', nombre:'Paraguay',    moneda:'PYG', codigoTel:'+595', docId:'CI',    flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/py.svg' },
-  { code:'VEN', nombre:'Venezuela',   moneda:'VES', codigoTel:'+58',  docId:'CI',    flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ve.svg' },
-  { code:'ESP', nombre:'España',      moneda:'EUR', codigoTel:'+34',  docId:'NIF',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/es.svg' },
-  { code:'GTM', nombre:'Guatemala',   moneda:'GTQ', codigoTel:'+502', docId:'DPI',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/gt.svg' },
-  { code:'PAN', nombre:'Panamá',      moneda:'USD', codigoTel:'+507', docId:'Cédula',flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/pa.svg' },
+  { code:'COL', nombre:'Colombia',    moneda:'COP', codigoTel:'+57',  docId:'CC/CE', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/co.svg', locale:'es-CO', decimales:0, usdAprox:4000 },
+  { code:'ECU', nombre:'Ecuador',     moneda:'USD', codigoTel:'+593', docId:'CI',    flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ec.svg', locale:'en-US', decimales:2, usdAprox:1 },
+  { code:'MEX', nombre:'México',      moneda:'MXN', codigoTel:'+52',  docId:'CURP',  flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/mx.svg', locale:'es-MX', decimales:2, usdAprox:17 },
+  { code:'PER', nombre:'Perú',        moneda:'PEN', codigoTel:'+51',  docId:'DNI',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/pe.svg', locale:'es-PE', decimales:2, usdAprox:3.7 },
+  { code:'CHL', nombre:'Chile',       moneda:'CLP', codigoTel:'+56',  docId:'RUN',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/cl.svg', locale:'es-CL', decimales:0, usdAprox:950 },
+  { code:'ARG', nombre:'Argentina',   moneda:'ARS', codigoTel:'+54',  docId:'DNI',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ar.svg', locale:'es-AR', decimales:0, usdAprox:1200 },
+  { code:'CRI', nombre:'Costa Rica',  moneda:'CRC', codigoTel:'+506', docId:'Cédula',flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/cr.svg', locale:'es-CR', decimales:0, usdAprox:520 },
+  { code:'PRY', nombre:'Paraguay',    moneda:'PYG', codigoTel:'+595', docId:'CI',    flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/py.svg', locale:'es-PY', decimales:0, usdAprox:7300 },
+  { code:'VEN', nombre:'Venezuela',   moneda:'VES', codigoTel:'+58',  docId:'CI',    flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ve.svg', locale:'es-VE', decimales:2, usdAprox:0 },
+  { code:'ESP', nombre:'España',      moneda:'EUR', codigoTel:'+34',  docId:'NIF',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/es.svg', locale:'es-ES', decimales:2, usdAprox:0.92 },
+  { code:'GTM', nombre:'Guatemala',   moneda:'GTQ', codigoTel:'+502', docId:'DPI',   flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/gt.svg', locale:'es-GT', decimales:2, usdAprox:7.8 },
+  { code:'PAN', nombre:'Panamá',      moneda:'USD', codigoTel:'+507', docId:'Cédula',flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/pa.svg', locale:'en-US', decimales:2, usdAprox:1 },
 ]
 
 export function paisPorCodigo(code: string): Pais | undefined {
   return PAISES.find(p => p.code === code)
+}
+
+// Formatea un valor en la moneda del país, con el símbolo siempre al inicio (algunos locales
+// como es-ES lo ponen al final por defecto — aquí se fuerza al inicio para que la moneda se
+// sienta "propia" sin importar el idioma del navegador).
+export function formatMoneda(valor: number, paisCode: string): string {
+  const p = paisPorCodigo(paisCode) || PAISES[0]
+  const s = new Intl.NumberFormat(p.locale, { style:'currency', currency:p.moneda, minimumFractionDigits:p.decimales, maximumFractionDigits:p.decimales }).format(valor || 0)
+  const m = s.match(/^([\d.,\s]+)\s*([^\d\s]+)$/) // símbolo quedó al final -> moverlo al inicio
+  return m ? `${m[2]} ${m[1]}` : s
+}
+
+// Convierte un monto en COP (moneda base de facturación real) a un valor aproximado en la
+// moneda del país dado. Solo para mostrar referencia informativa en la web — el cobro real
+// siempre se hace en COP vía Stripe/Wompi, esto no cambia esa lógica.
+export function copAproxA(valorCOP: number, paisCode: string): number {
+  const p = paisPorCodigo(paisCode) || PAISES[0]
+  const colUsd = PAISES[0].usdAprox // COP por USD
+  if (!p.usdAprox) return 0 // sin tasa confiable (ej. Venezuela hiperinflación) -> no mostrar conversión
+  return (valorCOP / colUsd) * p.usdAprox
 }
 
 export function buscarPaises(query: string): Pais[] {

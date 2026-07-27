@@ -1,22 +1,14 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
+import { PAISES, paisPorCodigo, formatMoneda } from '@/lib/paises'
+import { useGeoPais } from '@/lib/geo'
 
 const T = { bg:'#0D1E35', card:'#081426', accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#5A7A9A', border:'#152238' }
 
-const PAISES = [
-  { code:'COL', nombre:'Colombia',  moneda:'COP', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/co.svg' },
-  { code:'ECU', nombre:'Ecuador',   moneda:'USD', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ec.svg' },
-  { code:'MEX', nombre:'México',    moneda:'MXN', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/mx.svg' },
-  { code:'PER', nombre:'Perú',      moneda:'PEN', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/pe.svg' },
-  { code:'CHL', nombre:'Chile',     moneda:'CLP', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/cl.svg' },
-  { code:'ARG', nombre:'Argentina', moneda:'ARS', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/ar.svg' },
-  { code:'CRI', nombre:'Costa Rica',moneda:'CRC', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/cr.svg' },
-  { code:'PAN', nombre:'Panamá',    moneda:'USD', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/pa.svg' },
-  { code:'ESP', nombre:'España',    moneda:'EUR', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/es.svg' },
-]
-
 const WA_JOAN = '573206348574'
+
+const SIMBOLO: Record<string, string> = { COP:'$', USD:'$', MXN:'$', PEN:'S/', CLP:'$', ARS:'$', CRC:'₡', PYG:'₲', VES:'Bs', EUR:'€', GTQ:'Q' }
 
 const inp: React.CSSProperties = { width:'100%', background:'#0A1628', border:'1.5px solid #1E3050', borderRadius:'8px', padding:'9px 10px', fontSize:'13px', color:'#E8EDF5', outline:'none', boxSizing:'border-box' }
 const lbl: React.CSSProperties = { fontSize:'11px', color:'#5A7A9A', marginBottom:'4px', display:'block' }
@@ -26,9 +18,38 @@ const sectionH: React.CSSProperties = { fontSize:'12px', fontWeight:700, color: 
 
 function n(v: string) { const x = parseFloat(v.replace(/,/g,'.')); return isNaN(x) ? 0 : x }
 
+// Input de dinero que se siente "propio" del país: símbolo de la moneda al inicio y separadores
+// de miles/decimales según convención local (ej. 89.900 en Colombia, 33.99 en dólares). Se
+// muestra formateado solo cuando el campo no tiene el foco, para no pelear con el cursor mientras
+// el usuario escribe.
+function MoneyInput({ value, onChange, paisCode, placeholder }: { value: string; onChange: (v: string) => void; paisCode: string; placeholder?: string }) {
+  const p = paisPorCodigo(paisCode) || PAISES[0]
+  const [foco, setFoco] = useState(false)
+  const num = n(value)
+  const display = !foco && value !== ''
+    ? num.toLocaleString(p.locale, { minimumFractionDigits: p.decimales, maximumFractionDigits: p.decimales })
+    : value
+  return (
+    <div style={{ position:'relative' }}>
+      <span style={{ position:'absolute', left:'10px', top:'50%', transform:'translateY(-50%)', fontSize:'12px', color:'#5A7A9A', pointerEvents:'none' }}>
+        {SIMBOLO[p.moneda] || '$'}
+      </span>
+      <input
+        style={{ ...inp, paddingLeft:'32px' }}
+        inputMode="decimal"
+        value={display}
+        placeholder={placeholder || '0'}
+        onFocus={() => setFoco(true)}
+        onBlur={() => setFoco(false)}
+        onChange={e => onChange(e.target.value.replace(/[^\d.,]/g, ''))}
+      />
+    </div>
+  )
+}
+
 export default function SimuladorPage() {
-  const [pais, setPais] = useState('COL')
-  const moneda = PAISES.find(p => p.code === pais)?.moneda || 'USD'
+  const { pais, setPais, detectadoAuto } = useGeoPais('COL')
+  const moneda = paisPorCodigo(pais)?.moneda || 'USD'
 
   const [producto, setProducto] = useState('')
   const [costoProveedor, setCostoProveedor] = useState('')
@@ -65,7 +86,7 @@ export default function SimuladorPage() {
   const [enviandoContacto, setEnviandoContacto] = useState(false)
   const [contactoOk, setContactoOk] = useState(false)
 
-  const fmt = useMemo(() => new Intl.NumberFormat('es-CO', { style: 'currency', currency: moneda, maximumFractionDigits: 0 }), [moneda])
+  const fmt = (v: number) => formatMoneda(v, pais)
 
   async function calcular(e: React.FormEvent) {
     e.preventDefault()
@@ -125,10 +146,10 @@ export default function SimuladorPage() {
       }
       const pNombre = producto || 'tu producto'
       const extrasTxt = [
-        ...resultado.costosExtraVals.filter(c=>c.valor).map(c=>`${c.label}: ${fmt.format(c.valor)}`),
+        ...resultado.costosExtraVals.filter(c=>c.valor).map(c=>`${c.label}: ${fmt(c.valor)}`),
         ...resultado.pctExtraVals.filter(p=>p.valor).map(p=>`${p.label}: ${p.valor}%`),
       ].join('\n')
-      const txt = `Hola! Usé la calculadora de precios de DIZGO para *${pNombre}*.\n\nCostos totales por pedido: ${fmt.format(resultado.costos)}\nPrecio de venta sugerido: ${fmt.format(resultado.pvp)}\nUtilidad neta esperada: ${fmt.format(resultado.utilidad)}${extrasTxt ? `\n\nExtras que agregué:\n${extrasTxt}` : ''}\n\nNombre: ${nombre}\nQuiero que me ayuden a aplicar esto en mi tienda.`
+      const txt = `Hola! Usé la calculadora de precios de DIZGO para *${pNombre}*.\n\nCostos totales por pedido: ${fmt(resultado.costos)}\nPrecio de venta sugerido: ${fmt(resultado.pvp)}\nUtilidad neta esperada: ${fmt(resultado.utilidad)}${extrasTxt ? `\n\nExtras que agregué:\n${extrasTxt}` : ''}\n\nNombre: ${nombre}\nQuiero que me ayuden a aplicar esto en mi tienda.`
       window.open(`https://wa.me/${WA_JOAN}?text=${encodeURIComponent(txt)}`, '_blank')
       setContactoOk(true)
     } finally { setEnviandoContacto(false) }
@@ -153,7 +174,7 @@ export default function SimuladorPage() {
         <form onSubmit={calcular} style={{ background: T.card, border:`1px solid ${T.border}`, borderRadius:'14px', padding:'20px' }}>
 
           <div style={{ ...lbl, marginBottom:'8px' }}>País — define la moneda de tus cálculos</div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'6px', marginBottom:'14px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(110px,1fr))', gap:'6px', marginBottom: detectadoAuto ? '8px' : '14px' }}>
             {PAISES.map(p => (
               <button type="button" key={p.code} onClick={() => setPais(p.code)}
                 style={{ background: pais===p.code ? `${T.accent}15` : '#0A1628', border:`1.5px solid ${pais===p.code ? T.accent : '#1E3050'}`, borderRadius:'8px', padding:'6px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
@@ -162,6 +183,11 @@ export default function SimuladorPage() {
               </button>
             ))}
           </div>
+          {detectadoAuto && (
+            <div style={{ fontSize:'10.5px', color: T.blue, marginBottom:'14px' }}>
+              📍 Detectamos que estás en {paisPorCodigo(pais)?.nombre} — cambia el país arriba si no es correcto.
+            </div>
+          )}
 
           <div style={fld}>
             <label style={lbl}>Nombre del producto</label>
@@ -170,22 +196,22 @@ export default function SimuladorPage() {
 
           <div style={sectionH}>Costos por pedido ({moneda})</div>
           <div style={row2}>
-            <div><label style={lbl}>Costo del producto (proveedor)</label><input style={inp} inputMode="decimal" value={costoProveedor} onChange={e=>setCostoProveedor(e.target.value)} placeholder="0" /></div>
-            <div><label style={lbl}>Costo administrativo por pedido</label><input style={inp} inputMode="decimal" value={adminPedido} onChange={e=>setAdminPedido(e.target.value)} placeholder="0" /></div>
+            <div><label style={lbl}>Costo del producto (proveedor)</label><MoneyInput value={costoProveedor} onChange={setCostoProveedor} paisCode={pais} /></div>
+            <div><label style={lbl}>Costo administrativo por pedido</label><MoneyInput value={adminPedido} onChange={setAdminPedido} paisCode={pais} /></div>
           </div>
           <div style={row2}>
-            <div><label style={lbl}>Flete de envío</label><input style={inp} inputMode="decimal" value={fleteEnvio} onChange={e=>setFleteEnvio(e.target.value)} placeholder="0" /></div>
-            <div><label style={lbl}>Flete de devolución</label><input style={inp} inputMode="decimal" value={fleteDevolucion} onChange={e=>setFleteDevolucion(e.target.value)} placeholder="0" /></div>
+            <div><label style={lbl}>Flete de envío</label><MoneyInput value={fleteEnvio} onChange={setFleteEnvio} paisCode={pais} /></div>
+            <div><label style={lbl}>Flete de devolución</label><MoneyInput value={fleteDevolucion} onChange={setFleteDevolucion} paisCode={pais} /></div>
           </div>
           <div style={row2}>
-            <div><label style={lbl}>Fulfillment de envío</label><input style={inp} inputMode="decimal" value={fulfillmentEnvio} onChange={e=>setFulfillmentEnvio(e.target.value)} placeholder="0" /></div>
-            <div><label style={lbl}>Fulfillment de devolución</label><input style={inp} inputMode="decimal" value={fulfillmentDevolucion} onChange={e=>setFulfillmentDevolucion(e.target.value)} placeholder="0" /></div>
+            <div><label style={lbl}>Fulfillment de envío</label><MoneyInput value={fulfillmentEnvio} onChange={setFulfillmentEnvio} paisCode={pais} /></div>
+            <div><label style={lbl}>Fulfillment de devolución</label><MoneyInput value={fulfillmentDevolucion} onChange={setFulfillmentDevolucion} paisCode={pais} /></div>
           </div>
 
           {costosExtra.map(c => (
             <div key={c.id} style={{ display:'grid', gridTemplateColumns:'1fr 140px auto', gap:'8px', marginBottom:'10px', alignItems:'end' }}>
               <div><label style={lbl}>Nombre del costo</label><input style={inp} value={c.label} onChange={e=>setCostosExtra(cs=>cs.map(x=>x.id===c.id?{...x,label:e.target.value}:x))} placeholder="Ej: Empaque especial" /></div>
-              <div><label style={lbl}>Valor ({moneda})</label><input style={inp} inputMode="decimal" value={c.valor} onChange={e=>setCostosExtra(cs=>cs.map(x=>x.id===c.id?{...x,valor:e.target.value}:x))} placeholder="0" /></div>
+              <div><label style={lbl}>Valor ({moneda})</label><MoneyInput value={c.valor} onChange={v=>setCostosExtra(cs=>cs.map(x=>x.id===c.id?{...x,valor:v}:x))} paisCode={pais} /></div>
               <button type="button" onClick={()=>quitarCostoExtra(c.id)} title="Quitar" style={{ background:'#0A1628', border:`1.5px solid ${T.red}40`, borderRadius:'8px', color: T.red, width:'34px', height:'34px', cursor:'pointer', fontSize:'14px' }}>✕</button>
             </div>
           ))}
@@ -236,15 +262,15 @@ export default function SimuladorPage() {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px', marginBottom:'14px' }}>
               <div style={{ background:'#0A1828', border:`1px solid ${T.border}`, borderRadius:'10px', padding:'12px' }}>
                 <div style={{ fontSize:'10px', color: T.muted, marginBottom:'4px' }}>Costos totales por pedido</div>
-                <div style={{ fontSize:'17px', fontWeight:800, color: T.text }}>{fmt.format(resultado.costos)}</div>
+                <div style={{ fontSize:'17px', fontWeight:800, color: T.text }}>{fmt(resultado.costos)}</div>
               </div>
               <div style={{ background:`${T.accent}12`, border:`1px solid ${T.accent}40`, borderRadius:'10px', padding:'12px' }}>
                 <div style={{ fontSize:'10px', color: T.accent, marginBottom:'4px' }}>Precio de venta sugerido</div>
-                <div style={{ fontSize:'19px', fontWeight:800, color: T.accent }}>{fmt.format(resultado.pvp)}</div>
+                <div style={{ fontSize:'19px', fontWeight:800, color: T.accent }}>{fmt(resultado.pvp)}</div>
               </div>
               <div style={{ background:'#0A1828', border:`1px solid ${T.border}`, borderRadius:'10px', padding:'12px' }}>
                 <div style={{ fontSize:'10px', color: T.muted, marginBottom:'4px' }}>Utilidad neta esperada</div>
-                <div style={{ fontSize:'17px', fontWeight:800, color: T.green }}>{fmt.format(resultado.utilidad)}</div>
+                <div style={{ fontSize:'17px', fontWeight:800, color: T.green }}>{fmt(resultado.utilidad)}</div>
               </div>
             </div>
 
@@ -253,7 +279,7 @@ export default function SimuladorPage() {
                 <div style={{ fontSize:'10px', color: T.muted, marginBottom:'6px', textTransform:'uppercase', letterSpacing:'.4px' }}>Extras incluidos en el cálculo</div>
                 {resultado.costosExtraVals.map((c,i) => (
                   <div key={`ce-${i}`} style={{ display:'flex', justifyContent:'space-between', fontSize:'11.5px', color: T.text, padding:'2px 0' }}>
-                    <span>{c.label}</span><span>{fmt.format(c.valor)}</span>
+                    <span>{c.label}</span><span>{fmt(c.valor)}</span>
                   </div>
                 ))}
                 {resultado.pctExtraVals.map((p,i) => (
