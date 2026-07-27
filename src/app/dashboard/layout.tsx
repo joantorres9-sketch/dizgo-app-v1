@@ -34,6 +34,7 @@ const NAV = [
     { href:'/dashboard/cazador',  icon:'🔍', label:'Cazador Productos' },
     { href:'/dashboard/formacion',icon:'🎓', label:'Formación' },
     { href:'/dashboard/admin',    icon:'⚙️', label:'Superadmin' },
+    { href:'/dashboard/admin/crm',icon:'📈', label:'CRM Ventas DIZGO' },
   ]},
 ]
 

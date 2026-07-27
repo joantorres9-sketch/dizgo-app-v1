@@ -26,3 +26,19 @@ export async function verificarTenantStaff(req: Request, tenantId: string): Prom
   }
   return { ok: true, userId: user.id }
 }
+
+// Para rutas que no pertenecen a ningún tenant (ej. el CRM interno de ventas de DIZGO) —
+// solo exige que el usuario autenticado tenga rol='superadmin', sin comparar tenant_id.
+export async function verificarSuperadmin(req: Request): Promise<{ ok: true; userId: string } | { ok: false; error: string; status: number }> {
+  const authHeader = req.headers.get('authorization')
+  const token = authHeader?.replace('Bearer ', '')
+  if (!token) return { ok: false, error: 'No autenticado', status: 401 }
+
+  const supabase = getSupabaseAdmin()
+  const { data: { user }, error } = await supabase.auth.getUser(token)
+  if (error || !user) return { ok: false, error: 'Sesión inválida', status: 401 }
+
+  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
+  if (!profile || profile.rol !== 'superadmin') return { ok: false, error: 'Solo superadmin', status: 403 }
+  return { ok: true, userId: user.id }
+}
