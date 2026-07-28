@@ -256,8 +256,8 @@ export default function PQRSFPage() {
 
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {filtradas.map(p => {
-                const tipo = TIPO_INFO[p.tipo]
-                const estado = ESTADO_INFO[p.estado]
+                const tipo = TIPO_INFO[p.tipo] || { label:p.tipo, color:'#8B96A8', emoji:'❓', dias:15 }
+                const estado = ESTADO_INFO[p.estado] || { color:'#8B96A8', bg:'rgba(139,150,168,0.1)' }
                 const dias = diasRestantes(p.fecha_limite)
                 const activa = seleccionada?.id === p.id
                 return (
@@ -305,8 +305,8 @@ export default function PQRSFPage() {
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
                 <div>
                   <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>RADICADO</div>
-                  <div style={{ fontSize:'14px', fontWeight:'800', color: TIPO_INFO[seleccionada.tipo].color }}>
-                    {TIPO_INFO[seleccionada.tipo].emoji} {seleccionada.numero_radicado}
+                  <div style={{ fontSize:'14px', fontWeight:'800', color: TIPO_INFO[seleccionada.tipo]?.color || '#8B96A8' }}>
+                    {TIPO_INFO[seleccionada.tipo]?.emoji || '❓'} {seleccionada.numero_radicado}
                   </div>
                 </div>
                 <button onClick={() => setSeleccionada(null)} style={{ background:'none', border:'none', color:'#8B96A8', cursor:'pointer', fontSize:'20px' }}>×</button>
