@@ -22,9 +22,12 @@ const TABS: { v: string; l: string }[] = [
   { v:'kanban', l:'📈 Kanban' },
   { v:'catalogo', l:'💰 Catálogo & Agente' },
   { v:'finanzas', l:'🏦 Finanzas' },
+  { v:'publicaciones', l:'📝 Publicaciones' },
+  { v:'campanas', l:'📣 Campañas' },
   { v:'enlaces', l:'🔗 Enlaces' },
   { v:'integraciones', l:'🔌 Integraciones' },
 ]
+const OBJETIVOS_CAMPANA = ['OUTCOME_TRAFFIC', 'OUTCOME_ENGAGEMENT', 'OUTCOME_LEADS', 'OUTCOME_SALES', 'OUTCOME_AWARENESS']
 
 const ENLACES = [
   { label:'Meta Business Manager (Dizgo.co)', url:'https://business.facebook.com/latest/home?business_id=1672084047562878', emoji:'📘' },
@@ -50,6 +53,12 @@ type CatalogoItem = { nombre: string; precio: string; detalle: string }
 type ConfigAgente = { prompt_sistema: string; catalogo: { planes_app: CatalogoItem[]; servicios_consultoria: CatalogoItem[] } }
 type TenantPago = { id: string; nombre: string; plan: string; licencia: string; licencia_vence: string | null }
 type PagoLog = { id: string; tenant_id: string | null; proveedor: string; evento: string; created_at: string }
+type Publicacion = { id: string; texto: string; imagen_url: string | null; fb_post_id: string | null; estado: string; created_at: string }
+type Campana = {
+  id: string; nombre: string; objetivo: string; presupuesto_diario_cop: number; estado: string
+  meta_campaign_id: string | null; creado_at: string
+  rendimiento: { spend: string; impressions: string; clicks: string } | null
+}
 
 const inp: React.CSSProperties = { width:'100%', background:T.card2, border:`1.5px solid ${T.border}`, borderRadius:'8px', padding:'8px 10px', fontSize:'12px', color:T.text, outline:'none', boxSizing:'border-box' }
 const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
@@ -86,6 +95,18 @@ export default function CentroDizgoPage() {
   const [tenantsPago, setTenantsPago] = useState<TenantPago[]>([])
   const [pagos, setPagos] = useState<PagoLog[]>([])
   const [nombresTenant, setNombresTenant] = useState<Record<string,string>>({})
+
+  // ── Publicaciones ──
+  const [publicaciones, setPublicaciones] = useState<Publicacion[]>([])
+  const [textoPost, setTextoPost] = useState('')
+  const [imagenPost, setImagenPost] = useState('')
+  const [publicando, setPublicando] = useState(false)
+
+  // ── Campañas ──
+  const [campanas, setCampanas] = useState<Campana[]>([])
+  const [formCampana, setFormCampana] = useState({ nombre:'', objetivo: OBJETIVOS_CAMPANA[0], presupuesto:'' })
+  const [creandoCampana, setCreandoCampana] = useState(false)
+  const [activandoId, setActivandoId] = useState<string | null>(null)
 
   // ── Integraciones ──
   const [estadoIntegraciones, setEstadoIntegraciones] = useState<Record<string, boolean> | null>(null)
@@ -125,6 +146,17 @@ export default function CentroDizgoPage() {
     setNombresTenant(mapa)
   }, [supabase])
 
+  const cargarPublicaciones = useCallback(async () => {
+    const { data } = await supabase.from('crm_publicaciones').select('*').order('created_at', { ascending: false })
+    setPublicaciones((data as Publicacion[]) || [])
+  }, [supabase])
+
+  const cargarCampanas = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+    const res = await fetch('/api/crm/facebook/campanas', { headers: { Authorization: `Bearer ${session?.access_token}` } })
+    if (res.ok) { const d = await res.json(); setCampanas(d.campanas || []) }
+  }, [supabase])
+
   const cargarIntegraciones = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession()
     const res = await fetch('/api/crm/estado-integraciones', { headers: { Authorization: `Bearer ${session?.access_token}` } })
@@ -138,6 +170,8 @@ export default function CentroDizgoPage() {
     if (tab === 'kanban') cargarLeads()
     if (tab === 'catalogo' && !config) cargarConfig()
     if (tab === 'finanzas') cargarFinanzas()
+    if (tab === 'publicaciones') cargarPublicaciones()
+    if (tab === 'campanas') cargarCampanas()
     if (tab === 'integraciones') cargarIntegraciones()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autorizado, tab])
@@ -201,6 +235,66 @@ export default function CentroDizgoPage() {
     setGuardandoConfig(false)
     setConfigGuardado(true)
     setTimeout(() => setConfigGuardado(false), 2000)
+  }
+
+  // ── Acciones Publicaciones ──
+  async function publicar() {
+    if (!textoPost.trim()) return
+    setPublicando(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/crm/facebook/publicar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ texto: textoPost, imagenUrl: imagenPost || undefined }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error publicando')
+      setTextoPost(''); setImagenPost('')
+      cargarPublicaciones()
+    } catch (e: any) {
+      alert(e.message || 'Error publicando')
+    } finally { setPublicando(false) }
+  }
+
+  // ── Acciones Campañas ──
+  async function crearCampana() {
+    const presupuesto = Number(formCampana.presupuesto)
+    if (!formCampana.nombre.trim() || !presupuesto) { alert('Completa nombre y presupuesto diario'); return }
+    setCreandoCampana(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/crm/facebook/campana/crear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ nombre: formCampana.nombre, objetivo: formCampana.objetivo, presupuestoDiarioCop: presupuesto }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error creando la campaña')
+      setFormCampana({ nombre:'', objetivo: OBJETIVOS_CAMPANA[0], presupuesto:'' })
+      cargarCampanas()
+    } catch (e: any) {
+      alert(e.message || 'Error creando la campaña')
+    } finally { setCreandoCampana(false) }
+  }
+
+  async function activarCampanaAccion(c: Campana) {
+    const monto = formatMoneda(c.presupuesto_diario_cop, 'COL')
+    if (!confirm(`Vas a activar "${c.nombre}" con presupuesto diario de ${monto}. Esto empieza a gastar de la tarjeta registrada en la cuenta publicitaria. ¿Confirmas?`)) return
+    setActivandoId(c.id)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/crm/facebook/campana/activar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
+        body: JSON.stringify({ id: c.id, presupuestoConfirmado: c.presupuesto_diario_cop }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error activando la campaña')
+      cargarCampanas()
+    } catch (e: any) {
+      alert(e.message || 'Error activando la campaña')
+    } finally { setActivandoId(null) }
   }
 
   if (autorizado === null) return <div style={{ padding:'40px', color:T.muted, fontSize:'13px' }}>Verificando acceso…</div>
@@ -389,6 +483,86 @@ export default function CentroDizgoPage() {
         </div>
       )}
 
+      {tab === 'publicaciones' && (
+        <div style={{ maxWidth:'640px' }}>
+          <div style={{ marginBottom:'20px' }}>
+            <label style={lbl}>Texto de la publicación</label>
+            <textarea style={{ ...inp, minHeight:'90px', resize:'vertical' }} value={textoPost} onChange={e => setTextoPost(e.target.value)} placeholder="¿Qué quieres contarle a tu audiencia?" />
+            <div style={{ marginTop:'8px' }}>
+              <label style={lbl}>URL de imagen (opcional)</label>
+              <input style={inp} value={imagenPost} onChange={e => setImagenPost(e.target.value)} placeholder="https://..." />
+            </div>
+            <button onClick={publicar} disabled={publicando || !textoPost.trim()}
+              style={{ marginTop:'10px', padding:'10px 18px', background:T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:700, fontSize:'13px', cursor: publicando ? 'wait' : 'pointer', opacity: publicando ? 0.7 : 1 }}>
+              {publicando ? 'Publicando…' : '📤 Publicar en la Página'}
+            </button>
+          </div>
+
+          <div style={{ fontSize:'12px', fontWeight:700, color:T.text, marginBottom:'8px' }}>Publicaciones</div>
+          <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'10px', overflow:'hidden' }}>
+            {publicaciones.length === 0 && <div style={{ padding:'16px', fontSize:'12px', color:T.muted, textAlign:'center' }}>Sin publicaciones todavía</div>}
+            {publicaciones.map(p => (
+              <div key={p.id} style={{ padding:'10px 14px', borderBottom:`1px solid ${T.border}`, fontSize:'12px' }}>
+                <div style={{ color:T.text, marginBottom:'3px' }}>{p.texto}</div>
+                <div style={{ display:'flex', justifyContent:'space-between', color:T.muted, fontSize:'10.5px' }}>
+                  <span>{p.estado === 'publicado' ? '🟢 Publicado' : '🔴 Falló'} · {new Date(p.created_at).toLocaleString('es-CO')}</span>
+                  {p.fb_post_id && <a href={`https://facebook.com/${p.fb_post_id}`} target="_blank" rel="noopener noreferrer" style={{ color:T.blue }}>Ver post →</a>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab === 'campanas' && (
+        <div>
+          <div style={{ background:`${T.red}10`, border:`1px solid ${T.red}30`, borderRadius:'8px', padding:'10px 14px', marginBottom:'16px', fontSize:'11px', color:T.red }}>
+            Crear una campaña aquí SIEMPRE queda en pausa — no gasta nada. Solo el botón "Activar" en una campaña ya creada empieza a gastar de la tarjeta real.
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'2fr 1.2fr 1fr auto', gap:'8px', marginBottom:'20px', alignItems:'end', maxWidth:'760px' }}>
+            <div><label style={lbl}>Nombre de la campaña</label><input style={inp} value={formCampana.nombre} onChange={e => setFormCampana(f => ({ ...f, nombre: e.target.value }))} placeholder="Ej: DIZGO - Lanzamiento App" /></div>
+            <div>
+              <label style={lbl}>Objetivo</label>
+              <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={formCampana.objetivo} onChange={e => setFormCampana(f => ({ ...f, objetivo: e.target.value }))}>
+                {OBJETIVOS_CAMPANA.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+            <div><label style={lbl}>Presupuesto diario (COP)</label><input style={inp} inputMode="numeric" value={formCampana.presupuesto} onChange={e => setFormCampana(f => ({ ...f, presupuesto: e.target.value.replace(/\D/g,'') }))} placeholder="50000" /></div>
+            <button onClick={crearCampana} disabled={creandoCampana}
+              style={{ padding:'9px 16px', background:T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:700, fontSize:'12px', cursor: creandoCampana ? 'wait' : 'pointer', height:'34px' }}>
+              {creandoCampana ? '…' : 'Crear (pausada)'}
+            </button>
+          </div>
+
+          <div style={{ fontSize:'12px', fontWeight:700, color:T.text, marginBottom:'8px' }}>Campañas</div>
+          <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'10px', overflow:'hidden' }}>
+            {campanas.length === 0 && <div style={{ padding:'16px', fontSize:'12px', color:T.muted, textAlign:'center' }}>Sin campañas todavía</div>}
+            {campanas.map(c => (
+              <div key={c.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', borderBottom:`1px solid ${T.border}`, fontSize:'12px' }}>
+                <div>
+                  <div style={{ color:T.text, fontWeight:600 }}>{c.nombre}</div>
+                  <div style={{ color:T.muted, fontSize:'10.5px' }}>
+                    {c.objetivo} · {formatMoneda(c.presupuesto_diario_cop, 'COL')}/día
+                    {c.rendimiento && ` · gasto: ${c.rendimiento.spend} · ${c.rendimiento.impressions} impr. · ${c.rendimiento.clicks} clics`}
+                  </div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span style={{ fontSize:'9px', padding:'2px 8px', borderRadius:'4px', fontWeight:700, background: c.estado === 'activa' ? `${T.green}20` : `${T.muted}20`, color: c.estado === 'activa' ? T.green : T.muted }}>
+                    {c.estado === 'activa' ? '🟢 ACTIVA' : c.estado === 'pausada' ? '⏸ PAUSADA' : '📝 BORRADOR'}
+                  </span>
+                  {c.estado === 'pausada' && (
+                    <button onClick={() => activarCampanaAccion(c)} disabled={activandoId === c.id}
+                      style={{ padding:'5px 12px', background:T.red, border:'none', borderRadius:'6px', color:'#fff', fontWeight:700, fontSize:'10.5px', cursor: activandoId === c.id ? 'wait' : 'pointer' }}>
+                      {activandoId === c.id ? '…' : '▶ Activar (gasta real)'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {tab === 'enlaces' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'12px' }}>
           {ENLACES.map(e => (
@@ -434,6 +608,18 @@ export default function CentroDizgoPage() {
                 <div style={{ fontSize:'12px', fontWeight:700, color:T.text, marginBottom:'6px' }}>✉️ Resend (correos)</div>
                 <div style={{ fontSize:'11px', color: estadoIntegraciones.resend ? T.green : T.red, fontWeight:700 }}>
                   {estadoIntegraciones.resend ? '🟢 Conectado' : '🔴 No configurado'}
+                </div>
+              </div>
+              <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px' }}>
+                <div style={{ fontSize:'12px', fontWeight:700, color:T.text, marginBottom:'6px' }}>📘 Página de Facebook</div>
+                <div style={{ fontSize:'11px', color: estadoIntegraciones.facebookPagina ? T.green : T.red, fontWeight:700 }}>
+                  {estadoIntegraciones.facebookPagina ? '🟢 Conectado' : '🔴 No configurado'}
+                </div>
+              </div>
+              <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'10px', padding:'14px' }}>
+                <div style={{ fontSize:'12px', fontWeight:700, color:T.text, marginBottom:'6px' }}>📣 Meta Ads</div>
+                <div style={{ fontSize:'11px', color: estadoIntegraciones.metaAds ? T.green : T.red, fontWeight:700 }}>
+                  {estadoIntegraciones.metaAds ? '🟢 Conectado' : '🔴 No configurado'}
                 </div>
               </div>
             </>

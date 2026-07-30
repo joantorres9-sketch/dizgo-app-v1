@@ -13,5 +13,7 @@ export async function GET(req: NextRequest) {
     wompi: !!process.env.WOMPI_PRIVATE_KEY,
     claude: !!process.env.ANTHROPIC_API_KEY,
     resend: !!process.env.RESEND_API_KEY,
+    facebookPagina: !!process.env.META_ACCESS_TOKEN && !!process.env.META_PAGE_ID,
+    metaAds: !!process.env.META_ACCESS_TOKEN && !!process.env.META_AD_ACCOUNT_ID,
   })
 }
