@@ -27,7 +27,9 @@ const TABS: { v: string; l: string }[] = [
 ]
 
 const ENLACES = [
-  { label:'Meta Business Manager', url:'https://business.facebook.com/', emoji:'📘' },
+  { label:'Meta Business Manager (Dizgo.co)', url:'https://business.facebook.com/latest/home?business_id=1672084047562878', emoji:'📘' },
+  { label:'Administrador de WhatsApp', url:'https://business.facebook.com/latest/whatsapp_manager/phone_numbers/?business_id=1672084047562878', emoji:'💬' },
+  { label:'Administrador de Anuncios (Meta Ads)', url:'https://adsmanager.facebook.com/adsmanager/manage/campaigns?act=2093741134685570', emoji:'📣' },
   { label:'Vercel — app.dizgo.app', url:'https://vercel.com/joantorres9-sketchs-projects/dizgo-app', emoji:'▲' },
   { label:'Vercel — www.dizgo.app', url:'https://vercel.com/joantorres9-sketchs-projects/dizgo-home', emoji:'▲' },
   { label:'Supabase', url:'https://supabase.com/dashboard/project/pplwwvfopzfkdkkxyswq', emoji:'🗄️' },
