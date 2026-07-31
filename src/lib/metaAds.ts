@@ -28,6 +28,7 @@ export async function crearCampanaBorrador(nombre: string, objetivo: string, pre
   // 1. Campaña -- status PAUSED forzado, no viene del caller
   const campana = await llamarGraph(`${adAccount}/campaigns`, {
     name: nombre, objective: objetivo, status: 'PAUSED', special_ad_categories: '[]',
+    is_adset_budget_sharing_enabled: 'false',
   })
   if (!campana.ok) return campana
   const campaignId = campana.data.id
