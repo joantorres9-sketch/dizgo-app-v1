@@ -101,11 +101,13 @@ export default function CentroDizgoPage() {
   const [textoPost, setTextoPost] = useState('')
   const [imagenPost, setImagenPost] = useState('')
   const [publicando, setPublicando] = useState(false)
+  const [publicado, setPublicado] = useState(false)
 
   // ── Campañas ──
   const [campanas, setCampanas] = useState<Campana[]>([])
   const [formCampana, setFormCampana] = useState({ nombre:'', objetivo: OBJETIVOS_CAMPANA[0], presupuesto:'' })
   const [creandoCampana, setCreandoCampana] = useState(false)
+  const [campanaCreada, setCampanaCreada] = useState(false)
   const [activandoId, setActivandoId] = useState<string | null>(null)
 
   // ── Integraciones ──
@@ -252,6 +254,8 @@ export default function CentroDizgoPage() {
       if (!res.ok) throw new Error(data.error || 'Error publicando')
       setTextoPost(''); setImagenPost('')
       cargarPublicaciones()
+      setPublicado(true)
+      setTimeout(() => setPublicado(false), 3000)
     } catch (e: any) {
       alert(e.message || 'Error publicando')
     } finally { setPublicando(false) }
@@ -273,6 +277,8 @@ export default function CentroDizgoPage() {
       if (!res.ok) throw new Error(data.error || 'Error creando la campaña')
       setFormCampana({ nombre:'', objetivo: OBJETIVOS_CAMPANA[0], presupuesto:'' })
       cargarCampanas()
+      setCampanaCreada(true)
+      setTimeout(() => setCampanaCreada(false), 3000)
     } catch (e: any) {
       alert(e.message || 'Error creando la campaña')
     } finally { setCreandoCampana(false) }
@@ -493,8 +499,8 @@ export default function CentroDizgoPage() {
               <input style={inp} value={imagenPost} onChange={e => setImagenPost(e.target.value)} placeholder="https://..." />
             </div>
             <button onClick={publicar} disabled={publicando || !textoPost.trim()}
-              style={{ marginTop:'10px', padding:'10px 18px', background:T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:700, fontSize:'13px', cursor: publicando ? 'wait' : 'pointer', opacity: publicando ? 0.7 : 1 }}>
-              {publicando ? 'Publicando…' : '📤 Publicar en la Página'}
+              style={{ marginTop:'10px', padding:'10px 18px', background: publicado ? T.green : T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:700, fontSize:'13px', cursor: publicando ? 'wait' : 'pointer', opacity: publicando ? 0.7 : 1 }}>
+              {publicado ? '✓ Publicado en la Página' : publicando ? 'Publicando…' : '📤 Publicar en la Página'}
             </button>
           </div>
 
@@ -529,10 +535,11 @@ export default function CentroDizgoPage() {
             </div>
             <div><label style={lbl}>Presupuesto diario (COP)</label><input style={inp} inputMode="numeric" value={formCampana.presupuesto} onChange={e => setFormCampana(f => ({ ...f, presupuesto: e.target.value.replace(/\D/g,'') }))} placeholder="50000" /></div>
             <button onClick={crearCampana} disabled={creandoCampana}
-              style={{ padding:'9px 16px', background:T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:700, fontSize:'12px', cursor: creandoCampana ? 'wait' : 'pointer', height:'34px' }}>
-              {creandoCampana ? '…' : 'Crear (pausada)'}
+              style={{ padding:'9px 16px', background: campanaCreada ? T.green : T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:700, fontSize:'12px', cursor: creandoCampana ? 'wait' : 'pointer', height:'34px' }}>
+              {campanaCreada ? '✓ Creada' : creandoCampana ? '…' : 'Crear (pausada)'}
             </button>
           </div>
+          {campanaCreada && <div style={{ fontSize:'12px', color:T.green, marginTop:'-14px', marginBottom:'14px' }}>Campaña creada y guardada en pausa — revisa la lista abajo.</div>}
 
           <div style={{ fontSize:'12px', fontWeight:700, color:T.text, marginBottom:'8px' }}>Campañas</div>
           <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'10px', overflow:'hidden' }}>
