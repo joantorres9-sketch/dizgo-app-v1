@@ -16,7 +16,7 @@ async function llamarGraph(path: string, params: Record<string, string>): Promis
     body: new URLSearchParams({ ...params, access_token: token }),
   })
   const data = await res.json().catch(() => ({}))
-  if (!res.ok) return { ok: false, error: data?.error?.message || `Error ${res.status} en Meta Ads` }
+  if (!res.ok) return { ok: false, error: data?.error?.error_user_msg || data?.error?.message || `Error ${res.status} en Meta Ads` }
   return { ok: true, data }
 }
 
@@ -38,6 +38,7 @@ export async function crearCampanaBorrador(nombre: string, objetivo: string, pre
     name: `${nombre} - Conjunto`, campaign_id: campaignId, status: 'PAUSED',
     daily_budget: String(Math.round(presupuestoDiarioCop)),
     billing_event: 'IMPRESSIONS', optimization_goal: 'LINK_CLICKS',
+    bid_strategy: 'LOWEST_COST_WITHOUT_CAP',
     targeting: JSON.stringify({ geo_locations: { countries: ['CO'] } }),
   })
   if (!adset.ok) return adset
