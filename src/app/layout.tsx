@@ -15,7 +15,6 @@ const jetbrains = JetBrains_Mono({
 export const metadata: Metadata = {
   title: 'DIZGO — Hallazgo de dinero',
   description: 'Plataforma de gestión financiera y operativa para e-commerce y dropshipping en LATAM',
-  icons: { icon: '/favicon.ico' },
 }
 
 export const viewport: Viewport = {
