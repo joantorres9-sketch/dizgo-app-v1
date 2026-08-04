@@ -2,6 +2,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configCostosFijos, configCostosVariables, type FilaCostoFijo, type FilaCostoVariable } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -245,6 +248,10 @@ export default function CostosPage() {
   const [nuevaCat, setNuevaCat] = useState('')
   const [showNuevaCat, setShowNuevaCat] = useState(false)
 
+  // Carga masiva
+  const [previewCF, setPreviewCF] = useState<FilaImportada<FilaCostoFijo>[] | null>(null)
+  const [previewCV, setPreviewCV] = useState<FilaImportada<FilaCostoVariable>[] | null>(null)
+
   const CATS_CF = [...CATS_CF_BASE, ...catPersonalizadas]
   const coloresCat: Record<string,string> = {
     '👥 Personal Operativo':T.blue,'🏢 Gastos Administrativos':T.muted,
@@ -362,6 +369,42 @@ export default function CostosPage() {
   async function deleteCV(id:string) {
     if (!confirm('¿Eliminar?')) return
     await supabase.from('costos_variables').update({activo:false}).eq('id',id); loadData()
+  }
+
+  async function importarLote(tabla:string, filas:Record<string,unknown>[]) {
+    let ok = 0
+    for (let i=0;i<filas.length;i+=100) {
+      const lote = filas.slice(i,i+100)
+      const {error} = await supabase.from(tabla).insert(lote)
+      if (!error) ok += lote.length
+    }
+    return ok
+  }
+
+  async function confirmarImportCF() {
+    if (!previewCF) return
+    const validas = previewCF.filter(f=>f.valido)
+    const filas = validas.map(f=>({...f.datos, tenant_id:tenantId, activo:true, pef_cat:'no_clasificado', tipo_registro:'historico'}))
+    const ok = await importarLote('costos_fijos', filas)
+    await supabase.from('uploads').insert({
+      tenant_id:tenantId, tipo:'plantilla_costos_fijos', nombre_archivo:configCostosFijos.nombreArchivo,
+      registros_total:previewCF.length, registros_ok:ok, registros_error:previewCF.length-ok,
+      estado: ok===previewCF.length ? 'completado' : 'error',
+    })
+    setPreviewCF(null); loadData()
+  }
+
+  async function confirmarImportCV() {
+    if (!previewCV) return
+    const validas = previewCV.filter(f=>f.valido)
+    const filas = validas.map(f=>({...f.datos, tenant_id:tenantId, activo:true, pef_cat:'no_clasificado'}))
+    const ok = await importarLote('costos_variables', filas)
+    await supabase.from('uploads').insert({
+      tenant_id:tenantId, tipo:'plantilla_costos_variables', nombre_archivo:configCostosVariables.nombreArchivo,
+      registros_total:previewCV.length, registros_ok:ok, registros_error:previewCV.length-ok,
+      estado: ok===previewCV.length ? 'completado' : 'error',
+    })
+    setPreviewCV(null); loadData()
   }
 
   async function saveTesteo(items:{concepto:string;valor:number}[], productoId:string, pef:string) {
@@ -600,7 +643,8 @@ export default function CostosPage() {
                 </button>
               )}
             </div>
-            <div style={{display:'flex',gap:'8px'}}>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              <BotonesPlantilla config={configCostosFijos} onArchivoValidado={setPreviewCF} theme={T} />
               <button onClick={()=>setShowTesteo(true)}
                 style={{padding:'8px 14px',background:`${T.yellow}15`,border:`1px solid ${T.yellow}40`,borderRadius:'8px',color:T.yellow,cursor:'pointer',fontSize:'12px',fontWeight:'600'}}>
                 🧪 Agregar Testeo
@@ -611,6 +655,7 @@ export default function CostosPage() {
               </button>
             </div>
           </div>
+          {previewCF && <CargaMasivaModal filas={previewCF} columnas={configCostosFijos.columnas} onConfirm={confirmarImportCF} onClose={()=>setPreviewCF(null)} theme={T} />}
 
           {/* Formulario CF */}
           {showFormCF && (
@@ -729,11 +774,15 @@ export default function CostosPage() {
                 {MODELOS.map(m=><option key={m} value={m}>{m}</option>)}
               </select>
             </div>
-            <button onClick={()=>{setShowFormCV(true);setEditCV(null)}}
-              style={{padding:'8px 16px',background:T.green,border:'none',borderRadius:'8px',color:T.card,fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
-              + Agregar CV
-            </button>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              <BotonesPlantilla config={configCostosVariables} onArchivoValidado={setPreviewCV} theme={T} />
+              <button onClick={()=>{setShowFormCV(true);setEditCV(null)}}
+                style={{padding:'8px 16px',background:T.green,border:'none',borderRadius:'8px',color:T.card,fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
+                + Agregar CV
+              </button>
+            </div>
           </div>
+          {previewCV && <CargaMasivaModal filas={previewCV} columnas={configCostosVariables.columnas} onConfirm={confirmarImportCV} onClose={()=>setPreviewCV(null)} theme={T} />}
 
           {showFormCV && (
             <div style={{background:T.card2,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'16px',marginBottom:'16px'}}>

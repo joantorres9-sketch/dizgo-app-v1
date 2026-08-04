@@ -2,6 +2,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configProductos, type FilaProducto } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -51,18 +54,6 @@ interface ProductoCombo {
   costo_flete_dev: number
   costo_fulfillment: number
   cf_pedido: number
-}
-
-interface FilaPreview {
-  nombre: string
-  pvp_final: number
-  costo_proveedor: number
-  pct_publicidad: number
-  pct_devolucion: number
-  margen: number
-  estado: string
-  valido: boolean
-  error?: string
 }
 
 // ── HELPERS ───────────────────────────────────────────────
@@ -473,77 +464,6 @@ function ModalIAChat({ onClose }: { onClose: () => void }) {
             style={{ padding: '8px 14px', background: T.accent, border: 'none', borderRadius: '7px', color: T.card, fontWeight: '700', cursor: 'pointer', fontSize: '12px', flexShrink: 0 }}
           >
             Enviar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── MODAL PREVIEW CARGA MASIVA ────────────────────────────
-function ModalPreview({
-  filas, onConfirm, onClose,
-}: {
-  filas: FilaPreview[]
-  onConfirm: () => void
-  onClose: () => void
-}) {
-  const validas = filas.filter((f) => f.valido).length
-  const invalidas = filas.filter((f) => !f.valido).length
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '14px', width: 'min(760px,100%)', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-          <div>
-            <div style={{ fontSize: '14px', fontWeight: '700', color: T.text }}>👁️ Vista previa — Carga masiva</div>
-            <div style={{ fontSize: '11px', color: T.muted, marginTop: '2px' }}>
-              {filas.length} filas · <span style={{ color: T.green }}>{validas} válidas</span> · <span style={{ color: T.red }}>{invalidas} con error</span>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: '18px' }}>✕</button>
-        </div>
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#060E1C', position: 'sticky', top: 0 }}>
-                {['#', 'Nombre', 'PVP', 'Costo', '% Pub', '% Dev', 'Margen', 'Estado', '✓'].map((h) => (
-                  <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', color: T.muted, borderBottom: `1px solid ${T.border}`, whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map((f, i) => {
-                const s = getSem(f.margen)
-                return (
-                  <tr key={i} style={{ borderBottom: `1px solid ${T.border}`, background: !f.valido ? `${T.red}08` : i % 2 === 0 ? 'transparent' : '#080F1C' }}>
-                    <td style={{ padding: '7px 12px', fontSize: '11px', color: T.muted }}>{i + 1}</td>
-                    <td style={{ padding: '7px 12px', fontSize: '12px', color: f.valido ? T.text : T.red, maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nombre || '—'}</td>
-                    <td style={{ padding: '7px 12px', fontSize: '12px', color: T.text }}>{fmt(f.pvp_final)}</td>
-                    <td style={{ padding: '7px 12px', fontSize: '12px', color: T.text }}>{fmt(f.costo_proveedor)}</td>
-                    <td style={{ padding: '7px 12px', fontSize: '12px', color: T.text }}>{f.pct_publicidad}%</td>
-                    <td style={{ padding: '7px 12px', fontSize: '12px', color: T.text }}>{f.pct_devolucion}%</td>
-                    <td style={{ padding: '7px 12px', fontSize: '12px', fontWeight: '700', color: s.color }}>{f.margen > 0 ? `${f.margen.toFixed(1)}%` : '--'}</td>
-                    <td style={{ padding: '7px 12px' }}>
-                      <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: `${T.muted}20`, color: T.muted }}>{f.estado}</span>
-                    </td>
-                    <td style={{ padding: '7px 12px', textAlign: 'center' }}>
-                      {f.valido ? <span style={{ color: T.green }}>✓</span> : <span style={{ color: T.red }} title={f.error}>✗</span>}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div style={{ padding: '14px 20px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ flex: 1, fontSize: '12px', color: T.muted }}>Se importarán solo las {validas} filas válidas</div>
-          <button onClick={onClose} style={{ padding: '10px 16px', background: T.card2, border: `1px solid ${T.border}`, borderRadius: '8px', color: T.muted, cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
-          <button
-            onClick={onConfirm}
-            disabled={validas === 0}
-            style={{ padding: '10px 20px', background: validas > 0 ? T.accent : T.border, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: validas > 0 ? 'pointer' : 'not-allowed', fontSize: '13px' }}
-          >
-            ✅ Importar {validas} productos
           </button>
         </div>
       </div>
@@ -1010,10 +930,9 @@ export default function ProductosPage() {
   const [editData, setEditData] = useState<Producto | null>(null)
   const [showResumen, setShowResumen] = useState<Producto | null>(null)
   const [showIA, setShowIA] = useState(false)
-  const [preview, setPreview] = useState<FilaPreview[] | null>(null)
+  const [preview, setPreview] = useState<FilaImportada<FilaProducto>[] | null>(null)
   const [filtro, setFiltro] = useState('todos')
   const [buscar, setBuscar] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
 
   async function loadData() {
     setLoading(true)
@@ -1039,45 +958,19 @@ export default function ProductosPage() {
     loadData()
   }
 
-  async function procesarMasiva(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const XLSX = await import('xlsx')
-      const buf = await file.arrayBuffer()
-      const wb = XLSX.read(buf)
-      const ws = wb.Sheets['Productos'] || wb.Sheets[wb.SheetNames[0]]
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][]
-      const headers = rows[0] as string[]
-      const filas: FilaPreview[] = rows.slice(1).filter((r) => (r as unknown[]).some(Boolean)).map((row) => {
-        const r = row as unknown[]
-        const get = (col: string) => {
-          const i = headers.findIndex((h) => h?.toLowerCase().includes(col.toLowerCase()))
-          return i >= 0 ? r[i] : undefined
-        }
-        const nombre = String(get('nombre') || '').toUpperCase().trim()
-        const pvp = parseFloat(String(get('pvp') || get('precio') || 0)) || 0
-        const costo = parseFloat(String(get('costo') || get('proveedor') || 0)) || 0
-        const pct_pub = parseFloat(String(get('public') || 20)) || 20
-        const pct_dev = parseFloat(String(get('devol') || 20)) || 20
-        const margen = pvp > 0 ? calcMargen(pvp, { cp: costo, cf: 0, cfd: 0, cfu: 0, cfp: 0 }, { dev: pct_dev, pub: pct_pub, dp: 5, com: 3, pas: 0, pasc: 0, cv: 2, ca: 1 }) : 0
-        const valido = !!nombre && pvp > 0
-        return { nombre, pvp_final: pvp, costo_proveedor: costo, pct_publicidad: pct_pub, pct_devolucion: pct_dev, margen, estado: 'borrador', valido, error: !nombre ? 'Sin nombre' : !pvp ? 'Sin PVP' : undefined }
-      })
-      setPreview(filas)
-    } catch {
-      alert('Error al leer el archivo. Usa la plantilla de DIZGO.')
-    }
-    if (fileRef.current) fileRef.current.value = ''
-  }
-
   async function confirmarMasiva() {
     if (!preview) return
-    const validas = preview.filter((f) => f.valido)
+    const validas = preview.filter((f) => f.valido).map((f) => f.datos as FilaProducto)
+    let ok = 0
     for (let i = 0; i < validas.length; i++) {
       const f = validas[i]
       const sku = generarSKU(f.nombre, 'producto', productos.length + i + 1)
-      await supabase.from('productos').insert({
+      const margen = calcMargen(
+        f.pvp_final,
+        { cp: f.costo_proveedor, cf: 0, cfd: 0, cfu: 0, cfp: 0 },
+        { dev: f.pct_devolucion, pub: f.pct_publicidad, dp: 5, com: 3, pas: 0, pasc: 0, cv: 2, ca: 1 }
+      )
+      const { error } = await supabase.from('productos').insert({
         nombre: f.nombre, tipo: 'producto', estado: f.estado,
         pvp_final: f.pvp_final, costo_proveedor: f.costo_proveedor,
         pct_publicidad: f.pct_publicidad, pct_devolucion: f.pct_devolucion,
@@ -1085,9 +978,15 @@ export default function ProductosPage() {
         pct_com_pasarela: 0, pct_com_ventas: 2, pct_com_admin: 1,
         sku, tenant_id: tenantId, ciclo_vida: 'borrador',
         modelo_negocio: 'dropshipping',
-        pvp_historial: [{ fecha: new Date().toISOString(), pvp: f.pvp_final, margen: f.margen, motivo: 'carga_masiva' }],
+        pvp_historial: [{ fecha: new Date().toISOString(), pvp: f.pvp_final, margen, motivo: 'carga_masiva' }],
       })
+      if (!error) ok++
     }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_productos', nombre_archivo: configProductos.nombreArchivo,
+      registros_total: preview.length, registros_ok: ok, registros_error: preview.length - ok,
+      estado: ok === preview.length ? 'completado' : 'error',
+    })
     setPreview(null)
     loadData()
   }
@@ -1137,7 +1036,7 @@ export default function ProductosPage() {
         />
       )}
       {showIA && <ModalIAChat onClose={() => setShowIA(false)} />}
-      {preview && <ModalPreview filas={preview} onConfirm={confirmarMasiva} onClose={() => setPreview(null)} />}
+      {preview && <CargaMasivaModal filas={preview} columnas={configProductos.columnas} onConfirm={confirmarMasiva} onClose={() => setPreview(null)} theme={T} />}
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
@@ -1152,13 +1051,7 @@ export default function ProductosPage() {
           >
             🤖 IA Catálogo
           </button>
-          <input ref={fileRef} type="file" accept=".xlsx,.csv" style={{ display: 'none' }} onChange={procesarMasiva} />
-          <button
-            onClick={() => fileRef.current?.click()}
-            style={{ padding: '8px 14px', background: T.card, border: `1px solid ${T.border}`, borderRadius: '8px', color: T.muted, cursor: 'pointer', fontSize: '12px' }}
-          >
-            📤 Carga masiva
-          </button>
+          <BotonesPlantilla config={configProductos} onArchivoValidado={setPreview} theme={T} />
           <button
             onClick={() => { setEditData(null); setShowModal(true) }}
             style={{ padding: '8px 18px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}

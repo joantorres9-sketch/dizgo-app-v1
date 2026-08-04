@@ -1,6 +1,9 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configMetas, type FilaMeta } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
 
 // ── TEMA ──────────────────────────────────────────────────────
 const T = {
@@ -72,6 +75,7 @@ export default function MetasPage() {
   const [tenantId, setTenantId] = useState('')
   const [loading,  setLoading]  = useState(true)
   const [guardando,setGuardando]= useState(false)
+  const [previewMetas, setPreviewMetas] = useState<FilaImportada<FilaMeta>[] | null>(null)
   const [tab,      setTab]      = useState<Tab>('hoy')
   const [metas,    setMetas]    = useState<MetasMes>(META_DEFAULT)
   const [modoMedicion, setModoMedicion] = useState<'pe_minimo'|'meta'|'optimista'>('meta')
@@ -278,6 +282,25 @@ export default function MetasPage() {
     setGuardando(false)
   }
 
+  async function confirmarImportMetas() {
+    if (!previewMetas || !tenantId) return
+    const validas = previewMetas.filter(f => f.valido)
+    const filas = validas.map(f => ({ ...f.datos, tenant_id: tenantId }))
+    let ok = 0
+    for (let i = 0; i < filas.length; i += 100) {
+      const lote = filas.slice(i, i + 100)
+      const { error } = await supabase.from('metas').upsert(lote, { onConflict: 'tenant_id,periodo' })
+      if (!error) ok += lote.length
+    }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_metas', nombre_archivo: configMetas.nombreArchivo,
+      registros_total: previewMetas.length, registros_ok: ok, registros_error: previewMetas.length - ok,
+      estado: ok === previewMetas.length ? 'completado' : 'error',
+    })
+    setPreviewMetas(null)
+    loadData()
+  }
+
   // ── ISO ACTUAL ────────────────────────────────────────────
   const isoActual = calcISO(tcReal, tdReal, teReal, devReal, margenReal)
   const isoColor  = colorISO(isoActual)
@@ -351,8 +374,12 @@ export default function MetasPage() {
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🎯 Metas & Proyecciones</h1>
           <p style={{ fontSize:'12px', color:T.muted }}>El Oráculo de Eficiencia · Día {diaActual}/{diasMes} · {diasRestantes} días restantes</p>
         </div>
-        {guardando && <span style={{ fontSize:'11px', color:T.muted }}>Guardando...</span>}
+        <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
+          {guardando && <span style={{ fontSize:'11px', color:T.muted }}>Guardando...</span>}
+          <BotonesPlantilla config={configMetas} onArchivoValidado={setPreviewMetas} theme={T} />
+        </div>
       </div>
+      {previewMetas && <CargaMasivaModal filas={previewMetas} columnas={configMetas.columnas} onConfirm={confirmarImportMetas} onClose={()=>setPreviewMetas(null)} theme={T} />}
 
       {/* ── ISO — META MAESTRA ── */}
       <div style={{ ...s, padding:'18px 22px', marginBottom:'18px', border:`2px solid ${isoColor}` }}>
