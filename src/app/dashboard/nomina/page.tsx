@@ -4,6 +4,9 @@ import { createClient } from '@/lib/supabase/client'
 import { PAISES, buscarPaises, paisPorCodigo, divisionesPorPais, etiquetaDivision, configRHPorPais } from '@/lib/paises'
 import * as XLSX from 'xlsx'
 import { construirColillaPDF } from '@/lib/colillaPdf'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configColaboradores, type FilaColaborador } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -1628,6 +1631,7 @@ export default function NominaPage() {
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [colaboradores, setColaboradores] = useState<Colaborador[]>([])
+  const [previewColaboradores, setPreviewColaboradores] = useState<FilaImportada<FilaColaborador>[] | null>(null)
   const [procesos, setProcesos] = useState<Proceso[]>([])
   const [cargos, setCargos] = useState<Cargo[]>([])
   const [indicadores, setIndicadores] = useState<Indicador[]>([])
@@ -1832,6 +1836,36 @@ export default function NominaPage() {
       .select('id').single()
     await loadData()
     return err ? null : data?.id || null
+  }
+
+  async function confirmarImportColaboradores() {
+    if (!previewColaboradores || !tenantId) return
+    const mapaCargos = new Map(cargos.map(c => [c.nombre.toLowerCase().trim(), c.id]))
+    const filas: Record<string, unknown>[] = []
+    const sinCargo: string[] = []
+    for (const f of previewColaboradores) {
+      if (!f.valido) continue
+      const d = f.datos
+      const cargoId = mapaCargos.get((d.cargo || '').toLowerCase().trim())
+      if (!cargoId) { sinCargo.push(`fila ${f.fila} (${d.cargo})`); continue }
+      filas.push({ ...d, cargo_id: cargoId, tenant_id: tenantId, activo: true })
+    }
+    let ok = 0
+    for (let i = 0; i < filas.length; i += 100) {
+      const lote = filas.slice(i, i + 100)
+      const { error } = await supabase.from('colaboradores').insert(lote)
+      if (!error) ok += lote.length
+    }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_colaboradores', nombre_archivo: configColaboradores.nombreArchivo,
+      registros_total: previewColaboradores.length, registros_ok: ok,
+      registros_error: previewColaboradores.length - ok,
+      estado: ok === previewColaboradores.length ? 'completado' : 'error',
+      notas: sinCargo.length ? `Cargo no encontrado: ${sinCargo.slice(0, 20).join(', ')}` : null,
+    })
+    setPreviewColaboradores(null)
+    if (sinCargo.length) alert(`${ok} colaboradores importados. ${sinCargo.length} filas no se importaron por cargo no encontrado — créalos primero en Organigrama y vuelve a intentar esas filas.`)
+    loadData()
   }
 
   async function eliminarColaborador(id: string) {
@@ -2055,6 +2089,7 @@ export default function NominaPage() {
           <p style={{ fontSize:'12px', color:T.muted }}>Tu equipo es tu mayor activo — gestiona con precisión</p>
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          <BotonesPlantilla config={configColaboradores} onArchivoValidado={setPreviewColaboradores} theme={T} />
           <button onClick={copiarLinkRegistro}
             style={{ padding:'9px 16px', background:`${T.blue}15`, border:`1px solid ${T.blue}40`, borderRadius:'9px', color:T.blue, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
             🔗 Copiar link de registro
@@ -2065,6 +2100,7 @@ export default function NominaPage() {
           </button>
         </div>
       </div>
+      {previewColaboradores && <CargaMasivaModal filas={previewColaboradores} columnas={configColaboradores.columnas} onConfirm={confirmarImportColaboradores} onClose={()=>setPreviewColaboradores(null)} theme={T} />}
 
       {/* Alertas contratos */}
       {alertasVencimiento.length > 0 && (

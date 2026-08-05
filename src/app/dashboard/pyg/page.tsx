@@ -2,6 +2,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import * as XLSX from 'xlsx'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configLibroCaja, type FilaLibroCaja } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
+
+// Paleta local de este archivo (pyg/page.tsx no usa un objeto T central, colorea inline) --
+// se arma aquí solo para pasarle theme a los componentes compartidos de carga masiva.
+const T_LIBRO = { bg:'#0A0D14', card:'#111520', card2:'#0A0D14', accent:'#F5A623', text:'#E8EDF5', muted:'#5A6478', border:'rgba(255,255,255,0.1)', green:'#2DD4A0', red:'#F05C5C' }
 
 type Producto = {
   id:string; nombre:string; pvp_final:number; costo_proveedor:number; costo_flete:number
@@ -56,6 +63,7 @@ export default function PYGPage() {
   const [nuevaCxp, setNuevaCxp] = useState({ tercero:'', tipo_tercero:'proveedor', concepto:'', valor:0, fecha_vencimiento:'', categoria_flujo:'operativo' })
   // Form movimiento manual caja
   const [nuevoMov, setNuevoMov] = useState({ concepto:'', tipo:'salida', valor:0, categoria_flujo:'operativo' })
+  const [previewLibroCaja, setPreviewLibroCaja] = useState<FilaImportada<FilaLibroCaja>[] | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -219,6 +227,25 @@ export default function PYGPage() {
     }).select().single()
     if (data) setMovimientosCaja(prev => [data as MovCaja, ...prev])
     setNuevoMov({ concepto:'', tipo:'salida', valor:0, categoria_flujo:'operativo' })
+  }
+
+  async function confirmarImportLibroCaja() {
+    if (!previewLibroCaja || !tenantId) return
+    const validas = previewLibroCaja.filter(f => f.valido).map(f => f.datos)
+    const filas = validas.map(f => ({ ...f, tenant_id: tenantId, origen: 'excel_upload' }))
+    let ok = 0
+    for (let i = 0; i < filas.length; i += 100) {
+      const lote = filas.slice(i, i + 100)
+      const { error } = await supabase.from('libro_caja').insert(lote)
+      if (!error) ok += lote.length
+    }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_libro_caja', nombre_archivo: configLibroCaja.nombreArchivo,
+      registros_total: previewLibroCaja.length, registros_ok: ok, registros_error: previewLibroCaja.length - ok,
+      estado: ok === previewLibroCaja.length ? 'completado' : 'error',
+    })
+    setPreviewLibroCaja(null)
+    loadData()
   }
 
   function exportarExcel() {
@@ -620,7 +647,12 @@ export default function PYGPage() {
       {tab === 'libro_caja' && (
         <div className="dz-grid-side" style={{ ['--side-w' as any]:'320px', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📒 Libro de Caja — últimos 30 días</div>
+            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px' }}>
+              <span style={{ fontWeight:'700' }}>📒 Libro de Caja — últimos 30 días</span>
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                <BotonesPlantilla config={configLibroCaja} onArchivoValidado={setPreviewLibroCaja} theme={T_LIBRO} />
+              </div>
+            </div>
             {movimientosCaja.length === 0 ? (
               <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin movimientos registrados</div>
             ) : movimientosCaja.map(m => (
@@ -678,6 +710,7 @@ export default function PYGPage() {
           </div>
         </div>
       )}
+      {previewLibroCaja && <CargaMasivaModal filas={previewLibroCaja} columnas={configLibroCaja.columnas} onConfirm={confirmarImportLibroCaja} onClose={()=>setPreviewLibroCaja(null)} theme={T_LIBRO} />}
     </div>
   )
 }

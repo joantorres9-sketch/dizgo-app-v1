@@ -1,6 +1,9 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { BotonesPlantilla, CargaMasivaModal } from '@/components/CargaMasivaModal'
+import { configPauta, type FilaPauta } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
 
 const T = {
   bg:'#0D1E35', card:'#111520', card2:'#0A0D14',
@@ -39,15 +42,18 @@ function parsearCSVMeta(texto: string): Partial<Registro>[] {
     }
     return -1
   }
-  const iCampana = idx('nombre de la campaña','campaign name','campaña')
-  const iInversion = idx('importe gastado','amount spent','gasto')
-  const iAlcance = idx('alcance','reach')
-  const iClics = idx('clics en el enlace','link clicks','clics')
+  // Alias de Meta (español/inglés) y TikTok Ads Manager -- Meta/TikTok pueden renombrar
+  // columnas en sus exports, por eso cada campo prueba varios nombres posibles en vez de
+  // depender de una cabecera fija.
+  const iCampana = idx('nombre de la campaña','campaign name','campaña','campaign')
+  const iInversion = idx('importe gastado','amount spent','gasto','cost')
+  const iAlcance = idx('alcance','reach','impresiones','impressions')
+  const iClics = idx('clics en el enlace','link clicks','clics','clicks')
   const iCtr = idx('ctr')
   const iCpm = idx('cpm')
   const iCpc = idx('cpc')
-  const iResultados = idx('resultados','results')
-  const iCosteResultado = idx('costo por resultado','cost per result')
+  const iResultados = idx('resultados','results','conversions','conversiones')
+  const iCosteResultado = idx('costo por resultado','cost per result','cost per conversion','costo por conversión')
   const iFecha = idx('día','day','fecha','date')
 
   return lineas.slice(1).map(linea => {
@@ -73,6 +79,7 @@ export default function PautaPage() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploadPlataforma, setUploadPlataforma] = useState<'META'|'TIKTOK'>('META')
+  const [previewPauta, setPreviewPauta] = useState<FilaImportada<FilaPauta>[] | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -155,6 +162,40 @@ export default function PautaPage() {
     )
     if (error) { setUploadMsg(`❌ Error: ${error.message}`); return }
     setUploadMsg(`✅ ${parsed.length} registros cargados correctamente`)
+    await loadData()
+  }
+
+  async function confirmarImportPauta() {
+    if (!previewPauta || !tenantId) return
+    const validas = previewPauta.filter(f => f.valido)
+    const filas = validas.map(f => {
+      const d = f.datos
+      const inversion = Number(d.inversion) || 0
+      const impresiones = Number(d.impresiones) || 0
+      const clics = Number(d.clics) || 0
+      const resultados = Number(d.resultados) || 0
+      return {
+        tenant_id: tenantId, fecha: d.fecha, plataforma: d.plataforma, campana: d.campana,
+        inversion, impresiones, clics, resultados,
+        ctr: impresiones > 0 ? Math.round(clics/impresiones*10000)/100 : 0,
+        cpm: impresiones > 0 ? Math.round(inversion/impresiones*1000) : 0,
+        cpc: clics > 0 ? Math.round(inversion/clics) : 0,
+        cpa: resultados > 0 ? Math.round(inversion/resultados) : 0,
+        fuente: 'excel_upload',
+      }
+    })
+    let ok = 0
+    for (let i = 0; i < filas.length; i += 100) {
+      const lote = filas.slice(i, i+100)
+      const { error } = await supabase.from('pauta').insert(lote)
+      if (!error) ok += lote.length
+    }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_pauta', nombre_archivo: configPauta.nombreArchivo,
+      registros_total: previewPauta.length, registros_ok: ok, registros_error: previewPauta.length - ok,
+      estado: ok === previewPauta.length ? 'completado' : 'error',
+    })
+    setPreviewPauta(null)
     await loadData()
   }
 
@@ -473,6 +514,17 @@ export default function PautaPage() {
                 {uploadMsg}
               </div>
             )}
+          </div>
+
+          <div style={{ ...s, padding:'20px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'10px' }}>📄 CARGA MASIVA — PLANTILLA MANUAL DIZGO</div>
+            <div style={{ fontSize:'12px', color:T.muted, marginBottom:'14px', lineHeight:'1.6' }}>
+              El CSV de arriba sigue siendo lo recomendado (siempre calza con lo que exporta Meta/TikTok). Usa esta plantilla solo para digitar histórico manual o consolidar datos de otra fuente.
+            </div>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              <BotonesPlantilla config={configPauta} onArchivoValidado={setPreviewPauta} theme={T} />
+            </div>
+            {previewPauta && <CargaMasivaModal filas={previewPauta} columnas={configPauta.columnas} onConfirm={confirmarImportPauta} onClose={()=>setPreviewPauta(null)} theme={T} />}
           </div>
 
           <div style={{ ...s, padding:'20px' }}>

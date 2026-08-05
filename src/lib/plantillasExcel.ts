@@ -44,7 +44,8 @@ function parsePorTipo(raw: unknown, tipo: TipoCol): unknown {
     case 'fecha': {
       const iso = /^\d{4}-\d{2}-\d{2}/.exec(s)
       if (iso) return s.slice(0, 10)
-      const dmy = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(s)
+      // Acepta DD/MM/AAAA y DD-MM-AAAA (Dropi exporta con guiones, DIZGO con slash)
+      const dmy = /^(\d{1,2})[/-](\d{1,2})[/-](\d{4})(?:\s|$)/.exec(s)
       if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`
       // Excel a veces entrega fechas como número de serie
       if (typeof raw === 'number') {

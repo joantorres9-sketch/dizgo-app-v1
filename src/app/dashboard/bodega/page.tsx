@@ -1,6 +1,14 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import * as XLSX from 'xlsx'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configInventarioInicial, configInventarioCompra, type FilaInventario } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
+
+// Paleta local (bodega/page.tsx colorea inline, sin objeto T central) -- solo para pasarle
+// theme a los componentes compartidos de carga masiva.
+const T_BODEGA = { bg:'#0A0D14', card:'#111520', card2:'#0A0D14', accent:'#F5A623', text:'#E8EDF5', muted:'#5A6478', border:'rgba(255,255,255,0.1)', green:'#2DD4A0', red:'#F05C5C' }
 
 type Bodega = { id:string; nombre:string; tipo:string; pais_codigo:string; ciudad:string; orden_flujo:number; activa:boolean }
 type Inventario = { id:string; producto_id:string; bodega_id:string; cantidad_disponible:number; cantidad_reservada:number; cantidad_en_transito_nacionaliz:number; cantidad_dañada:number; stock_minimo:number }
@@ -50,6 +58,7 @@ export default function BodegaPage() {
   const [showNuevaBodega, setShowNuevaBodega] = useState(false)
   const [nuevaBodega, setNuevaBodega] = useState({ nombre:'', tipo:'ciudad', ciudad:'', pais_codigo:'COL' })
   const [bodegaSel, setBodegaSel] = useState<string|null>(null)
+  const [previewInventario, setPreviewInventario] = useState<{ filas: FilaImportada<FilaInventario>[]; tipoCarga:'carga_inicial'|'compra' } | null>(null)
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -99,6 +108,75 @@ export default function BodegaPage() {
     setShowNuevaBodega(false)
   }
 
+  async function confirmarImportInventario() {
+    if (!previewInventario || !tenantId) return
+    const { filas: preview, tipoCarga } = previewInventario
+    const mapaProductos = new Map(productos.map(p => [p.nombre.toLowerCase().trim(), p.id]))
+    const mapaBodegas = new Map(bodegas.map(b => [b.nombre.toLowerCase().trim(), b.id]))
+    const mapaInventario = new Map(inventario.map(i => [`${i.producto_id}_${i.bodega_id}`, i]))
+
+    const noEncontrados: string[] = []
+    const movimientos: Record<string, unknown>[] = []
+    let ok = 0
+
+    for (const f of preview) {
+      if (!f.valido) continue
+      const d = f.datos
+      const productoId = mapaProductos.get((d.producto || '').toLowerCase().trim())
+      const bodegaId = mapaBodegas.get((d.bodega || '').toLowerCase().trim())
+      if (!productoId) { noEncontrados.push(`fila ${f.fila}: producto "${d.producto}" no existe`); continue }
+      if (!bodegaId) { noEncontrados.push(`fila ${f.fila}: bodega "${d.bodega}" no existe (bodegas válidas: ${bodegas.map(b=>b.nombre).join(', ')})`); continue }
+
+      const cantidad = Number(d.cantidad) || 0
+      const key = `${productoId}_${bodegaId}`
+      const existente = mapaInventario.get(key)
+      if (existente) {
+        await supabase.from('inventario').update({ cantidad_disponible: existente.cantidad_disponible + cantidad }).eq('id', existente.id)
+        mapaInventario.set(key, { ...existente, cantidad_disponible: existente.cantidad_disponible + cantidad })
+      } else {
+        const { data } = await supabase.from('inventario').insert({
+          tenant_id: tenantId, producto_id: productoId, bodega_id: bodegaId, cantidad_disponible: cantidad,
+        }).select().single()
+        if (data) mapaInventario.set(key, data as Inventario)
+      }
+      movimientos.push({
+        tenant_id: tenantId, producto_id: productoId, bodega_id_destino: bodegaId,
+        tipo: tipoCarga, cantidad, costo_unitario: d.costo_unitario || 0,
+        motivo: tipoCarga === 'carga_inicial' ? 'Carga de inventario inicial' : 'Compra registrada por carga masiva',
+      })
+      ok++
+    }
+
+    if (movimientos.length) {
+      for (let i = 0; i < movimientos.length; i += 100) {
+        await supabase.from('movimientos_inventario').insert(movimientos.slice(i, i + 100))
+      }
+    }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: `plantilla_${tipoCarga === 'carga_inicial' ? 'inventario_inicial' : 'inventario_compra'}`,
+      nombre_archivo: (tipoCarga === 'carga_inicial' ? configInventarioInicial : configInventarioCompra).nombreArchivo,
+      registros_total: preview.length, registros_ok: ok, registros_error: preview.length - ok,
+      estado: ok === preview.length ? 'completado' : 'error',
+      notas: noEncontrados.length ? noEncontrados.slice(0, 20).join(' | ') : null,
+    })
+    setPreviewInventario(null)
+    if (noEncontrados.length) alert(`${ok} filas cargadas. ${noEncontrados.length} filas no se cargaron:\n\n${noEncontrados.slice(0,10).join('\n')}`)
+    loadData()
+  }
+
+  function exportarInventario() {
+    const filas = inventario.map(i => ({
+      Producto: nombreProd(i.producto_id), Bodega: nombreBod(i.bodega_id),
+      'Cantidad disponible': i.cantidad_disponible, 'Cantidad reservada': i.cantidad_reservada,
+      'En tránsito nacionalización': i.cantidad_en_transito_nacionaliz, 'Cantidad dañada': i.cantidad_dañada,
+      'Stock mínimo': i.stock_minimo,
+    }))
+    const ws = XLSX.utils.json_to_sheet(filas)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
+    XLSX.writeFile(wb, `inventario_${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
   async function nacionalizarStock(invId:string) {
     const item = inventario.find(i=>i.id===invId)
     if (!item || item.cantidad_en_transito_nacionaliz<=0) return
@@ -134,8 +212,35 @@ export default function BodegaPage() {
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🏭 Bodega & Inventario</h1>
           <p style={{ fontSize:'13px', color:'#8B96A8' }}>Física + Virtual · Importación · Dropshipping · HACER</p>
         </div>
-        <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
+        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+          <button onClick={exportarInventario} style={{ padding:'9px 16px', background:'transparent', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'9px', color:'#8B96A8', fontWeight:'600', cursor:'pointer', fontSize:'12px' }}>📥 Exportar inventario</button>
+          <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
+        </div>
       </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'10px', marginBottom:'16px' }}>
+        <div style={{ ...s, padding:'12px 14px' }}>
+          <div style={{ fontSize:'11px', fontWeight:'700', color:'#F5A623', marginBottom:'8px' }}>📦 Carga masiva — Inventario inicial</div>
+          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+            <BotonesPlantilla config={configInventarioInicial} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'carga_inicial' })} theme={T_BODEGA} />
+          </div>
+        </div>
+        <div style={{ ...s, padding:'12px 14px' }}>
+          <div style={{ fontSize:'11px', fontWeight:'700', color:'#9B6BFF', marginBottom:'8px' }}>🛒 Carga masiva — Compras / movimientos posteriores</div>
+          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+            <BotonesPlantilla config={configInventarioCompra} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'compra' })} theme={T_BODEGA} />
+          </div>
+        </div>
+      </div>
+      {previewInventario && (
+        <CargaMasivaModal
+          filas={previewInventario.filas}
+          columnas={(previewInventario.tipoCarga === 'carga_inicial' ? configInventarioInicial : configInventarioCompra).columnas}
+          onConfirm={confirmarImportInventario}
+          onClose={()=>setPreviewInventario(null)}
+          theme={T_BODEGA}
+        />
+      )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[

@@ -1,6 +1,9 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configInversionActivos, type FilaInversionActivo } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
 
 // ── TEMA ──────────────────────────────────────────────────────
 const T = {
@@ -16,8 +19,8 @@ type Tab = 'inversion' | 'capital_propio' | 'oportunidad' | 'credito' | 'roi'
 type Dictamen = 'verde' | 'amarillo' | 'rojo' | 'pendiente'
 
 interface Activo {
-  id: string; concepto: string; categoria: string
-  valor: number; vida_util_meses: number; activo: boolean; notas: string
+  id: string; nombre: string; tipo: string
+  valor: number; vida_util_meses: number; fecha_compra?: string; activo: boolean
 }
 interface Capital {
   id: string; concepto: string; categoria: string
@@ -72,12 +75,12 @@ function calcCuotaFija(monto: number, tasaMensual: number, plazo: number): numbe
 
 // ── ACTIVOS DEFAULT ───────────────────────────────────────────
 const ACTIVOS_DEFAULT: Omit<Activo,'id'>[] = [
-  { concepto:'Computador / Portátil', categoria:'hardware',   valor:2500000, vida_util_meses:36, activo:true,  notas:'' },
-  { concepto:'Celular',               categoria:'hardware',   valor:1200000, vida_util_meses:24, activo:true,  notas:'' },
-  { concepto:'Cámara para fotos/video',categoria:'hardware',  valor:800000,  vida_util_meses:36, activo:false, notas:'' },
-  { concepto:'Ring Light / Iluminación',categoria:'hardware', valor:150000,  vida_util_meses:24, activo:false, notas:'' },
-  { concepto:'Escritorio y silla',    categoria:'mobiliario', valor:600000,  vida_util_meses:60, activo:true,  notas:'' },
-  { concepto:'Router / Red',          categoria:'hardware',   valor:200000,  vida_util_meses:36, activo:true,  notas:'' },
+  { nombre:'Computador / Portátil', tipo:'hardware',   valor:2500000, vida_util_meses:36, activo:true  },
+  { nombre:'Celular',               tipo:'hardware',   valor:1200000, vida_util_meses:24, activo:true  },
+  { nombre:'Cámara para fotos/video',tipo:'hardware',  valor:800000,  vida_util_meses:36, activo:false },
+  { nombre:'Ring Light / Iluminación',tipo:'hardware', valor:150000,  vida_util_meses:24, activo:false },
+  { nombre:'Escritorio y silla',    tipo:'mobiliario', valor:600000,  vida_util_meses:60, activo:true  },
+  { nombre:'Router / Red',          tipo:'hardware',   valor:200000,  vida_util_meses:36, activo:true  },
 ]
 const CAPITAL_DEFAULT: Omit<Capital,'id'>[] = [
   { concepto:'Capital de trabajo inicial',     categoria:'capital_trabajo', valor:3000000, tipo:'propio', activo:true  },
@@ -132,6 +135,7 @@ export default function InversionPage() {
 
   // Nuevo activo / capital
   const [newActivo,  setNewActivo]  = useState({ concepto:'', valor:0, vida:36, cat:'hardware' })
+  const [previewActivos, setPreviewActivos] = useState<FilaImportada<FilaInversionActivo>[] | null>(null)
   const [newCapital, setNewCapital] = useState({ concepto:'', valor:0, cat:'capital_trabajo' })
   const [newSocio,   setNewSocio]   = useState({ nombre:'', aporte:0, pct:0, tipo:'dinero' })
 
@@ -337,12 +341,31 @@ export default function InversionPage() {
     if (!newActivo.concepto || !tenantId) return
     setGuardando(true)
     const { data } = await supabase.from('inversiones_activos').insert({
-      tenant_id: tenantId, concepto: newActivo.concepto, categoria: newActivo.cat,
+      tenant_id: tenantId, nombre: newActivo.concepto, tipo: newActivo.cat,
       valor: newActivo.valor, vida_util_meses: newActivo.vida, activo: true,
     }).select().single()
     if (data) setActivos(prev => [...prev, data as Activo])
     setNewActivo({ concepto:'', valor:0, vida:36, cat:'hardware' })
     setGuardando(false)
+  }
+
+  async function confirmarImportActivos() {
+    if (!previewActivos || !tenantId) return
+    const validas = previewActivos.filter(f => f.valido).map(f => f.datos)
+    const filas = validas.map(f => ({ ...f, tenant_id: tenantId, activo: true }))
+    let ok = 0
+    for (let i = 0; i < filas.length; i += 100) {
+      const lote = filas.slice(i, i + 100)
+      const { error } = await supabase.from('inversiones_activos').insert(lote)
+      if (!error) ok += lote.length
+    }
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_inversion_activos', nombre_archivo: configInversionActivos.nombreArchivo,
+      registros_total: previewActivos.length, registros_ok: ok, registros_error: previewActivos.length - ok,
+      estado: ok === previewActivos.length ? 'completado' : 'error',
+    })
+    setPreviewActivos(null)
+    loadData()
   }
 
   async function guardarCapital() {
@@ -541,7 +564,7 @@ export default function InversionPage() {
                     await supabase.from('inversiones_activos').update({ activo: !a.activo }).eq('id', a.id)
                   }}
                   style={{ cursor:'pointer', accentColor:T.blue }} />
-                <span style={{ flex:1, fontSize:'11px', color: a.activo ? T.text : T.muted }}>{a.concepto}</span>
+                <span style={{ flex:1, fontSize:'11px', color: a.activo ? T.text : T.muted }}>{a.nombre}</span>
                 <span style={{ fontSize:'10px', color:T.purple }}>{a.vida_util_meses}m</span>
                 <input type="number" value={Number(a.valor)}
                   onChange={e => setActivos(activos.map(x => x.id===a.id ? {...x, valor:Number(e.target.value)} : x))}
@@ -551,7 +574,12 @@ export default function InversionPage() {
 
             {/* Agregar activo */}
             <div style={{ ...s2, padding:'12px', marginTop:'12px' }}>
-              <div style={{ fontSize:'11px', color:T.muted, marginBottom:'8px' }}>+ Agregar activo</div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', flexWrap:'wrap', gap:'6px' }}>
+                <div style={{ fontSize:'11px', color:T.muted }}>+ Agregar activo</div>
+                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                  <BotonesPlantilla config={configInversionActivos} onArchivoValidado={setPreviewActivos} theme={T} />
+                </div>
+              </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 80px 60px', gap:'6px', marginBottom:'6px' }}>
                 <input placeholder="Concepto" value={newActivo.concepto}
                   onChange={e => setNewActivo(p => ({...p, concepto:e.target.value}))} style={{...inp, fontSize:'11px'}} />
@@ -565,6 +593,7 @@ export default function InversionPage() {
                 + Agregar
               </button>
             </div>
+            {previewActivos && <CargaMasivaModal filas={previewActivos} columnas={configInversionActivos.columnas} onConfirm={confirmarImportActivos} onClose={()=>setPreviewActivos(null)} theme={T} />}
 
             <div style={{ marginTop:'10px', padding:'10px 12px', ...s2, display:'flex', justifyContent:'space-between' }}>
               <div>

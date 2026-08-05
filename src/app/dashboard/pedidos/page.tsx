@@ -2,6 +2,23 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
+import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { configPedidosDropi, configPedidos, type FilaPedidoDropi, type FilaPedido } from '@/lib/plantillasConfig'
+import type { FilaImportada } from '@/lib/plantillasExcel'
+
+// Traduce el ESTATUS real de Dropi (export de Órdenes) al estado interno de DIZGO. Confirmado
+// contra un archivo de ejemplo real -- si Dropi cambia o agrega estatus nuevos, cualquiera no
+// listado aquí cae a 'ingresado' en vez de bloquear la fila.
+const ESTATUS_DROPI_A_ESTADO: Record<string, string> = {
+  'PENDIENTE CONFIRMACION': 'ingresado', 'PENDIENTE': 'ingresado',
+  'PREPARADO PARA TRANSPORTADORA': 'en_bodega', 'EN BODEGA ORIGEN': 'en_bodega',
+  'INGRESANDO DE RECOLECCION A': 'en_transito', 'INGRESANDO OPERATIVO A': 'en_transito',
+  'EN RUTA A CENTRO LOGISTICO': 'en_transito', 'EN DISTRIBUCIÓN A CLIENTE': 'en_transito',
+  'PARA RETIRO EN AGENCIA SERVIENTREGA': 'en_transito', 'EN RUTA A CONCESION': 'en_transito',
+  'INGRESANDO A': 'en_transito',
+  'CANCELADO': 'cancelado', 'RECHAZADO': 'cancelado',
+  'NOVEDAD': 'novedad', 'ENTREGADO': 'entregado', 'DEVOLUCION': 'devolucion',
+}
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -92,7 +109,7 @@ type Pedido = {
   id: string; tenant_id: string; numero_pedido: string; cliente_nombre: string
   cliente_telefono: string; cliente_ciudad: string; cliente_departamento: string
   producto_nombre: string; producto_id?: string; pvp: number; estado: string
-  origen: string; riesgo: string; cliente_tipo: string
+  origen: string; risk_score: string; cliente_tipo: string
   sla_nivel: string; horas_sin_gest: number; ia_modo: boolean; requiere_anticipo: boolean
   anticipo_estado: string; anticipo_valor: number
   dias_transito: number; zona_roja: boolean
@@ -179,7 +196,7 @@ function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=
       const {error:err} = await supabase.from('pedidos').insert({
         ...form, tenant_id:tenantId, estado:'ingresado',
         sla_nivel:'verde', horas_sin_gest:0, ia_modo:true,
-        riesgo: riesgoCalculado, cliente_tipo: tipoCliente,
+        risk_score: riesgoCalculado, cliente_tipo: tipoCliente,
         zona_roja: esZonaRoja, dias_transito: diasTransito,
         requiere_anticipo: requiereAnticipo,
         anticipo_estado: requiereAnticipo ? 'pendiente' : 'no_requerido',
@@ -403,7 +420,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
   }
 
   const estadoInfo = ESTADOS.find(e=>e.v===pedido.estado)
-  const riesgoInfo = RIESGOS.find(r=>r.v===pedido.riesgo)
+  const riesgoInfo = RIESGOS.find(r=>r.v===pedido.risk_score)
   const slaColorLocal = (n:string) => n==='verde'?T.green:n==='amarillo'?T.yellow:T.red
 
   const actionIcons: Record<string,string> = {
@@ -607,6 +624,9 @@ export default function PedidosPage() {
   const [buscar, setBuscar] = useState('')
   const [pedidoActivo, setPedidoActivo] = useState<Pedido|null>(null)
   const [showNuevo, setShowNuevo] = useState(false)
+  const [previewDropi, setPreviewDropi] = useState<FilaImportada<FilaPedidoDropi>[] | null>(null)
+  const [previewGenerico, setPreviewGenerico] = useState<FilaImportada<FilaPedido>[] | null>(null)
+  const [progresoImport, setProgresoImport] = useState<{ total: number; hechos: number } | null>(null)
 
   async function loadData() {
     setLoading(true)
@@ -650,6 +670,99 @@ export default function PedidosPage() {
 
   useEffect(()=>{ loadData() },[])
 
+  // ── Carga masiva de pedidos: lotes de 500, hasta 3 lotes en paralelo. Pensado para
+  // históricos de hasta ~20.000 filas -- se salta a propósito los efectos secundarios caros
+  // del alta manual (alertas, recálculo de riesgo/zona por fila) porque son pedidos ya
+  // resueltos en el pasado, no eventos en vivo.
+  async function insertarPedidosEnLotes(filas: Record<string, unknown>[]) {
+    setProgresoImport({ total: filas.length, hechos: 0 })
+    const CHUNK = 500, CONCURRENCIA = 3
+    let ok = 0
+    for (let i = 0; i < filas.length; i += CHUNK * CONCURRENCIA) {
+      const promesas: Promise<{ ok: boolean; n: number }>[] = []
+      for (let j = 0; j < CONCURRENCIA; j++) {
+        const lote = filas.slice(i + j * CHUNK, i + (j + 1) * CHUNK)
+        if (!lote.length) continue
+        promesas.push((async () => { const r = await supabase.from('pedidos').insert(lote); return { ok: !r.error, n: lote.length } })())
+      }
+      const resultados = await Promise.all(promesas)
+      resultados.forEach(r => { if (r.ok) ok += r.n })
+      setProgresoImport(p => p ? { ...p, hechos: Math.min(p.total, p.hechos + resultados.reduce((a, r) => a + r.n, 0)) } : p)
+    }
+    setProgresoImport(null)
+    return ok
+  }
+
+  async function confirmarImportPedidosDropi() {
+    if (!previewDropi || !tenantId) return
+    const { data: prods } = await supabase.from('productos').select('id,nombre,sku').eq('tenant_id', tenantId)
+    const mapaSku = new Map((prods || []).filter(p => p.sku).map(p => [String(p.sku).toLowerCase().trim(), p.id]))
+    const mapaNombre = new Map((prods || []).map(p => [String(p.nombre).toLowerCase().trim(), p.id]))
+
+    const filas: Record<string, unknown>[] = []
+    const sinProducto: string[] = []
+    for (const f of previewDropi) {
+      if (!f.valido) continue
+      const d = f.datos
+      const sku = String(d.SKU || '').toLowerCase().trim()
+      const nombreProd = String(d.PRODUCTO || '').toLowerCase().trim()
+      const productoId = (sku && mapaSku.get(sku)) || mapaNombre.get(nombreProd)
+      if (!productoId) { sinProducto.push(`fila ${f.fila}: "${d.PRODUCTO}" (SKU ${d.SKU || '—'})`); continue }
+      const estado = ESTATUS_DROPI_A_ESTADO[String(d.ESTATUS || '').toUpperCase().trim()] || 'ingresado'
+      filas.push({
+        tenant_id: tenantId, cliente_nombre: d['NOMBRE CLIENTE'], cliente_telefono: d['TELÉFONO'] || null,
+        cliente_ciudad: d['CIUDAD DESTINO'], cliente_departamento: d['DEPARTAMENTO DESTINO'] || null,
+        producto_id: productoId, producto_nombre: d.PRODUCTO, cantidad: d.CANTIDAD || 1,
+        pvp: d['TOTAL DE LA ORDEN'], estado, origen: 'Dropi',
+        transportadora: d.TRANSPORTADORA || null, numero_guia: d['NÚMERO GUIA'] || null,
+        fecha_pedido: d.FECHA, risk_score: 'low', cliente_tipo: 'nuevo', sla_nivel: 'verde', horas_sin_gest: 0,
+      })
+    }
+    const ok = await insertarPedidosEnLotes(filas)
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_pedidos_dropi', nombre_archivo: configPedidosDropi.nombreArchivo,
+      registros_total: previewDropi.length, registros_ok: ok, registros_error: previewDropi.length - ok,
+      estado: ok === previewDropi.length ? 'completado' : 'error',
+      notas: sinProducto.length ? sinProducto.slice(0, 20).join(' | ') : null,
+    })
+    setPreviewDropi(null)
+    if (sinProducto.length) alert(`${ok} pedidos importados. ${sinProducto.length} filas no se importaron por producto no encontrado (revisa el SKU o el nombre en Catálogo).`)
+    loadData()
+  }
+
+  async function confirmarImportPedidosGenerico() {
+    if (!previewGenerico || !tenantId) return
+    const { data: prods } = await supabase.from('productos').select('id,nombre').eq('tenant_id', tenantId)
+    const mapaNombre = new Map((prods || []).map(p => [String(p.nombre).toLowerCase().trim(), p.id]))
+
+    const filas: Record<string, unknown>[] = []
+    const sinProducto: string[] = []
+    for (const f of previewGenerico) {
+      if (!f.valido) continue
+      const d = f.datos
+      const productoId = mapaNombre.get(String(d.producto || '').toLowerCase().trim())
+      if (!productoId) { sinProducto.push(`fila ${f.fila}: "${d.producto}"`); continue }
+      filas.push({
+        tenant_id: tenantId, cliente_nombre: d.cliente_nombre, cliente_telefono: d.cliente_telefono || null,
+        cliente_ciudad: d.cliente_ciudad, cliente_departamento: d.cliente_departamento || null,
+        producto_id: productoId, producto_nombre: d.producto, cantidad: d.cantidad || 1,
+        pvp: d.pvp, estado: d.estado || 'ingresado', origen: d.origen || 'Manual',
+        transportadora: d.transportadora || null, fecha_pedido: d.fecha_pedido,
+        risk_score: 'low', cliente_tipo: 'nuevo', sla_nivel: 'verde', horas_sin_gest: 0,
+      })
+    }
+    const ok = await insertarPedidosEnLotes(filas)
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_pedidos', nombre_archivo: configPedidos.nombreArchivo,
+      registros_total: previewGenerico.length, registros_ok: ok, registros_error: previewGenerico.length - ok,
+      estado: ok === previewGenerico.length ? 'completado' : 'error',
+      notas: sinProducto.length ? sinProducto.slice(0, 20).join(' | ') : null,
+    })
+    setPreviewGenerico(null)
+    if (sinProducto.length) alert(`${ok} pedidos importados. ${sinProducto.length} filas no se importaron por producto no encontrado.`)
+    loadData()
+  }
+
   const filtrados = pedidos.filter(p=>{
     const me = filtroEstado==='todos'||p.estado===filtroEstado
     const mb = !buscar || p.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase()) ||
@@ -668,7 +781,7 @@ export default function PedidosPage() {
     novedades:  pedidos.filter(p=>p.estado==='novedad').length,
     devoluciones:pedidos.filter(p=>p.estado==='devolucion').length,
     sla_vencido:pedidos.filter(p=>p.sla_nivel==='rojo').length,
-    alto_riesgo:pedidos.filter(p=>['high','critical'].includes(p.riesgo||'')).length,
+    alto_riesgo:pedidos.filter(p=>['high','critical'].includes(p.risk_score||'')).length,
   }
   const tc = kpis.total>0?Math.round(kpis.confirmados/kpis.total*100):0
   const te = kpis.despachados>0?Math.round(kpis.entregados/kpis.despachados*100):0
@@ -693,6 +806,34 @@ export default function PedidosPage() {
           <button onClick={()=>setShowNuevo(true)} style={{padding:'8px 18px',background:T.accent,border:'none',borderRadius:'8px',color:T.card,fontWeight:'700',cursor:'pointer',fontSize:'13px'}}>+ Nuevo pedido</button>
         </div>
       </div>
+
+      {/* Carga masiva */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'10px',marginBottom:'14px'}}>
+        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px 14px'}}>
+          <div style={{fontSize:'11px',fontWeight:'700',color:T.accent,marginBottom:'8px'}}>📥 Carga masiva — Export de Dropi</div>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+            <BotonesPlantilla config={configPedidosDropi} onArchivoValidado={setPreviewDropi} theme={T} />
+          </div>
+          <div style={{fontSize:'10px',color:T.muted,marginTop:'6px'}}>Puedes subir directo el Excel que exporta Dropi, sin reformatear.</div>
+        </div>
+        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px 14px'}}>
+          <div style={{fontSize:'11px',fontWeight:'700',color:T.blue,marginBottom:'8px'}}>📄 Carga masiva — Plantilla genérica DIZGO</div>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+            <BotonesPlantilla config={configPedidos} onArchivoValidado={setPreviewGenerico} theme={T} />
+          </div>
+          <div style={{fontSize:'10px',color:T.muted,marginTop:'6px'}}>Si no usas Dropi, llena esta plantilla con tus pedidos históricos.</div>
+        </div>
+      </div>
+      {progresoImport && (
+        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px 14px',marginBottom:'14px'}}>
+          <div style={{fontSize:'11px',color:T.muted,marginBottom:'6px'}}>Importando pedidos… {progresoImport.hechos}/{progresoImport.total}</div>
+          <div style={{background:T.card2,borderRadius:'6px',height:'8px',overflow:'hidden'}}>
+            <div style={{background:T.accent,height:'100%',width:`${Math.round(progresoImport.hechos/progresoImport.total*100)}%`,transition:'width .2s'}} />
+          </div>
+        </div>
+      )}
+      {previewDropi && <CargaMasivaModal filas={previewDropi} columnas={configPedidosDropi.columnas} onConfirm={confirmarImportPedidosDropi} onClose={()=>setPreviewDropi(null)} theme={T} />}
+      {previewGenerico && <CargaMasivaModal filas={previewGenerico} columnas={configPedidos.columnas} onConfirm={confirmarImportPedidosGenerico} onClose={()=>setPreviewGenerico(null)} theme={T} />}
 
       {/* KPIs — Embudo de etapas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'8px',marginBottom:'14px'}}>
@@ -793,8 +934,8 @@ export default function PedidosPage() {
                   </td>
                   <td style={{padding:'8px 12px',fontSize:'11px',color:T.muted}}>{p.origen||'—'}</td>
                   <td style={{padding:'8px 12px'}}>
-                    <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 6px',borderRadius:'4px',background:`${riesgoColor(p.riesgo)}20`,color:riesgoColor(p.riesgo)}}>
-                      {RIESGOS.find(r=>r.v===p.riesgo)?.l||'—'}
+                    <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 6px',borderRadius:'4px',background:`${riesgoColor(p.risk_score)}20`,color:riesgoColor(p.risk_score)}}>
+                      {RIESGOS.find(r=>r.v===p.risk_score)?.l||'—'}
                     </span>
                   </td>
                   <td style={{padding:'8px 12px'}}>

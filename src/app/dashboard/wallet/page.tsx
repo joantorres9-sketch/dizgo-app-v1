@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import { createClient, formatMoney } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
+import { generarPlantilla } from '@/lib/plantillasExcel'
+import { configWalletDropi } from '@/lib/plantillasConfig'
 
 type Tx = {
   dropi_id: number; fecha: string; tipo: string; monto: number;
@@ -140,11 +142,18 @@ export default function WalletPage() {
           <h1 className="text-2xl font-bold">💳 Wallet Dropi</h1>
           <p className="text-sm mt-1" style={{ color: '#8B96A8' }}>Historial de transacciones · Cargar Excel exportado de Dropi</p>
         </div>
-        <label className="cursor-pointer px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
-               style={{ background: '#F5A623', color: '#0A0D14' }}>
-          📤 Cargar Excel Dropi
-          <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} disabled={uploading} />
-        </label>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => generarPlantilla(configWalletDropi)}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#8B96A8' }}>
+            📄 Generar plantilla actualizada
+          </button>
+          <label className="cursor-pointer px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                 style={{ background: '#F5A623', color: '#0A0D14' }}>
+            📤 Cargar Excel Dropi
+            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} disabled={uploading} />
+          </label>
+        </div>
       </div>
 
       {uploadMsg && (
