@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/client'
 import { BotonesPlantilla, CargaMasivaModal } from '@/components/CargaMasivaModal'
 import { configPauta, type FilaPauta } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 const T = {
   bg:'#0D1E35', card:'#111520', card2:'#0A0D14',
@@ -71,6 +73,7 @@ function parsearCSVMeta(texto: string): Partial<Registro>[] {
 
 export default function PautaPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'resumen'|'campanas'|'dia_dia'|'carga'>('resumen')
@@ -147,6 +150,7 @@ export default function PautaPage() {
   }))
 
   async function handleCSV(file: File) {
+    if (!puede('pauta','agregar')) return
     setUploadMsg('Procesando archivo...')
     const texto = await file.text()
     const parsed = parsearCSVMeta(texto)
@@ -162,10 +166,12 @@ export default function PautaPage() {
     )
     if (error) { setUploadMsg(`❌ Error: ${error.message}`); return }
     setUploadMsg(`✅ ${parsed.length} registros cargados correctamente`)
+    logAccion('pauta','agregar')
     await loadData()
   }
 
   async function confirmarImportPauta() {
+    if (!puede('pauta','agregar')) return
     if (!previewPauta || !tenantId) return
     const validas = previewPauta.filter(f => f.valido)
     const filas = validas.map(f => {
@@ -195,6 +201,7 @@ export default function PautaPage() {
       registros_total: previewPauta.length, registros_ok: ok, registros_error: previewPauta.length - ok,
       estado: ok === previewPauta.length ? 'completado' : 'error',
     })
+    logAccion('pauta','agregar')
     setPreviewPauta(null)
     await loadData()
   }
@@ -220,6 +227,7 @@ export default function PautaPage() {
   }
 
   async function guardarCpaMaximo(prodId: string, valor: number) {
+    if (!puede('pauta','modificar')) return
     await supabase.from('productos').update({ cpa_maximo: valor }).eq('id', prodId)
     setProductos(prev => prev.map(p => p.id===prodId ? { ...p, cpa_maximo:valor } : p))
   }
@@ -245,6 +253,7 @@ export default function PautaPage() {
   )
 
   return (
+    <RequierePermiso modulo="pauta">
     <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ marginBottom:'20px' }}>
@@ -549,5 +558,6 @@ export default function PautaPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

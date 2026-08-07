@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 type PQRSF = {
   id: string; numero_radicado: string; tipo: 'P'|'Q'|'R'|'S'|'F'
@@ -40,6 +42,7 @@ const inp = { background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', bo
 
 export default function PQRSFPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [tenantSlug, setTenantSlug] = useState('')
   const [loading, setLoading] = useState(true)
@@ -176,6 +179,7 @@ export default function PQRSFPage() {
   )
 
   return (
+    <RequierePermiso modulo="pqrsf">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
@@ -192,10 +196,12 @@ export default function PQRSFPage() {
               {copiado ? '✅ Copiado' : '🔗 Copiar link público'}
             </button>
           )}
-          <button onClick={() => setTab('nueva')}
-            style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
-            + Nueva PQRSF
-          </button>
+          {puede('pqrsf','agregar') && (
+            <button onClick={() => setTab('nueva')}
+              style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
+              + Nueva PQRSF
+            </button>
+          )}
         </div>
       </div>
 
@@ -350,13 +356,15 @@ export default function PQRSFPage() {
                     placeholder="Escribe tu respuesta al cliente..." rows={4}
                     style={{ ...inp, resize:'vertical', marginBottom:'8px' }} />
                   <div style={{ display:'flex', gap:'8px' }}>
-                    <button onClick={responder} disabled={!respuesta || guardando}
-                      style={{ flex:1, padding:'9px', background: respuesta ? '#F5A623' : 'rgba(255,255,255,0.05)',
-                        border:'none', borderRadius:'8px', color: respuesta ? '#0A0D14' : '#5A6478',
-                        cursor: respuesta ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'700' }}>
-                      {guardando ? 'Enviando...' : '✉️ Enviar respuesta'}
-                    </button>
-                    {seleccionada.estado === 'RESPONDIDO' && (
+                    {puede('pqrsf','modificar') && (
+                      <button onClick={responder} disabled={!respuesta || guardando}
+                        style={{ flex:1, padding:'9px', background: respuesta ? '#F5A623' : 'rgba(255,255,255,0.05)',
+                          border:'none', borderRadius:'8px', color: respuesta ? '#0A0D14' : '#5A6478',
+                          cursor: respuesta ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'700' }}>
+                        {guardando ? 'Enviando...' : '✉️ Enviar respuesta'}
+                      </button>
+                    )}
+                    {seleccionada.estado === 'RESPONDIDO' && puede('pqrsf','modificar') && (
                       <button onClick={() => cerrar(seleccionada.id)}
                         style={{ padding:'9px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
                         ✅ Cerrar
@@ -436,10 +444,10 @@ export default function PQRSFPage() {
                 rows={4} onChange={e => setNuevaPQRSF(p => ({...p, descripcion:e.target.value}))} style={{ ...inp, resize:'vertical' }} />
             </div>
 
-            <button onClick={crearNueva} disabled={!nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !nuevaPQRSF.descripcion || guardando}
+            <button onClick={crearNueva} disabled={!nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !nuevaPQRSF.descripcion || guardando || !puede('pqrsf','agregar')}
               style={{ width:'100%', padding:'11px', background:'#F5A623', border:'none', borderRadius:'10px',
                 color:'#0A0D14', cursor:'pointer', fontWeight:'700', fontSize:'13px',
-                opacity: !nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto ? 0.5 : 1 }}>
+                opacity: !nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !puede('pqrsf','agregar') ? 0.5 : 1 }}>
               {guardando ? 'Radicando...' : '📬 Radicar PQRSF'}
             </button>
           </div>
@@ -545,5 +553,6 @@ export default function PQRSFPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/client'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configInversionActivos, type FilaInversionActivo } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 // ── TEMA ──────────────────────────────────────────────────────
 const T = {
@@ -94,6 +96,7 @@ const CAPITAL_DEFAULT: Omit<Capital,'id'>[] = [
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────
 export default function InversionPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
 
   const [tenantId, setTenantId] = useState('')
   const [pais,     setPais]     = useState('COL')
@@ -491,6 +494,7 @@ export default function InversionPage() {
   )
 
   return (
+    <RequierePermiso modulo="inversion">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
 
       {/* Header */}
@@ -556,7 +560,7 @@ export default function InversionPage() {
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>🖥️ ACTIVOS TANGIBLES (con depreciación)</div>
             {activos.map(a => (
               <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', opacity: a.activo ? 1 : 0.5 }}>
-                <input type="checkbox" checked={a.activo}
+                <input type="checkbox" checked={a.activo} disabled={!puede('inversion','modificar')}
                   onChange={async () => {
                     const updated = activos.map(x => x.id===a.id ? {...x, activo:!x.activo} : x)
                     setActivos(updated)
@@ -566,13 +570,14 @@ export default function InversionPage() {
                   style={{ cursor:'pointer', accentColor:T.blue }} />
                 <span style={{ flex:1, fontSize:'11px', color: a.activo ? T.text : T.muted }}>{a.nombre}</span>
                 <span style={{ fontSize:'10px', color:T.purple }}>{a.vida_util_meses}m</span>
-                <input type="number" value={Number(a.valor)}
+                <input type="number" value={Number(a.valor)} disabled={!puede('inversion','modificar')}
                   onChange={e => setActivos(activos.map(x => x.id===a.id ? {...x, valor:Number(e.target.value)} : x))}
                   style={{ ...inp, width:'110px', textAlign:'right', fontSize:'12px' }} />
               </div>
             ))}
 
             {/* Agregar activo */}
+            {puede('inversion','agregar') && (
             <div style={{ ...s2, padding:'12px', marginTop:'12px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', flexWrap:'wrap', gap:'6px' }}>
                 <div style={{ fontSize:'11px', color:T.muted }}>+ Agregar activo</div>
@@ -593,6 +598,7 @@ export default function InversionPage() {
                 + Agregar
               </button>
             </div>
+            )}
             {previewActivos && <CargaMasivaModal filas={previewActivos} columnas={configInversionActivos.columnas} onConfirm={confirmarImportActivos} onClose={()=>setPreviewActivos(null)} theme={T} />}
 
             <div style={{ marginTop:'10px', padding:'10px 12px', ...s2, display:'flex', justifyContent:'space-between' }}>
@@ -613,15 +619,16 @@ export default function InversionPage() {
               <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'12px' }}>💵 CAPITAL DE TRABAJO & OTROS</div>
               {capital.map(c => (
                 <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', opacity: c.activo ? 1 : 0.5 }}>
-                  <input type="checkbox" checked={c.activo}
+                  <input type="checkbox" checked={c.activo} disabled={!puede('inversion','modificar')}
                     onChange={() => setCapital(capital.map(x => x.id===c.id ? {...x, activo:!x.activo} : x))}
                     style={{ cursor:'pointer', accentColor:T.green }} />
                   <span style={{ flex:1, fontSize:'11px', color: c.activo ? T.text : T.muted }}>{c.concepto}</span>
-                  <input type="number" value={Number(c.valor)}
+                  <input type="number" value={Number(c.valor)} disabled={!puede('inversion','modificar')}
                     onChange={e => setCapital(capital.map(x => x.id===c.id ? {...x, valor:Number(e.target.value)} : x))}
                     style={{ ...inp, width:'110px', textAlign:'right', fontSize:'12px' }} />
                 </div>
               ))}
+              {puede('inversion','agregar') && (
               <div style={{ ...s2, padding:'10px', marginTop:'8px', display:'flex', gap:'6px' }}>
                 <input placeholder="Concepto" value={newCapital.concepto}
                   onChange={e => setNewCapital(p => ({...p, concepto:e.target.value}))} style={{...inp, fontSize:'11px'}} />
@@ -630,6 +637,7 @@ export default function InversionPage() {
                 <button onClick={guardarCapital}
                   style={{ padding:'6px 12px', background:`${T.green}20`, border:`1px solid ${T.green}40`, borderRadius:'7px', color:T.green, cursor:'pointer', fontSize:'11px', flexShrink:0 }}>+</button>
               </div>
+              )}
               <div style={{ marginTop:'8px', padding:'8px 12px', background:`${T.green}08`, borderRadius:'8px', display:'flex', justifyContent:'space-between' }}>
                 <span style={{ fontSize:'11px', color:T.muted }}>Subtotal capital</span>
                 <span style={{ fontSize:'14px', fontWeight:'800', color:T.green }}>{fmt(totalCapital, pais)}</span>
@@ -1136,5 +1144,6 @@ export default function InversionPage() {
         {guardando && <span style={{ marginLeft:'10px' }}>· Guardando...</span>}
       </div>
     </div>
+    </RequierePermiso>
   )
 }

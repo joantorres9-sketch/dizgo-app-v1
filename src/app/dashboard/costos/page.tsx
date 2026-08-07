@@ -2,9 +2,11 @@
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
-import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
+import { CargaMasivaModal } from '@/components/CargaMasivaModal'
 import { configCostosFijos, configCostosVariables, type FilaCostoFijo, type FilaCostoVariable } from '@/lib/plantillasConfig'
-import type { FilaImportada } from '@/lib/plantillasExcel'
+import { generarPlantilla, parsearArchivo, type ConfigPlantilla, type FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -94,6 +96,61 @@ function Tip({text,children}:{text:string;children:React.ReactNode}) {
       {children}
       {s&&<div style={{position:'absolute',bottom:'calc(100%+6px)',left:'50%',transform:'translateX(-50%)',background:'#060E1C',border:`1px solid ${T.border}`,borderRadius:'8px',padding:'8px 10px',fontSize:'11px',color:T.text,width:'240px',zIndex:300,lineHeight:1.6,boxShadow:'0 4px 16px rgba(0,0,0,.5)',whiteSpace:'pre-wrap',pointerEvents:'none'}}>{text}</div>}
     </span>
+  )
+}
+
+// ── BOTONES PLANTILLA (con permisos) ─────────────────────
+// Réplica local de BotonesPlantilla (src/components/CargaMasivaModal.tsx) que separa
+// "Generar plantilla" (descargar) de "Cargar Masivamente" (agregar) para poder aplicar
+// el gating de permisos a cada acción de forma independiente.
+function BotonesPlantillaGated<T>({
+  config, onArchivoValidado, theme, puedeAgregar, puedeDescargar,
+}: {
+  config: ConfigPlantilla<T>
+  onArchivoValidado: (filas: FilaImportada<T>[]) => void
+  theme: typeof T
+  puedeAgregar: boolean
+  puedeDescargar: boolean
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const filas = await parsearArchivo(file, config)
+      onArchivoValidado(filas)
+    } catch (err: any) {
+      alert(err.message || 'Error al leer el archivo')
+    }
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  function onGenerarPlantilla() {
+    logAccion('costos', 'descargar')
+    generarPlantilla(config)
+  }
+
+  return (
+    <>
+      <input ref={fileRef} type="file" accept=".xlsx,.csv" style={{ display: 'none' }} onChange={onFile} />
+      {puedeDescargar && (
+        <button
+          onClick={onGenerarPlantilla}
+          style={{ padding: '8px 14px', background: theme.card, border: `1px solid ${theme.border}`, borderRadius: '8px', color: theme.muted, cursor: 'pointer', fontSize: '12px' }}
+        >
+          📄 Generar plantilla actualizada
+        </button>
+      )}
+      {puedeAgregar && (
+        <button
+          onClick={() => fileRef.current?.click()}
+          style={{ padding: '8px 14px', background: theme.card, border: `1px solid ${theme.border}`, borderRadius: '8px', color: theme.muted, cursor: 'pointer', fontSize: '12px' }}
+        >
+          📤 Cargar Masivamente
+        </button>
+      )}
+    </>
   )
 }
 
@@ -221,6 +278,7 @@ function ModalTesteo({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function CostosPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tab, setTab] = useState<'dashboard'|'cf'|'cv'|'pef'|'historico'>('dashboard')
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -441,6 +499,7 @@ export default function CostosPage() {
   ]
 
   return (
+    <RequierePermiso modulo="costos">
     <div style={{color:T.text,fontFamily:'"DM Sans", system-ui, sans-serif'}}>
       {showTesteo && <ModalTesteo tenantId={tenantId} onClose={()=>setShowTesteo(false)} onSave={saveTesteo} />}
 
@@ -451,9 +510,11 @@ export default function CostosPage() {
           <p style={{fontSize:'12px',color:T.muted}}>CF · CV · PEF — Lo que no se mide, no se controla</p>
         </div>
         <div style={{display:'flex',gap:'8px'}}>
-          <button onClick={guardarSnapshot} style={{padding:'8px 14px',background:`${T.purple}15`,border:`1px solid ${T.purple}40`,borderRadius:'8px',color:T.purple,cursor:'pointer',fontSize:'12px',fontWeight:'600'}}>
-            💾 Guardar snapshot mes
-          </button>
+          {puede('costos','agregar') && (
+            <button onClick={guardarSnapshot} style={{padding:'8px 14px',background:`${T.purple}15`,border:`1px solid ${T.purple}40`,borderRadius:'8px',color:T.purple,cursor:'pointer',fontSize:'12px',fontWeight:'600'}}>
+              💾 Guardar snapshot mes
+            </button>
+          )}
         </div>
       </div>
 
@@ -644,18 +705,22 @@ export default function CostosPage() {
               )}
             </div>
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-              <BotonesPlantilla config={configCostosFijos} onArchivoValidado={setPreviewCF} theme={T} />
-              <button onClick={()=>setShowTesteo(true)}
-                style={{padding:'8px 14px',background:`${T.yellow}15`,border:`1px solid ${T.yellow}40`,borderRadius:'8px',color:T.yellow,cursor:'pointer',fontSize:'12px',fontWeight:'600'}}>
-                🧪 Agregar Testeo
-              </button>
-              <button onClick={()=>{setShowFormCF(true);setEditCF(null);setFormCF({concepto:'',categoria:'👥 Personal Operativo',cantidad:1,valor_unitario:0,pef_cat:'no_clasificado',tipo_registro:'historico',notas:''})}}
-                style={{padding:'8px 16px',background:T.blue,border:'none',borderRadius:'8px',color:'#fff',fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
-                + Agregar CF
-              </button>
+              <BotonesPlantillaGated config={configCostosFijos} onArchivoValidado={setPreviewCF} theme={T} puedeAgregar={puede('costos','agregar')} puedeDescargar={puede('costos','descargar')} />
+              {puede('costos','agregar') && (
+                <button onClick={()=>setShowTesteo(true)}
+                  style={{padding:'8px 14px',background:`${T.yellow}15`,border:`1px solid ${T.yellow}40`,borderRadius:'8px',color:T.yellow,cursor:'pointer',fontSize:'12px',fontWeight:'600'}}>
+                  🧪 Agregar Testeo
+                </button>
+              )}
+              {puede('costos','agregar') && (
+                <button onClick={()=>{setShowFormCF(true);setEditCF(null);setFormCF({concepto:'',categoria:'👥 Personal Operativo',cantidad:1,valor_unitario:0,pef_cat:'no_clasificado',tipo_registro:'historico',notas:''})}}
+                  style={{padding:'8px 16px',background:T.blue,border:'none',borderRadius:'8px',color:'#fff',fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
+                  + Agregar CF
+                </button>
+              )}
             </div>
           </div>
-          {previewCF && <CargaMasivaModal filas={previewCF} columnas={configCostosFijos.columnas} onConfirm={confirmarImportCF} onClose={()=>setPreviewCF(null)} theme={T} />}
+          {previewCF && puede('costos','agregar') && <CargaMasivaModal filas={previewCF} columnas={configCostosFijos.columnas} onConfirm={confirmarImportCF} onClose={()=>setPreviewCF(null)} theme={T} />}
 
           {/* Formulario CF */}
           {showFormCF && (
@@ -775,7 +840,7 @@ export default function CostosPage() {
               </select>
             </div>
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-              <BotonesPlantilla config={configCostosVariables} onArchivoValidado={setPreviewCV} theme={T} />
+              <BotonesPlantillaGated config={configCostosVariables} onArchivoValidado={setPreviewCV} theme={T} puedeAgregar={puede('costos','agregar')} puedeDescargar={puede('costos','descargar')} />
               <button onClick={()=>{setShowFormCV(true);setEditCV(null)}}
                 style={{padding:'8px 16px',background:T.green,border:'none',borderRadius:'8px',color:T.card,fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
                 + Agregar CV
@@ -1014,5 +1079,6 @@ export default function CostosPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

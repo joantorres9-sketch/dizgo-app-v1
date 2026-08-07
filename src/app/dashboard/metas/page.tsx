@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/client'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configMetas, type FilaMeta } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 // ── TEMA ──────────────────────────────────────────────────────
 const T = {
@@ -65,6 +67,7 @@ function colorISO(iso:number) { return iso >= 80 ? T.green : iso >= 60 ? T.yello
 
 export default function MetasPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
 
   const hoy = new Date()
   const diaActual = hoy.getDate()
@@ -366,6 +369,7 @@ export default function MetasPage() {
   )
 
   return (
+    <RequierePermiso modulo="metas">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
 
       {/* Header */}
@@ -376,7 +380,9 @@ export default function MetasPage() {
         </div>
         <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' }}>
           {guardando && <span style={{ fontSize:'11px', color:T.muted }}>Guardando...</span>}
-          <BotonesPlantilla config={configMetas} onArchivoValidado={setPreviewMetas} theme={T} />
+          {puede('metas','agregar') && (
+            <BotonesPlantilla config={configMetas} onArchivoValidado={setPreviewMetas} theme={T} />
+          )}
         </div>
       </div>
       {previewMetas && <CargaMasivaModal filas={previewMetas} columnas={configMetas.columnas} onConfirm={confirmarImportMetas} onClose={()=>setPreviewMetas(null)} theme={T} />}
@@ -502,8 +508,8 @@ export default function MetasPage() {
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'12px' }}>PASO 1 — ¿Qué quieres lograr este mes?</div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px' }}>
               {MODOS.map(m => (
-                <button key={m.v} onClick={()=>guardarMetas({ modo_objetivo:m.v })}
-                  style={{ padding:'12px', borderRadius:'10px', cursor:'pointer', textAlign:'left',
+                <button key={m.v} onClick={()=>guardarMetas({ modo_objetivo:m.v })} disabled={!puede('metas','modificar')}
+                  style={{ padding:'12px', borderRadius:'10px', cursor: puede('metas','modificar') ? 'pointer' : 'not-allowed', textAlign:'left',
                     border:`2px solid ${metas.modo_objetivo===m.v ? m.color : T.border}`,
                     background: metas.modo_objetivo===m.v ? `${m.color}12` : 'transparent' }}>
                   <div style={{ fontSize:'13px', fontWeight:'700', color: metas.modo_objetivo===m.v ? m.color : T.text }}>{m.l}</div>
@@ -516,8 +522,8 @@ export default function MetasPage() {
           {/* Selector horizonte */}
           <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
             {(['mes','trimestre','anual'] as Horizonte[]).map(h => (
-              <button key={h} onClick={()=>guardarMetas({ horizonte:h })}
-                style={{ flex:1, padding:'8px', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600',
+              <button key={h} onClick={()=>guardarMetas({ horizonte:h })} disabled={!puede('metas','modificar')}
+                style={{ flex:1, padding:'8px', borderRadius:'8px', cursor: puede('metas','modificar') ? 'pointer' : 'not-allowed', fontSize:'12px', fontWeight:'600',
                   border:`1px solid ${metas.horizonte===h ? T.purple : T.border}`,
                   background: metas.horizonte===h ? `${T.purple}15` : 'transparent', color: metas.horizonte===h ? T.purple : T.muted }}>
                 {h==='mes'?'📅 Corto plazo (mes)':h==='trimestre'?'📊 Mediano (trimestre)':'🚀 Largo plazo (año)'}
@@ -544,7 +550,7 @@ export default function MetasPage() {
                 ].map(it => (
                   <div key={String(it.k)} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
                     <label style={{ flex:1, fontSize:'12px', color:T.muted }}>{it.l}</label>
-                    <input type="number" value={Number(metas[it.k])}
+                    <input type="number" value={Number(metas[it.k])} disabled={!puede('metas','modificar')}
                       onChange={e=>guardarMetas({ [it.k]: Number(e.target.value) } as Partial<MetasMes>)}
                       style={{ ...inp, width:'130px', textAlign:'right' }} />
                   </div>
@@ -563,7 +569,7 @@ export default function MetasPage() {
                 ].map(it => (
                   <div key={String(it.k)} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'10px' }}>
                     <label style={{ flex:1, fontSize:'12px', color:T.muted }}>{it.l}</label>
-                    <input type="number" value={Number(metas[it.k])}
+                    <input type="number" value={Number(metas[it.k])} disabled={!puede('metas','modificar')}
                       onChange={e=>guardarMetas({ [it.k]: Number(e.target.value) } as Partial<MetasMes>)}
                       style={{ ...inp, width:'130px', textAlign:'right' }} />
                   </div>
@@ -817,5 +823,6 @@ export default function MetasPage() {
         {guardando && <span style={{ marginLeft:'10px' }}>· Guardando...</span>}
       </div>
     </div>
+    </RequierePermiso>
   )
 }

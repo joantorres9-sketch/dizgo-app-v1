@@ -1,9 +1,11 @@
 'use client'
+import { RequierePermiso } from '@/components/RequierePermiso'
 
 const T = { bg:'#0D1E35', card:'#081426', accent:'#F58720', blue:'#3D8EF0', text:'#E8EDF5', muted:'#5A7A9A', border:'#152238' }
 
 export default function FormacionPage() {
   return (
+    <RequierePermiso modulo="formacion">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'6px' }}>
         <span style={{ fontSize:'22px' }}>🎓</span>
@@ -21,5 +23,6 @@ export default function FormacionPage() {
         </div>
       </div>
     </div>
+    </RequierePermiso>
   )
 }

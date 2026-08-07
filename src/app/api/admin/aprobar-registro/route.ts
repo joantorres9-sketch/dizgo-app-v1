@@ -1,28 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/apiAuth'
 import { paisPorCodigo } from '@/lib/paises'
-
-const DIACRITICOS = new RegExp('[̀-ͯ]', 'g')
-
-function slugBase(nombre: string): string {
-  return nombre
-    .normalize('NFD').replace(DIACRITICOS, '') // quita tildes
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'tienda'
-}
-
-async function slugUnico(supabase: ReturnType<typeof getSupabaseAdmin>, nombre: string): Promise<string> {
-  const base = slugBase(nombre)
-  let candidato = base
-  let intento = 1
-  while (true) {
-    const { data } = await supabase.from('tenants').select('id').eq('slug', candidato).maybeSingle()
-    if (!data) return candidato
-    intento += 1
-    candidato = `${base}-${intento}`
-  }
-}
+import { slugUnico } from '@/lib/tenantSlug'
 
 async function requiereSuperadmin(req: Request) {
   const token = req.headers.get('authorization')?.replace('Bearer ', '')

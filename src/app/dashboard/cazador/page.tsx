@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 type ContextoNegocio = {
   cpa_promedio: number; tasa_entrega: number; tasa_devolucion: number
@@ -29,6 +31,7 @@ function fmt(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
 
 export default function CazadorProductosPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [analizando, setAnalizando] = useState(false)
@@ -318,6 +321,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
   const recomColor = recomendacion === 'INVERTIR' ? '#2DD4A0' : recomendacion === 'AJUSTAR' ? '#F5A623' : '#F05C5C'
 
   return (
+    <RequierePermiso modulo="cazador">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ marginBottom:'20px' }}>
         <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🔍 Agente Cazador de Productos</h1>
@@ -448,7 +452,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
                 {recomendacion === 'INVERTIR' ? '✅' : recomendacion === 'AJUSTAR' ? '⚠️' : '❌'} {recomendacion}
               </div>
               <div style={{ fontSize:'12px', color:'#8B96A8', marginTop:'6px' }}>{producto.nombre}</div>
-              {recomendacion === 'INVERTIR' && (
+              {recomendacion === 'INVERTIR' && puede('cazador','agregar') && (
                 <button onClick={agregarAlCatalogo} style={{ marginTop:'12px', padding:'9px 20px', background:'rgba(45,212,160,0.15)', border:'1px solid rgba(45,212,160,0.3)', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>
                   + Agregar al catálogo
                 </button>
@@ -481,5 +485,6 @@ en el negocio de dropshipping para ${producto.mercado}.`
         </div>
       </div>
     </div>
+    </RequierePermiso>
   )
 }

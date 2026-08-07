@@ -5,6 +5,8 @@ import { inicializarPaisTenant } from '@/lib/paises'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configProductos, type FilaProducto } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -473,13 +475,14 @@ function ModalIAChat({ onClose }: { onClose: () => void }) {
 
 // ── MODAL FORMULARIO PRODUCTO ─────────────────────────────
 function ModalFormulario({
-  onClose, onSave, tenantId, editData, totalProductos,
+  onClose, onSave, tenantId, editData, totalProductos, puedeGuardar,
 }: {
   onClose: () => void
   onSave: () => void
   tenantId: string
   editData: Producto | null
   totalProductos: number
+  puedeGuardar: boolean
 }) {
   const supabase = createClient()
   const [tipo, setTipo] = useState<'producto' | 'combo'>(editData?.tipo === 'combo' ? 'combo' : 'producto')
@@ -816,8 +819,8 @@ function ModalFormulario({
           <button onClick={onClose} style={{ flex: 1, padding: '10px', background: T.card2, border: `1px solid ${T.border}`, borderRadius: '8px', color: T.muted, cursor: 'pointer', fontSize: '13px' }}>Cancelar</button>
           <button
             onClick={guardar}
-            disabled={loading}
-            style={{ flex: 2, padding: '10px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: loading ? 'wait' : 'pointer', fontSize: '13px', opacity: loading ? 0.7 : 1 }}
+            disabled={loading || !puedeGuardar}
+            style={{ flex: 2, padding: '10px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: loading ? 'wait' : 'pointer', fontSize: '13px', opacity: loading || !puedeGuardar ? 0.7 : 1 }}
           >
             {loading ? 'Guardando...' : editData ? 'Guardar cambios' : `Crear ${tipo}`}
           </button>
@@ -923,6 +926,7 @@ function ModalResumen({
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function ProductosPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [productos, setProductos] = useState<Producto[]>([])
   const [loading, setLoading] = useState(true)
   const [tenantId, setTenantId] = useState('')
@@ -1016,6 +1020,7 @@ export default function ProductosPage() {
   }
 
   return (
+    <RequierePermiso modulo="productos">
     <div style={{ color: T.text, fontFamily: '"DM Sans", system-ui, sans-serif' }}>
 
       {/* Modales */}
@@ -1026,6 +1031,7 @@ export default function ProductosPage() {
           tenantId={tenantId}
           editData={editData}
           totalProductos={productos.length}
+          puedeGuardar={puede('productos', editData ? 'modificar' : 'agregar')}
         />
       )}
       {showResumen && (
@@ -1051,13 +1057,15 @@ export default function ProductosPage() {
           >
             🤖 IA Catálogo
           </button>
-          <BotonesPlantilla config={configProductos} onArchivoValidado={setPreview} theme={T} />
-          <button
-            onClick={() => { setEditData(null); setShowModal(true) }}
-            style={{ padding: '8px 18px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}
-          >
-            + Agregar producto
-          </button>
+          {puede('productos','agregar') && <BotonesPlantilla config={configProductos} onArchivoValidado={setPreview} theme={T} />}
+          {puede('productos','agregar') && (
+            <button
+              onClick={() => { setEditData(null); setShowModal(true) }}
+              style={{ padding: '8px 18px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}
+            >
+              + Agregar producto
+            </button>
+          )}
         </div>
       </div>
 
@@ -1135,7 +1143,7 @@ export default function ProductosPage() {
                     <div style={{ fontSize: '36px', marginBottom: '12px' }}>🛍️</div>
                     <div style={{ fontSize: '14px', fontWeight: '600', color: T.text, marginBottom: '6px' }}>No hay productos aún</div>
                     <div style={{ fontSize: '12px', color: T.muted, marginBottom: '16px' }}>Agrega tu primer producto o usa la carga masiva</div>
-                    <button onClick={() => setShowModal(true)} style={{ padding: '9px 20px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>+ Agregar primer producto</button>
+                    {puede('productos','agregar') && <button onClick={() => setShowModal(true)} style={{ padding: '9px 20px', background: T.accent, border: 'none', borderRadius: '8px', color: T.card, fontWeight: '700', cursor: 'pointer', fontSize: '13px' }}>+ Agregar primer producto</button>}
                   </td>
                 </tr>
               ) : (
@@ -1176,7 +1184,7 @@ export default function ProductosPage() {
                           <button onClick={() => setShowResumen(p)} style={{ padding: '5px 10px', background: `${T.blue}15`, border: `1px solid ${T.blue}30`, borderRadius: '6px', color: T.blue, cursor: 'pointer', fontSize: '11px', fontWeight: '600', whiteSpace: 'nowrap' }}>
                             Ver resumen
                           </button>
-                          <button onClick={() => eliminar(p.id)} style={{ padding: '5px 8px', background: `${T.red}15`, border: `1px solid ${T.red}30`, borderRadius: '6px', color: T.red, cursor: 'pointer', fontSize: '11px' }}>🗑</button>
+                          {puede('productos','eliminar') && <button onClick={() => eliminar(p.id)} style={{ padding: '5px 8px', background: `${T.red}15`, border: `1px solid ${T.red}30`, borderRadius: '6px', color: T.red, cursor: 'pointer', fontSize: '11px' }}>🗑</button>}
                         </div>
                       </td>
                     </tr>
@@ -1194,5 +1202,6 @@ export default function ProductosPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

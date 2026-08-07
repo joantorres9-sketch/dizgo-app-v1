@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 // ── TEMA ──────────────────────────────────────────────────────
 const T = {
@@ -68,6 +70,7 @@ const CONFIG_DEFAULT: Config = {
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────
 export default function EquilibrioPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
 
   // Estado global
   const [tenantId,  setTenantId]  = useState('')
@@ -349,6 +352,7 @@ export default function EquilibrioPage() {
   )
 
   return (
+    <RequierePermiso modulo="equilibrio">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
 
       {/* ── HEADER ── */}
@@ -367,9 +371,9 @@ export default function EquilibrioPage() {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'10px' }}>
           {MODOS.map(m => (
-            <button key={m.v} onClick={() => guardarConfig({ modo_activo: m.v })}
-              style={{ padding:'12px 14px', borderRadius:'10px', cursor:'pointer', textAlign:'left', border:`2px solid ${config.modo_activo === m.v ? m.color : T.border}`,
-                background: config.modo_activo === m.v ? `${m.color}12` : 'transparent', transition:'all .2s' }}>
+            <button key={m.v} disabled={!puede('equilibrio','modificar')} onClick={() => guardarConfig({ modo_activo: m.v })}
+              style={{ padding:'12px 14px', borderRadius:'10px', cursor: puede('equilibrio','modificar') ? 'pointer' : 'not-allowed', textAlign:'left', border:`2px solid ${config.modo_activo === m.v ? m.color : T.border}`,
+                background: config.modo_activo === m.v ? `${m.color}12` : 'transparent', transition:'all .2s', opacity: puede('equilibrio','modificar') ? 1 : 0.6 }}>
               <div style={{ fontSize:'13px', fontWeight:'700', color: config.modo_activo === m.v ? m.color : T.text, marginBottom:'3px' }}>{m.l}</div>
               <div style={{ fontSize:'11px', color:T.muted }}>{m.sub}</div>
               <div style={{ fontSize:'16px', fontWeight:'800', color: m.color, marginTop:'8px' }}>
@@ -378,7 +382,7 @@ export default function EquilibrioPage() {
               {m.v === 'rentabilidad' && config.modo_activo === 'rentabilidad' && (
                 <div style={{ marginTop:'8px', display:'flex', alignItems:'center', gap:'6px' }}>
                   <span style={{ fontSize:'10px', color:T.muted }}>Utilidad deseada:</span>
-                  <input type="number" value={config.utilidad_meta}
+                  <input type="number" value={config.utilidad_meta} disabled={!puede('equilibrio','modificar')}
                     onChange={e => guardarConfig({ utilidad_meta: Number(e.target.value) })}
                     onClick={e => e.stopPropagation()}
                     style={{ ...inp, width:'90px', padding:'4px 8px', fontSize:'11px' }} />
@@ -613,7 +617,7 @@ export default function EquilibrioPage() {
               ].map(row => (
                 <div key={String(row.k)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
                   <span style={{ fontSize:'11px', color:T.muted }}>{row.l}</span>
-                  <input type="number" min={0} max={100}
+                  <input type="number" min={0} max={100} disabled={!puede('equilibrio','modificar')}
                     value={Number(config[row.k])}
                     onChange={e => guardarConfig({ [row.k]: Number(e.target.value) } as Partial<Config>)}
                     style={{ ...inp, width:'80px', textAlign:'right' }} />
@@ -736,7 +740,7 @@ export default function EquilibrioPage() {
             <div style={{ fontSize:'11px', fontWeight:'700', color:T.muted, marginBottom:'10px' }}>⚙️ PARÁMETRO CPA (para cálculo de inversión en escenarios)</div>
             <div style={{ display:'flex', alignItems:'center', gap:'12px' }}>
               <span style={{ fontSize:'12px', color:T.muted }}>CPA de referencia:</span>
-              <input type="number" value={config.cpa_referencia}
+              <input type="number" value={config.cpa_referencia} disabled={!puede('equilibrio','modificar')}
                 onChange={e => guardarConfig({ cpa_referencia: Number(e.target.value) })}
                 style={{ ...inp, width:'120px' }} placeholder="0 = usar pauta real" />
               <span style={{ fontSize:'11px', color:T.muted }}>Si es 0, usa la pauta real del mes</span>
@@ -770,7 +774,7 @@ export default function EquilibrioPage() {
                   </div>
                   <div style={{ marginTop:'6px' }}>
                     <label style={{ fontSize:'10px', color:T.muted }}>Ajuste manual:</label>
-                    <input type="number" min={0} max={20}
+                    <input type="number" min={0} max={20} disabled={!puede('equilibrio','modificar')}
                       value={i === 0 ? config.num_confirmadores : config.num_empacadores}
                       onChange={e => guardarConfig(i === 0 ? { num_confirmadores: Number(e.target.value) } : { num_empacadores: Number(e.target.value) })}
                       style={{ ...inp, width:'70px', marginLeft:'8px', padding:'3px 8px', fontSize:'11px' }} />
@@ -883,5 +887,6 @@ export default function EquilibrioPage() {
         {guardando && <span style={{ marginLeft:'12px', color:T.muted }}>· Guardando config...</span>}
       </div>
     </div>
+    </RequierePermiso>
   )
 }

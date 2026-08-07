@@ -3,40 +3,17 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { MODULOS, GRUPOS } from '@/lib/modulos'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
-const NAV = [
-  { group:'PLANEAR', color:'#3D8EF0', items:[
-    { href:'/dashboard',           icon:'⊞',  label:'Inicio' },
-    { href:'/dashboard/nomina',    icon:'👥', label:'Nómina' },
-    { href:'/dashboard/costos',    icon:'📊', label:'Costos Fijos' },
-    { href:'/dashboard/productos', icon:'🛍️', label:'Catálogo' },
-    { href:'/dashboard/precio',    icon:'💡', label:'Precio & Costeo' },
-    { href:'/dashboard/inversion', icon:'💰', label:'Inversión' },
-    { href:'/dashboard/equilibrio',icon:'⚖️', label:'Punto Equilibrio' },
-    { href:'/dashboard/metas',     icon:'🎯', label:'Metas' },
-  ]},
-  { group:'HACER', color:'#2DD4A0', items:[
-    { href:'/dashboard/pedidos',   icon:'📦', label:'Pedidos' },
-    { href:'/dashboard/whatsapp',  icon:'💬', label:'Centro Contacto' },
-    { href:'/dashboard/logistica', icon:'🚚', label:'Logística' },
-    { href:'/dashboard/pauta',     icon:'📡', label:'Pauta Meta/TikTok' },
-    { href:'/dashboard/wallet',    icon:'💳', label:'Wallet Dropi' },
-    { href:'/dashboard/pqrsf',     icon:'📬', label:'PQRSF' },
-    { href:'/dashboard/bodega',    icon:'🏭', label:'Bodega' },
-  ]},
-  { group:'VERIFICAR', color:'#F5A623', items:[
-    { href:'/dashboard/pyg',     icon:'🏛️', label:'P&G Dashboard' },
-    { href:'/dashboard/embudo',  icon:'🌀', label:'Embudo' },
-    { href:'/dashboard/alertas', icon:'🚨', label:'Alertas' },
-  ]},
-  { group:'ACTUAR', color:'#9B6BFF', items:[
-    { href:'/dashboard/agentes',  icon:'🤖', label:'Agentes IA' },
-    { href:'/dashboard/cazador',  icon:'🔍', label:'Cazador Productos' },
-    { href:'/dashboard/formacion',icon:'🎓', label:'Formación' },
-    { href:'/dashboard/admin',    icon:'⚙️', label:'Superadmin' },
-    { href:'/dashboard/admin/empresa',icon:'🏢', label:'Centro DIZGO' },
-  ]},
-]
+const ITEMS_FIJOS = {
+  inicio: { href: '/dashboard', icon: '⊞', label: 'Inicio' },
+  superadmin: [
+    { href: '/dashboard/admin', icon: '⚙️', label: 'Superadmin' },
+    { href: '/dashboard/admin/accesos', icon: '🔐', label: 'Gestión de Accesos' },
+    { href: '/dashboard/admin/empresa', icon: '🏢', label: 'Centro DIZGO' },
+  ],
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -44,13 +21,50 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const [saliendo, setSaliendo] = useState(false)
+  const { perfil, cargando, puede, enHorario } = usePermisos()
 
   useEffect(() => { setMenuOpen(false) }, [pathname])
+
+  useEffect(() => {
+    if (!cargando && perfil && !enHorario) logAccion('sistema', 'fuera_horario')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, enHorario])
 
   async function cerrarSesion() {
     setSaliendo(true)
     await supabase.auth.signOut()
     router.push('/auth/login')
+  }
+
+  const esAdmin = perfil?.rol === 'owner' || perfil?.rol === 'superadmin'
+  // Un usuario de cortesía es rol='colaborador' (queda sujeto a la matriz de permisos como
+  // cualquier otro), pero sí necesita llegar a /dashboard/admin para su propio botón de
+  // "Borrar datos de prueba" — sin ver Gestión de Accesos ni Centro DIZGO, que son de verdad
+  // superadmin-only.
+  const itemsSuperadmin = esAdmin
+    ? ITEMS_FIJOS.superadmin
+    : perfil?.esCortesia
+      ? ITEMS_FIJOS.superadmin.filter(i => i.href === '/dashboard/admin')
+      : []
+  const gruposConItems = GRUPOS.map(g => ({
+    ...g,
+    items: MODULOS.filter(m => m.grupo === g.key && puede(m.key, 'ver')),
+  })).filter(g => g.items.length > 0)
+
+  if (!cargando && perfil && !enHorario) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', background: '#0A0D14', color: '#E8EDF5', fontFamily: 'system-ui,sans-serif', padding: '20px' }}>
+        <div style={{ textAlign: 'center', maxWidth: '380px' }}>
+          <div style={{ fontSize: '17px', fontWeight: 700, marginBottom: '10px' }}>⏰ Fuera de horario</div>
+          <div style={{ fontSize: '13px', color: '#8B96A8', lineHeight: 1.6, marginBottom: '18px' }}>
+            Tu horario de acceso configurado no permite entrar a DIZGO en este momento. Contacta al administrador de tu cuenta si necesitas ajustarlo.
+          </div>
+          <button onClick={cerrarSesion} style={{ padding: '9px 18px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '8px', color: '#F05C5C', fontWeight: '600', fontSize: '12px', cursor: 'pointer' }}>
+            🚪 Cerrar sesión
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -68,11 +82,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </Link>
         </div>
         <nav style={{ flex:1, padding:'8px 6px' }}>
-          {NAV.map(group => (
-            <div key={group.group} style={{ marginBottom:'14px' }}>
-              <div style={{ padding:'4px 10px 6px', fontSize:'9px', fontWeight:'800', letterSpacing:'1.5px', color:group.color }}>{group.group}</div>
+          <div style={{ marginBottom:'14px' }}>
+            {(() => {
+              const item = ITEMS_FIJOS.inicio
+              const active = pathname === item.href
+              return (
+                <Link key={item.href} href={item.href} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', borderRadius:'8px', marginBottom:'2px', textDecoration:'none', background: active ? '#3D8EF015' : 'transparent', borderLeft: active ? '2px solid #3D8EF0' : '2px solid transparent', color: active ? '#3D8EF0' : '#8B96A8', fontSize:'13px', fontWeight: active ? '600' : '400' }}>
+                  <span style={{ fontSize:'15px', width:'18px', textAlign:'center', flexShrink:0 }}>{item.icon}</span>
+                  <span>{item.label}</span>
+                </Link>
+              )
+            })()}
+          </div>
+          {gruposConItems.map(group => (
+            <div key={group.key} style={{ marginBottom:'14px' }}>
+              <div style={{ padding:'4px 10px 6px', fontSize:'9px', fontWeight:'800', letterSpacing:'1.5px', color:group.color }}>{group.key}</div>
               {group.items.map(item => {
-                const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
+                const active = pathname === item.href || pathname.startsWith(item.href)
                 return (
                   <Link key={item.href} href={item.href} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', borderRadius:'8px', marginBottom:'2px', textDecoration:'none', background: active ? `${group.color}15` : 'transparent', borderLeft: active ? `2px solid ${group.color}` : '2px solid transparent', color: active ? group.color : '#8B96A8', fontSize:'13px', fontWeight: active ? '600' : '400' }}>
                     <span style={{ fontSize:'15px', width:'18px', textAlign:'center', flexShrink:0 }}>{item.icon}</span>
@@ -82,6 +108,20 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               })}
             </div>
           ))}
+          {itemsSuperadmin.length > 0 && (
+            <div style={{ marginBottom:'14px' }}>
+              <div style={{ padding:'4px 10px 6px', fontSize:'9px', fontWeight:'800', letterSpacing:'1.5px', color:'#9B6BFF' }}>ACTUAR</div>
+              {itemsSuperadmin.map(item => {
+                const active = pathname === item.href || pathname.startsWith(item.href)
+                return (
+                  <Link key={item.href} href={item.href} style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', borderRadius:'8px', marginBottom:'2px', textDecoration:'none', background: active ? '#9B6BFF15' : 'transparent', borderLeft: active ? '2px solid #9B6BFF' : '2px solid transparent', color: active ? '#9B6BFF' : '#8B96A8', fontSize:'13px', fontWeight: active ? '600' : '400' }}>
+                    <span style={{ fontSize:'15px', width:'18px', textAlign:'center', flexShrink:0 }}>{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
         </nav>
         <div style={{ padding:'12px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
           <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'8px', textAlign:'center' }}>DIZGO v2.0 · COP</div>

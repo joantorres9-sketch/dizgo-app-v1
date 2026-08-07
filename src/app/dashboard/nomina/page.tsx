@@ -7,6 +7,8 @@ import { construirColillaPDF } from '@/lib/colillaPdf'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configColaboradores, type FilaColaborador } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -1625,6 +1627,7 @@ function ModalAjuste({ concepto, valorSistema, onClose, onGuardar }: {
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function NominaPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'procesos'|'indicadores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
   const [solicitudes, setSolicitudes] = useState<Array<Record<string, unknown>>>([])
   const [detalleSolicitud, setDetalleSolicitud] = useState<Record<string, unknown> | null>(null)
@@ -1967,6 +1970,7 @@ export default function NominaPage() {
   }
 
   function exportarExcelLiquidacion() {
+    logAccion('nomina', 'descargar')
     const filas = liquidaciones.map(l => {
       const col = colaboradores.find(c => c.id === l.colaborador_id)
       return {
@@ -2001,6 +2005,7 @@ export default function NominaPage() {
   }
 
   function descargarColillaPDF(l: Record<string, unknown>) {
+    logAccion('nomina', 'descargar')
     const col = colaboradores.find(c => c.id === l.colaborador_id)
     if (!col) return
     const doc = construirColillaPDF(datosColillaDe(l, col))
@@ -2009,6 +2014,7 @@ export default function NominaPage() {
 
   async function enviarColillasSeleccionadas() {
     if (colillasSeleccionadas.size === 0) return
+    logAccion('nomina', 'descargar')
     setEnviandoColillas(true)
     const { data: { session } } = await supabase.auth.getSession()
     const colillas = liquidaciones
@@ -2067,6 +2073,7 @@ export default function NominaPage() {
   ]
 
   return (
+    <RequierePermiso modulo="nomina">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       {showModal && (
         <ModalColaborador
@@ -2089,15 +2096,17 @@ export default function NominaPage() {
           <p style={{ fontSize:'12px', color:T.muted }}>Tu equipo es tu mayor activo — gestiona con precisión</p>
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-          <BotonesPlantilla config={configColaboradores} onArchivoValidado={setPreviewColaboradores} theme={T} />
+          {puede('nomina','agregar') && <BotonesPlantilla config={configColaboradores} onArchivoValidado={setPreviewColaboradores} theme={T} />}
           <button onClick={copiarLinkRegistro}
             style={{ padding:'9px 16px', background:`${T.blue}15`, border:`1px solid ${T.blue}40`, borderRadius:'9px', color:T.blue, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
             🔗 Copiar link de registro
           </button>
-          <button onClick={() => { setEditData(null); setShowModal(true) }}
-            style={{ padding:'9px 18px', background:T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
-            + Nuevo colaborador
-          </button>
+          {puede('nomina','agregar') && (
+            <button onClick={() => { setEditData(null); setShowModal(true) }}
+              style={{ padding:'9px 18px', background:T.accent, border:'none', borderRadius:'9px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'13px' }}>
+              + Nuevo colaborador
+            </button>
+          )}
         </div>
       </div>
       {previewColaboradores && <CargaMasivaModal filas={previewColaboradores} columnas={configColaboradores.columnas} onConfirm={confirmarImportColaboradores} onClose={()=>setPreviewColaboradores(null)} theme={T} />}
@@ -2215,9 +2224,9 @@ export default function NominaPage() {
                         </td>
                         <td style={{ padding:'8px 12px' }}>
                           <div style={{ display:'flex', gap:'6px' }}>
-                            <button onClick={() => { setEditData(c); setShowModal(true) }} style={{ padding:'4px 8px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'5px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>✏️</button>
+                            {puede('nomina','modificar') && <button onClick={() => { setEditData(c); setShowModal(true) }} style={{ padding:'4px 8px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'5px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>✏️</button>}
                             <button onClick={() => copiarLinkSolicitudes(c.id)} title="Copiar link personal de solicitudes" style={{ padding:'4px 8px', background:`${T.yellow}15`, border:`1px solid ${T.yellow}30`, borderRadius:'5px', color:T.yellow, cursor:'pointer', fontSize:'10px' }}>🔗</button>
-                            <button onClick={() => eliminarColaborador(c.id)} style={{ padding:'4px 8px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'5px', color:T.red, cursor:'pointer', fontSize:'10px' }}>🗑</button>
+                            {puede('nomina','eliminar') && <button onClick={() => eliminarColaborador(c.id)} style={{ padding:'4px 8px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'5px', color:T.red, cursor:'pointer', fontSize:'10px' }}>🗑</button>}
                           </div>
                         </td>
                       </tr>
@@ -2501,12 +2510,12 @@ export default function NominaPage() {
                   style={{ padding:'9px 16px', background:T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:'700', cursor: calculandoLiquidacion?'wait':'pointer', fontSize:'12px', opacity: calculandoLiquidacion?0.7:1 }}>
                   {calculandoLiquidacion ? 'Calculando...' : '🧮 Calcular liquidación del periodo'}
                 </button>
-                {liquidaciones.length > 0 && (
+                {liquidaciones.length > 0 && puede('nomina','descargar') && (
                   <button onClick={exportarExcelLiquidacion} style={{ padding:'9px 16px', background:'none', border:`1px solid ${T.border}`, borderRadius:'8px', color:T.text, cursor:'pointer', fontSize:'12px' }}>
                     📊 Excel
                   </button>
                 )}
-                {colillasSeleccionadas.size > 0 && (
+                {colillasSeleccionadas.size > 0 && puede('nomina','descargar') && (
                   <button onClick={enviarColillasSeleccionadas} disabled={enviandoColillas}
                     style={{ padding:'9px 16px', background:T.yellow, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: enviandoColillas?'wait':'pointer', fontSize:'12px', opacity: enviandoColillas?0.7:1 }}>
                     {enviandoColillas ? 'Enviando...' : `✉️ Enviar ${colillasSeleccionadas.size} colilla(s)`}
@@ -2595,7 +2604,7 @@ export default function NominaPage() {
                               <div style={{ display:'flex', gap:'6px' }}>
                                 {estado === 'calculada' && <button onClick={() => revisarLiquidacion(l)} style={{ padding:'4px 9px', background:`${T.purple}15`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>Revisar</button>}
                                 {estado === 'revisada' && <button onClick={() => aprobarLiquidacion(l)} style={{ padding:'4px 9px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'6px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>Aprobar</button>}
-                                {(estado === 'aprobada' || estado === 'pagada') && <button onClick={() => descargarColillaPDF(l)} style={{ padding:'4px 9px', background:`${T.green}15`, border:`1px solid ${T.green}30`, borderRadius:'6px', color:T.green, cursor:'pointer', fontSize:'10px' }}>📄 Colilla</button>}
+                                {(estado === 'aprobada' || estado === 'pagada') && puede('nomina','descargar') && <button onClick={() => descargarColillaPDF(l)} style={{ padding:'4px 9px', background:`${T.green}15`, border:`1px solid ${T.green}30`, borderRadius:'6px', color:T.green, cursor:'pointer', fontSize:'10px' }}>📄 Colilla</button>}
                               </div>
                             </td>
                           </tr>
@@ -2762,5 +2771,6 @@ export default function NominaPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

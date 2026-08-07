@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -69,6 +71,7 @@ function clasificarTicket(pvp: number): string {
 
 export default function PrecioPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [productos, setProductos] = useState<Producto[]>([])
   const [prodSel, setProdSel] = useState<Producto|null>(null)
   const [loading, setLoading] = useState(true)
@@ -324,6 +327,7 @@ export default function PrecioPage() {
   )
 
   return (
+    <RequierePermiso modulo="precio">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
@@ -465,21 +469,25 @@ export default function PrecioPage() {
                       <span style={{ color:T.purple }}>{k} <em style={{ color:T.muted, fontSize:'10px' }}>(extra)</em></span>
                       <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                         <span style={{ color:T.text }}>{fmt(v, pais)}</span>
-                        <button onClick={() => {
-                          const nuevo = { ...prodSel.costos_extra }; delete nuevo[k]
-                          setProdSel({ ...prodSel, costos_extra:nuevo })
-                        }} style={{ background:'none', border:'none', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
+                        {puede('precio','eliminar') && (
+                          <button onClick={() => {
+                            const nuevo = { ...prodSel.costos_extra }; delete nuevo[k]
+                            setProdSel({ ...prodSel, costos_extra:nuevo })
+                          }} style={{ background:'none', border:'none', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
+                        )}
                       </div>
                     </div>
                   ))}
-                  <button onClick={() => {
-                    const nombre = prompt('Nombre del costo extra:')
-                    if (!nombre) return
-                    const valor = Number(prompt('Valor ($):') || 0)
-                    setProdSel({ ...prodSel, costos_extra: { ...prodSel.costos_extra, [nombre]: valor } })
-                  }} style={{ marginTop:'6px', padding:'4px 10px', background:`${T.purple}10`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>
-                    + Agregar costo extra
-                  </button>
+                  {puede('precio','agregar') && (
+                    <button onClick={() => {
+                      const nombre = prompt('Nombre del costo extra:')
+                      if (!nombre) return
+                      const valor = Number(prompt('Valor ($):') || 0)
+                      setProdSel({ ...prodSel, costos_extra: { ...prodSel.costos_extra, [nombre]: valor } })
+                    }} style={{ marginTop:'6px', padding:'4px 10px', background:`${T.purple}10`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>
+                      + Agregar costo extra
+                    </button>
+                  )}
 
                   <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px', fontWeight:'700', marginTop:'6px' }}>
                     <span style={{ color:T.text }}>Subtotal directo</span>
@@ -512,21 +520,25 @@ export default function PrecioPage() {
                       <span style={{ color:T.purple }}>{k} <em style={{ color:T.muted, fontSize:'10px' }}>(extra)</em></span>
                       <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
                         <span style={{ color:T.text }}>{v}%</span>
-                        <button onClick={() => {
-                          const nuevo = { ...prodSel.pct_extra }; delete nuevo[k]
-                          setProdSel({ ...prodSel, pct_extra:nuevo })
-                        }} style={{ background:'none', border:'none', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
+                        {puede('precio','eliminar') && (
+                          <button onClick={() => {
+                            const nuevo = { ...prodSel.pct_extra }; delete nuevo[k]
+                            setProdSel({ ...prodSel, pct_extra:nuevo })
+                          }} style={{ background:'none', border:'none', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
+                        )}
                       </div>
                     </div>
                   ))}
-                  <button onClick={() => {
-                    const nombre = prompt('Nombre del % extra:')
-                    if (!nombre) return
-                    const valor = Number(prompt('Valor (%):') || 0)
-                    setProdSel({ ...prodSel, pct_extra: { ...prodSel.pct_extra, [nombre]: valor } })
-                  }} style={{ marginTop:'6px', padding:'4px 10px', background:`${T.purple}10`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>
-                    + Agregar % extra
-                  </button>
+                  {puede('precio','agregar') && (
+                    <button onClick={() => {
+                      const nombre = prompt('Nombre del % extra:')
+                      if (!nombre) return
+                      const valor = Number(prompt('Valor (%):') || 0)
+                      setProdSel({ ...prodSel, pct_extra: { ...prodSel.pct_extra, [nombre]: valor } })
+                    }} style={{ marginTop:'6px', padding:'4px 10px', background:`${T.purple}10`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>
+                      + Agregar % extra
+                    </button>
+                  )}
 
                   <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px', fontWeight:'700', marginTop:'6px' }}>
                     <span style={{ color:T.text }}>Total % variable</span>
@@ -605,8 +617,8 @@ export default function PrecioPage() {
                         <option value="temporada">Temporada / Oferta</option>
                       </select>
                     </div>
-                    <button onClick={guardarPVP} disabled={saving||!pvpHumano}
-                      style={{ width:'100%', padding:'11px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: saving||!pvpHumano?'not-allowed':'pointer', fontSize:'13px', opacity: saving||!pvpHumano?0.6:1 }}>
+                    <button onClick={guardarPVP} disabled={saving||!pvpHumano||!puede('precio','modificar')}
+                      style={{ width:'100%', padding:'11px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: saving||!pvpHumano||!puede('precio','modificar')?'not-allowed':'pointer', fontSize:'13px', opacity: saving||!pvpHumano||!puede('precio','modificar')?0.6:1 }}>
                       {saving ? 'Guardando...' : '💾 Guardar PVP — Aplicar a toda la app'}
                     </button>
                     <div style={{ fontSize:'10px', color:T.muted, textAlign:'center', marginTop:'6px' }}>
@@ -640,10 +652,12 @@ export default function PrecioPage() {
                       <div style={{ fontSize:'11px', color:T.muted }}>{h.margen_anterior?.toFixed(1)}%</div>
                       <div style={{ fontSize:'13px', fontWeight:'700', color: h.margen_nuevo>=25?T.green:h.margen_nuevo>=15?T.yellow:T.red }}>→ {h.margen_nuevo?.toFixed(1)}%</div>
                     </div>
-                    <button onClick={() => revertirPrecio(h.pvp_anterior)}
-                      style={{ padding:'5px 10px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'6px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>
-                      ↺ Revertir
-                    </button>
+                    {puede('precio','modificar') && (
+                      <button onClick={() => revertirPrecio(h.pvp_anterior)}
+                        style={{ padding:'5px 10px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'6px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>
+                        ↺ Revertir
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -742,7 +756,8 @@ export default function PrecioPage() {
                       💡 Con CPA histórico de {fmt(cpaRealHistorico, pais)}, este presupuesto generaría ≈ {Math.round(presupuestoMes/cpaRealHistorico)} pedidos
                     </div>
                   )}
-                  <button onClick={guardarPVP} style={{ width:'100%', padding:'9px', background:`${T.blue}20`, border:`1px solid ${T.blue}40`, borderRadius:'8px', color:T.blue, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                  <button onClick={guardarPVP} disabled={!puede('precio','modificar')}
+                    style={{ width:'100%', padding:'9px', background:`${T.blue}20`, border:`1px solid ${T.blue}40`, borderRadius:'8px', color:T.blue, cursor: puede('precio','modificar')?'pointer':'not-allowed', fontSize:'12px', fontWeight:'600', opacity: puede('precio','modificar')?1:0.6 }}>
                     💾 Guardar presupuesto
                   </button>
                 </div>
@@ -809,5 +824,6 @@ export default function PrecioPage() {
         )}
       </div>
     </div>
+    </RequierePermiso>
   )
 }

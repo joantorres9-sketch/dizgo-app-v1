@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
 
 type Registro = { fecha:string; campana:string; inversion:number; impresiones:number; clics:number; resultados:number }
 type Pedido = { estado:string; producto_id:string; pvp:number; ganancia:number }
@@ -162,6 +163,7 @@ export default function EmbudoPage() {
   )
 
   return (
+    <RequierePermiso modulo="embudo">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ marginBottom:'20px' }}>
         <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🔬 Embudo de Tráfico</h1>
@@ -464,5 +466,6 @@ export default function EmbudoPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

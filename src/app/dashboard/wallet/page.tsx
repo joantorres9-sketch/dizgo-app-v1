@@ -4,6 +4,8 @@ import { createClient, formatMoney } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 import { generarPlantilla } from '@/lib/plantillasExcel'
 import { configWalletDropi } from '@/lib/plantillasConfig'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 type Tx = {
   dropi_id: number; fecha: string; tipo: string; monto: number;
@@ -30,6 +32,7 @@ export default function WalletPage() {
   const [filter, setFilter]   = useState('TODO')
   const [uploadMsg, setUploadMsg] = useState('')
   const supabase = createClient()
+  const { puede } = usePermisos()
 
   useEffect(() => {
     async function load() {
@@ -136,6 +139,7 @@ export default function WalletPage() {
   if (loading) return <div className="text-center py-16 pulse-soft" style={{ color: '#5A6478' }}>Cargando wallet...</div>
 
   return (
+    <RequierePermiso modulo="wallet">
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -143,16 +147,20 @@ export default function WalletPage() {
           <p className="text-sm mt-1" style={{ color: '#8B96A8' }}>Historial de transacciones · Cargar Excel exportado de Dropi</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => generarPlantilla(configWalletDropi)}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                  style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#8B96A8' }}>
-            📄 Generar plantilla actualizada
-          </button>
-          <label className="cursor-pointer px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
-                 style={{ background: '#F5A623', color: '#0A0D14' }}>
-            📤 Cargar Excel Dropi
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} disabled={uploading} />
-          </label>
+          {puede('wallet', 'descargar') && (
+            <button onClick={() => { generarPlantilla(configWalletDropi); logAccion('wallet', 'descargar') }}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                    style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.15)', color: '#8B96A8' }}>
+              📄 Generar plantilla actualizada
+            </button>
+          )}
+          {puede('wallet', 'agregar') && (
+            <label className="cursor-pointer px-4 py-2.5 rounded-xl text-sm font-semibold transition-all"
+                   style={{ background: '#F5A623', color: '#0A0D14' }}>
+              📤 Cargar Excel Dropi
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} disabled={uploading} />
+            </label>
+          )}
         </div>
       </div>
 
@@ -271,5 +279,6 @@ export default function WalletPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

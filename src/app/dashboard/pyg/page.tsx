@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configLibroCaja, type FilaLibroCaja } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 // Paleta local de este archivo (pyg/page.tsx no usa un objeto T central, colorea inline) --
 // se arma aquí solo para pasarle theme a los componentes compartidos de carga masiva.
@@ -40,6 +42,7 @@ const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255
 
 export default function PYGPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'resultados'|'producto'|'mezcla'|'flujo_caja'|'balance'|'cxp'|'libro_caja'>('resultados')
@@ -249,6 +252,7 @@ export default function PYGPage() {
   }
 
   function exportarExcel() {
+    logAccion('pyg', 'descargar')
     const filas = [
       ['ESTADO DE RESULTADOS — DIZGO'],
       ['Mes','Ventas','Costos','Utilidad','Margen %'],
@@ -271,6 +275,7 @@ export default function PYGPage() {
   )
 
   return (
+    <RequierePermiso modulo="pyg">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
@@ -279,7 +284,9 @@ export default function PYGPage() {
           <p style={{ fontSize:'13px', color:'#8B96A8' }}>Resultados · Flujo de Caja · Balance · Cuentas por Pagar · Libro de Caja</p>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={exportarExcel} style={{ padding:'8px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📊 Excel</button>
+          {puede('pyg','descargar') && (
+            <button onClick={exportarExcel} style={{ padding:'8px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📊 Excel</button>
+          )}
           <button onClick={() => window.print()} style={{ padding:'8px 14px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:'#F05C5C', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📄 PDF</button>
         </div>
       </div>
@@ -597,7 +604,7 @@ export default function PYGPage() {
                   </div>
                   <div style={{ fontSize:'13px', fontWeight:'700' }}>{fmtFull(c.valor)}</div>
                   {c.estado==='pendiente' ? (
-                    <button onClick={() => pagarCxp(c)} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?'#F05C5C':'#F5A623', cursor:'pointer', fontSize:'10px', fontWeight:'700' }}>
+                    <button onClick={() => pagarCxp(c)} disabled={!puede('pyg','modificar')} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?'#F05C5C':'#F5A623', cursor: puede('pyg','modificar')?'pointer':'not-allowed', opacity: puede('pyg','modificar')?1:0.5, fontSize:'10px', fontWeight:'700' }}>
                       {vencida?'⚠ Vencida — Pagar':'Pagar'}
                     </button>
                   ) : (
@@ -712,5 +719,6 @@ export default function PYGPage() {
       )}
       {previewLibroCaja && <CargaMasivaModal filas={previewLibroCaja} columnas={configLibroCaja.columnas} onConfirm={confirmarImportLibroCaja} onClose={()=>setPreviewLibroCaja(null)} theme={T_LIBRO} />}
     </div>
+    </RequierePermiso>
   )
 }

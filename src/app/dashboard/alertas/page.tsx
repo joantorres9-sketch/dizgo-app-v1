@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 type Alerta = {
   id: string; tenant_id: string | null
@@ -45,6 +47,7 @@ const inp = { background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', bo
 
 export default function AlertasPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
 
   const [tenantId, setTenantId] = useState('')
   const [esSuperadmin, setEsSuperadmin] = useState(false)
@@ -276,6 +279,7 @@ export default function AlertasPage() {
   )
 
   return (
+    <RequierePermiso modulo="alertas">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
@@ -290,10 +294,12 @@ export default function AlertasPage() {
               ✓ Marcar todas leídas
             </button>
           )}
-          <button onClick={() => setTab('nueva')}
-            style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
-            + Nueva alerta
-          </button>
+          {puede('alertas','agregar') && (
+            <button onClick={() => setTab('nueva')}
+              style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
+              + Nueva alerta
+            </button>
+          )}
         </div>
       </div>
 
@@ -590,7 +596,7 @@ export default function AlertasPage() {
                 placeholder="Ej: Despachar todo el 28 antes de las 2pm" style={inp} />
             </div>
 
-            <button onClick={crearAlerta} disabled={!nueva.titulo || !nueva.mensaje}
+            <button onClick={crearAlerta} disabled={!nueva.titulo || !nueva.mensaje || !puede('alertas','agregar')}
               style={{ width:'100%', padding:'11px', background: nueva.titulo && nueva.mensaje ? '#F5A623' : 'rgba(255,255,255,0.05)',
                 border:'none', borderRadius:'10px', color: nueva.titulo && nueva.mensaje ? '#0A0D14' : '#5A6478',
                 cursor: nueva.titulo && nueva.mensaje ? 'pointer' : 'not-allowed', fontWeight:'700', fontSize:'13px' }}>
@@ -618,5 +624,6 @@ export default function AlertasPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

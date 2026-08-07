@@ -5,6 +5,8 @@ import { inicializarPaisTenant } from '@/lib/paises'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configPedidosDropi, configPedidos, type FilaPedidoDropi, type FilaPedido } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 // Traduce el ESTATUS real de Dropi (export de Órdenes) al estado interno de DIZGO. Confirmado
 // contra un archivo de ejemplo real -- si Dropi cambia o agrega estatus nuevos, cualquiera no
@@ -617,6 +619,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function PedidosPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
@@ -791,6 +794,7 @@ export default function PedidosPage() {
   const riesgoColor = (r:string) => RIESGOS.find(x=>x.v===r)?.c||T.muted
 
   return (
+    <RequierePermiso modulo="pedidos">
     <div style={{color:T.text,fontFamily:'"DM Sans", system-ui, sans-serif'}}>
       {showNuevo && <ModalNuevoPedido tenantId={tenantId} onClose={()=>setShowNuevo(false)} onSave={()=>{setShowNuevo(false);loadData()}} />}
       {pedidoActivo && <PanelPedido pedido={pedidoActivo} onClose={()=>setPedidoActivo(null)} onUpdate={loadData} />}
@@ -803,11 +807,14 @@ export default function PedidosPage() {
         </div>
         <div style={{display:'flex',gap:'8px'}}>
           <button onClick={loadData} style={{padding:'8px 14px',background:T.card,border:`1px solid ${T.border}`,borderRadius:'8px',color:T.muted,cursor:'pointer',fontSize:'12px'}}>🔄 Actualizar</button>
-          <button onClick={()=>setShowNuevo(true)} style={{padding:'8px 18px',background:T.accent,border:'none',borderRadius:'8px',color:T.card,fontWeight:'700',cursor:'pointer',fontSize:'13px'}}>+ Nuevo pedido</button>
+          {puede('pedidos','agregar') && (
+            <button onClick={()=>setShowNuevo(true)} style={{padding:'8px 18px',background:T.accent,border:'none',borderRadius:'8px',color:T.card,fontWeight:'700',cursor:'pointer',fontSize:'13px'}}>+ Nuevo pedido</button>
+          )}
         </div>
       </div>
 
       {/* Carga masiva */}
+      {puede('pedidos','agregar') && (
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:'10px',marginBottom:'14px'}}>
         <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px 14px'}}>
           <div style={{fontSize:'11px',fontWeight:'700',color:T.accent,marginBottom:'8px'}}>📥 Carga masiva — Export de Dropi</div>
@@ -824,6 +831,7 @@ export default function PedidosPage() {
           <div style={{fontSize:'10px',color:T.muted,marginTop:'6px'}}>Si no usas Dropi, llena esta plantilla con tus pedidos históricos.</div>
         </div>
       </div>
+      )}
       {progresoImport && (
         <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px 14px',marginBottom:'14px'}}>
           <div style={{fontSize:'11px',color:T.muted,marginBottom:'6px'}}>Importando pedidos… {progresoImport.hechos}/{progresoImport.total}</div>
@@ -910,7 +918,9 @@ export default function PedidosPage() {
                     <div style={{fontSize:'36px',marginBottom:'12px'}}>📦</div>
                     <div style={{fontSize:'14px',fontWeight:'600',color:T.text,marginBottom:'6px'}}>No hay pedidos</div>
                     <div style={{fontSize:'12px',color:T.muted,marginBottom:'16px'}}>Crea un pedido manual o conecta Shopify/Dropi</div>
-                    <button onClick={()=>setShowNuevo(true)} style={{padding:'9px 20px',background:T.accent,border:'none',borderRadius:'8px',color:T.card,fontWeight:'700',cursor:'pointer',fontSize:'13px'}}>+ Crear primer pedido</button>
+                    {puede('pedidos','agregar') && (
+                      <button onClick={()=>setShowNuevo(true)} style={{padding:'9px 20px',background:T.accent,border:'none',borderRadius:'8px',color:T.card,fontWeight:'700',cursor:'pointer',fontSize:'13px'}}>+ Crear primer pedido</button>
+                    )}
                   </td>
                 </tr>
               ):filtrados.map((p,idx)=>(
@@ -965,5 +975,6 @@ export default function PedidosPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

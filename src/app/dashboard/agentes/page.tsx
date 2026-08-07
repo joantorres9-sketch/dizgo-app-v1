@@ -1,6 +1,8 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 type PedidoPendiente = {
   id: string; numero_pedido: string; cliente_nombre: string
@@ -26,6 +28,7 @@ function horasDesde(fecha: string){ return Math.round((Date.now()-new Date(fecha
 
 export default function AgentesPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'confirmador'|'novedades'|'contable'|'campanas'|'inventario'|'logistico'>('confirmador')
@@ -251,6 +254,7 @@ Sé directo, usa números reales, sin rodeos.`
   )
 
   return (
+    <RequierePermiso modulo="agentes">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ marginBottom:'20px' }}>
         <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🤖 Agentes de IA DIZGO</h1>
@@ -302,7 +306,7 @@ Sé directo, usa números reales, sin rodeos.`
                   <div style={{ fontSize:'10px', color:'#F05C5C', marginTop:'2px' }}>⏰ {p.horas_espera}h esperando</div>
                 </div>
                 <button onClick={() => ejecutarAgente('confirmador', p)}
-                  disabled={corriendo === 'confirmador'}
+                  disabled={corriendo === 'confirmador' || !puede('agentes','agregar')}
                   style={{ padding:'7px 14px', background:'rgba(61,142,240,0.15)', border:'1px solid rgba(61,142,240,0.3)', borderRadius:'8px', color:'#3D8EF0', cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='confirmador' ? '⏳ Generando...' : '🤖 Generar mensaje'}
                 </button>
@@ -357,7 +361,7 @@ Sé directo, usa números reales, sin rodeos.`
                   <div style={{ fontSize:'10px', color:'#F5A623', marginTop:'2px' }}>⏰ {p.horas_espera}h en novedad</div>
                 </div>
                 <button onClick={() => ejecutarAgente('novedades', p)}
-                  disabled={corriendo === 'novedades'}
+                  disabled={corriendo === 'novedades' || !puede('agentes','agregar')}
                   style={{ padding:'7px 14px', background:'rgba(245,166,35,0.15)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:'8px', color:'#F5A623', cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='novedades' ? '⏳ Generando...' : '🤖 Resolver novedad'}
                 </button>
@@ -414,7 +418,7 @@ Sé directo, usa números reales, sin rodeos.`
                   <span style={{ fontSize:'11px', fontWeight:'700', color:'#F05C5C' }}>{fmt(c.valor)}</span>
                 </div>
               ))}
-              <button onClick={ejecutarContable} disabled={corriendo==='contable'}
+              <button onClick={ejecutarContable} disabled={corriendo==='contable' || !puede('agentes','agregar')}
                 style={{ width:'100%', marginTop:'14px', padding:'11px', background: corriendo==='contable'?'rgba(45,212,160,0.1)':'#2DD4A0', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor: corriendo==='contable'?'wait':'pointer', fontSize:'13px' }}>
                 {corriendo==='contable' ? '⏳ Analizando situación...' : '🤖 Ejecutar diagnóstico financiero'}
               </button>
@@ -476,7 +480,7 @@ Sé directo, usa números reales, sin rodeos.`
                       if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'campanas', trigger_tipo:'manual', input_resumen:p.campana, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
                     } catch { setResultado({ agente:'campanas', texto:'❌ Error al conectar' }) }
                     setCorriendo(null)
-                  }} disabled={corriendo==='campanas'}
+                  }} disabled={corriendo==='campanas' || !puede('agentes','agregar')}
                     style={{ padding:'6px 12px', background:`rgba(155,107,255,0.15)`, border:'none', borderRadius:'7px', color:'#9B6BFF', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                     {corriendo==='campanas'?'⏳':'🤖 Analizar'}
                   </button>
@@ -523,7 +527,7 @@ Sé directo, usa números reales, sin rodeos.`
                     if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'inventario', trigger_tipo:'manual', input_resumen:`Stock bajo: ${item.cantidad_disponible}/${item.stock_minimo}`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
                   } catch { setResultado({ agente:'inventario', texto:'❌ Error al conectar' }) }
                   setCorriendo(null)
-                }} disabled={corriendo==='inventario'}
+                }} disabled={corriendo==='inventario' || !puede('agentes','agregar')}
                   style={{ padding:'6px 12px', background:'rgba(240,92,92,0.15)', border:'none', borderRadius:'7px', color:'#F05C5C', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='inventario'?'⏳':'🤖 Analizar'}
                 </button>
@@ -575,7 +579,7 @@ Sé directo, usa números reales, sin rodeos.`
                       if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'logistico', trigger_tipo:'manual', input_resumen:`${t.transportadora}: ${t.tasa}% tasa entrega`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
                     } catch { setResultado({ agente:'logistico', texto:'❌ Error al conectar' }) }
                     setCorriendo(null)
-                  }} disabled={corriendo==='logistico'}
+                  }} disabled={corriendo==='logistico' || !puede('agentes','agregar')}
                     style={{ padding:'6px 12px', background:'rgba(45,212,160,0.15)', border:'none', borderRadius:'7px', color:'#2DD4A0', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                     {corriendo==='logistico'?'⏳':'🤖 Analizar'}
                   </button>
@@ -615,5 +619,6 @@ Sé directo, usa números reales, sin rodeos.`
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

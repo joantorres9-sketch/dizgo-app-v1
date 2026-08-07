@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant, paisPorCodigo } from '@/lib/paises'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -107,6 +109,7 @@ function llenarVariables(contenido: string, vars: Record<string,string>): string
 
 export default function WhatsAppPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'kanban'|'plantillas'|'lotes'>('kanban')
@@ -272,6 +275,7 @@ export default function WhatsAppPage() {
   )
 
   return (
+    <RequierePermiso modulo="whatsapp">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
@@ -350,7 +354,7 @@ export default function WhatsAppPage() {
                             </span>
                           )}
                         </div>
-                        {pis.v !== 'confirmados' && (
+                        {pis.v !== 'confirmados' && puede('whatsapp','modificar') && (
                           <div style={{ display:'flex', gap:'4px', marginTop:'6px', flexWrap:'wrap' }}>
                             {PISCINAS.filter(x => x.v !== pis.v).map(dest => (
                               <button key={dest.v} onClick={(e) => { e.stopPropagation(); moverPiscina(p, dest.v, 'manual') }}
@@ -506,10 +510,12 @@ export default function WhatsAppPage() {
               <span style={{ fontSize:'12px', fontWeight:'600', color: chats[pedidoActivo.id]?.ia_modo_activo ? T.purple : T.accent }}>
                 {chats[pedidoActivo.id]?.ia_modo_activo ? '🤖 MODO IA' : '👤 MODO HUMANO'}
               </span>
-              <button onClick={() => toggleModo(pedidoActivo, 'manual')}
-                style={{ padding:'6px 14px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:'20px', color:T.text, cursor:'pointer', fontSize:'11px' }}>
-                Cambiar
-              </button>
+              {puede('whatsapp','modificar') && (
+                <button onClick={() => toggleModo(pedidoActivo, 'manual')}
+                  style={{ padding:'6px 14px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:'20px', color:T.text, cursor:'pointer', fontSize:'11px' }}>
+                  Cambiar
+                </button>
+              )}
             </div>
 
             <div style={{ padding:'14px 20px' }}>
@@ -530,5 +536,6 @@ export default function WhatsAppPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

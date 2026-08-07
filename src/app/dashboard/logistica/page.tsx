@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { RequierePermiso } from '@/components/RequierePermiso'
 
 type Pedido = {
   id: string; cliente_nombre: string; cliente_telefono: string
@@ -163,6 +164,7 @@ export default function LogisticaPage() {
   )
 
   return (
+    <RequierePermiso modulo="logistica">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
@@ -430,5 +432,6 @@ export default function LogisticaPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

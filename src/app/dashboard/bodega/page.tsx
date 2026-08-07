@@ -5,6 +5,8 @@ import * as XLSX from 'xlsx'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
 import { configInventarioInicial, configInventarioCompra, type FilaInventario } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
+import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos, logAccion } from '@/lib/permisos'
 
 // Paleta local (bodega/page.tsx colorea inline, sin objeto T central) -- solo para pasarle
 // theme a los componentes compartidos de carga masiva.
@@ -44,6 +46,7 @@ function horasDesde(fecha:string){ return Math.round((Date.now()-new Date(fecha)
 
 export default function BodegaPage() {
   const supabase = createClient()
+  const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'stock'|'importacion'|'piscinas'|'riesgo'|'proveedor'>('stock')
@@ -175,6 +178,7 @@ export default function BodegaPage() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Inventario')
     XLSX.writeFile(wb, `inventario_${new Date().toISOString().slice(0,10)}.xlsx`)
+    logAccion('bodega', 'descargar')
   }
 
   async function nacionalizarStock(invId:string) {
@@ -206,6 +210,7 @@ export default function BodegaPage() {
   )
 
   return (
+    <RequierePermiso modulo="bodega">
     <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
@@ -213,25 +218,31 @@ export default function BodegaPage() {
           <p style={{ fontSize:'13px', color:'#8B96A8' }}>Física + Virtual · Importación · Dropshipping · HACER</p>
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
-          <button onClick={exportarInventario} style={{ padding:'9px 16px', background:'transparent', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'9px', color:'#8B96A8', fontWeight:'600', cursor:'pointer', fontSize:'12px' }}>📥 Exportar inventario</button>
-          <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
+          {puede('bodega','descargar') && (
+            <button onClick={exportarInventario} style={{ padding:'9px 16px', background:'transparent', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'9px', color:'#8B96A8', fontWeight:'600', cursor:'pointer', fontSize:'12px' }}>📥 Exportar inventario</button>
+          )}
+          {puede('bodega','agregar') && (
+            <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
+          )}
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'10px', marginBottom:'16px' }}>
-        <div style={{ ...s, padding:'12px 14px' }}>
-          <div style={{ fontSize:'11px', fontWeight:'700', color:'#F5A623', marginBottom:'8px' }}>📦 Carga masiva — Inventario inicial</div>
-          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-            <BotonesPlantilla config={configInventarioInicial} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'carga_inicial' })} theme={T_BODEGA} />
+      {puede('bodega','agregar') && (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'10px', marginBottom:'16px' }}>
+          <div style={{ ...s, padding:'12px 14px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#F5A623', marginBottom:'8px' }}>📦 Carga masiva — Inventario inicial</div>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              <BotonesPlantilla config={configInventarioInicial} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'carga_inicial' })} theme={T_BODEGA} />
+            </div>
+          </div>
+          <div style={{ ...s, padding:'12px 14px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#9B6BFF', marginBottom:'8px' }}>🛒 Carga masiva — Compras / movimientos posteriores</div>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              <BotonesPlantilla config={configInventarioCompra} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'compra' })} theme={T_BODEGA} />
+            </div>
           </div>
         </div>
-        <div style={{ ...s, padding:'12px 14px' }}>
-          <div style={{ fontSize:'11px', fontWeight:'700', color:'#9B6BFF', marginBottom:'8px' }}>🛒 Carga masiva — Compras / movimientos posteriores</div>
-          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-            <BotonesPlantilla config={configInventarioCompra} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'compra' })} theme={T_BODEGA} />
-          </div>
-        </div>
-      </div>
+      )}
       {previewInventario && (
         <CargaMasivaModal
           filas={previewInventario.filas}
@@ -477,5 +488,6 @@ export default function BodegaPage() {
         </div>
       )}
     </div>
+    </RequierePermiso>
   )
 }

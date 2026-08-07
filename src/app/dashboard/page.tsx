@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
+import { GuiaBienvenida } from '@/components/GuiaBienvenida'
 
 // ── TIPOS ────────────────────────────────────────────────────
 type MesData = {
@@ -236,6 +237,9 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
           .card-print { background:#f8f8f8!important; border:1px solid #ddd!important; }
         }
       `}</style>
+
+      {/* ── GUÍA DE BIENVENIDA (solo tenants de cortesía) ── */}
+      {planInfo.plan === 'cortesia' && <GuiaBienvenida />}
 
       {/* ── AVISO DE PLAN ── */}
       {planInfo.plan !== 'explorador' && planInfo.licencia_vence && (() => {
