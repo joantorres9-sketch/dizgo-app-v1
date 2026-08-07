@@ -87,6 +87,25 @@ export type PaisConfigRH = {
   entidades: { eps: string[]; pension: string[]; arl: string[]; banco: string[]; cajaComp: string[]; cesantias: string[] }
   nivelesFormacion: string[]
   tipoCuenta: string[]
+  // Rasgos normativos laborales — controlan qué campos/conceptos se muestran en el formulario de
+  // colaborador y en el cálculo de carga prestacional. `false`/`[]` significa que el concepto NO
+  // EXISTE en ese país (se oculta el campo), no que está vacío pendiente de llenar.
+  tieneCajaComp: boolean
+  tieneCesantias: boolean
+  tieneARLNiveles: boolean
+  tieneAuxTransporte: boolean
+  tieneExoneracionParafiscal: boolean
+  tiposContrato: string[]
+  tiposCotizante: { value: string; label: string }[]
+}
+
+// Países donde DIZGO aún no tiene la normatividad laboral verificada — placeholders neutros
+// (NO son términos legales reales de cada país) hasta que se investigue y confirme cada uno.
+// Ver src/app/dashboard/nomina/NOMINA_MULTIPAIS_PLAN.md para el plan de ajuste país por país.
+const GENERICO_LABORAL = {
+  tieneCajaComp: false, tieneCesantias: false, tieneARLNiveles: false, tieneAuxTransporte: false, tieneExoneracionParafiscal: false,
+  tiposContrato: ['Indefinido','A plazo fijo','Por obra o servicio','Prestación de servicios'],
+  tiposCotizante: [] as { value: string; label: string }[],
 }
 
 const CONFIG_RH_BASE: Record<string, PaisConfigRH> = {
@@ -101,7 +120,16 @@ const CONFIG_RH_BASE: Record<string, PaisConfigRH> = {
     },
     nivelesFormacion: ['Primaria','Bachillerato','Técnico','Tecnólogo','Profesional','Especialización','Maestría','Doctorado'],
     tipoCuenta: ['Ahorros','Corriente'],
+    tieneCajaComp: true, tieneCesantias: true, tieneARLNiveles: true, tieneAuxTransporte: true, tieneExoneracionParafiscal: true,
+    tiposContrato: ['Empleado','Término fijo','Obra o labor','Contratista','Honorarios','Aprendiz SENA'],
+    tiposCotizante: [
+      { value:'1', label:'01 — Dependiente' }, { value:'2', label:'02 — Independiente' }, { value:'3', label:'03 — Servicio doméstico' },
+      { value:'12', label:'12 — Dependiente sector público sin tope' }, { value:'15', label:'15 — Aprendiz etapa lectiva (sin cotización)' }, { value:'51', label:'51 — Aprendiz etapa práctica' },
+    ],
   },
+  // Ecuador: sin Caja de Compensación, sin múltiples fondos privados de cesantías, sin niveles de
+  // ARL (IESS Riesgos del Trabajo es una sola entidad) ni auxilio de transporte legal. Tipos de
+  // contrato y de cotizante IESS verificados en 2026 — ver NOMINA_MULTIPAIS_PLAN.md.
   ECU: {
     entidades: {
       eps: ['IESS','Salud S.A.','Humana','Colonial'],
@@ -113,6 +141,26 @@ const CONFIG_RH_BASE: Record<string, PaisConfigRH> = {
     },
     nivelesFormacion: ['Primaria','Secundaria','Bachillerato','Técnico','Tecnólogo','Tercer Nivel','Cuarto Nivel'],
     tipoCuenta: ['Ahorros','Corriente'],
+    tieneCajaComp: false, tieneCesantias: false, tieneARLNiveles: false, tieneAuxTransporte: false, tieneExoneracionParafiscal: false,
+    tiposContrato: [
+      'Contrato Indefinido','Contrato Eventual','Contrato Ocasional','Contrato por Obra Cierta',
+      'Contrato por Obra o Servicio dentro del Giro del Negocio','Contrato por Temporada','Contrato de Aprendizaje',
+      'Contrato Especial Emergente','Contrato Joven','Contrato de Emprendimiento',
+      'Contratos Sectoriales (Agrícola, Ganadero, Turístico, Florícola, Construcción, etc.)',
+      'Contrato a Jornada Parcial Permanente','Contrato de Teletrabajo',
+    ],
+    tiposCotizante: [
+      { value:'privado_dependencia', label:'Trabajador sector privado (bajo relación de dependencia)' },
+      { value:'publico_dependencia', label:'Servidor público (bajo relación de dependencia)' },
+      { value:'domestico', label:'Trabajador del hogar / doméstico (bajo relación de dependencia)' },
+      { value:'independiente', label:'Trabajador independiente / autónomo (sin relación de dependencia)' },
+      { value:'cultural', label:'Actor o gestor cultural (registrado en el RUAC)' },
+      { value:'voluntario_residente', label:'Afiliado voluntario residente en Ecuador' },
+      { value:'voluntario_exterior', label:'Afiliado voluntario ecuatoriano en el exterior' },
+      { value:'seguro_campesino', label:'Cotizante del Seguro Social Campesino' },
+      { value:'no_remunerado_hogar', label:'Trabajo No Remunerado del Hogar' },
+      { value:'joven', label:'Afiliado Joven (15 a 24 años: voluntario o emprendedor)' },
+    ],
   },
   MEX: {
     entidades: {
@@ -125,6 +173,7 @@ const CONFIG_RH_BASE: Record<string, PaisConfigRH> = {
     },
     nivelesFormacion: ['Primaria','Secundaria','Preparatoria','Técnico','Licenciatura','Especialidad','Maestría','Doctorado'],
     tipoCuenta: ['Débito','Nómina'],
+    ...GENERICO_LABORAL,
   },
   PER: {
     entidades: {
@@ -137,6 +186,7 @@ const CONFIG_RH_BASE: Record<string, PaisConfigRH> = {
     },
     nivelesFormacion: ['Primaria','Secundaria','Técnico','Universitario','Posgrado'],
     tipoCuenta: ['Ahorros','Corriente'],
+    ...GENERICO_LABORAL,
   },
 }
 
@@ -144,6 +194,7 @@ const CONFIG_RH_GENERICO: PaisConfigRH = {
   entidades: { eps: [], pension: [], arl: [], banco: [], cajaComp: [], cesantias: [] },
   nivelesFormacion: ['Primaria','Secundaria','Técnico','Universitario','Posgrado'],
   tipoCuenta: ['Ahorros','Corriente'],
+  ...GENERICO_LABORAL,
 }
 
 export function configRHPorPais(paisCode: string): PaisConfigRH {

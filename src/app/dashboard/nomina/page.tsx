@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, Fragment } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { PAISES, buscarPaises, paisPorCodigo, divisionesPorPais, etiquetaDivision, configRHPorPais } from '@/lib/paises'
+import { PAISES, buscarPaises, paisPorCodigo, divisionesPorPais, etiquetaDivision, configRHPorPais, formatMoneda } from '@/lib/paises'
 import * as XLSX from 'xlsx'
 import { construirColillaPDF } from '@/lib/colillaPdf'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
@@ -156,14 +156,15 @@ function Ayuda({ texto }: { texto: string }) {
   )
 }
 
-// ── Input numérico con separador de miles en vivo (1.500.000, no 1500000) ──
-function InputMiles({ value, onChange, style }: { value: number; onChange: (v: number) => void; style?: React.CSSProperties }) {
-  const [texto, setTexto] = useState(value ? value.toLocaleString('es-CO') : '')
+// ── Input numérico con separador de miles en vivo (1.500.000, no 1500000) — el separador (punto
+// vs coma) sigue el locale del país para no registrar por error 1,000 como si fuera 1.000 ──
+function InputMiles({ value, onChange, style, locale = 'es-CO' }: { value: number; onChange: (v: number) => void; style?: React.CSSProperties; locale?: string }) {
+  const [texto, setTexto] = useState(value ? value.toLocaleString(locale) : '')
   useEffect(() => {
     const limpio = parseInt(texto.replace(/\D/g, ''), 10) || 0
-    if (limpio !== value) setTexto(value ? value.toLocaleString('es-CO') : '')
+    if (limpio !== value) setTexto(value ? value.toLocaleString(locale) : '')
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value])
+  }, [value, locale])
   return (
     <input
       style={style || inp}
@@ -172,10 +173,41 @@ function InputMiles({ value, onChange, style }: { value: number; onChange: (v: n
       onChange={e => {
         const digitos = e.target.value.replace(/\D/g, '')
         const num = digitos ? parseInt(digitos, 10) : 0
-        setTexto(num ? num.toLocaleString('es-CO') : '')
+        setTexto(num ? num.toLocaleString(locale) : '')
         onChange(num)
       }}
     />
+  )
+}
+
+// ── Selector de indicativo telefónico con bandera + nombre de país — un <select> nativo no
+// puede mostrar imágenes en las opciones, así que se arma un dropdown propio (mismo patrón que
+// ComboBuscable) para que se vea el país, no solo el código pelado ("+593") ──
+function SelectorIndicativo({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const actual = PAISES.find(p => p.codigoTel === value) || PAISES[0]
+  return (
+    <div style={{ position:'relative' }}>
+      <button type="button" onClick={() => setOpen(o => !o)} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        style={{ ...inp, display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', textAlign:'left' }}>
+        <img src={actual.flag} alt="" style={{ width:'16px', height:'12px', objectFit:'cover', borderRadius:'2px', flexShrink:0 }} />
+        <span style={{ fontSize:'12px' }}>{actual.codigoTel}</span>
+      </button>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:60, width:'230px', maxHeight:'220px', overflowY:'auto', background:'#050B16', border:`1px solid ${T.border}`, borderRadius:'8px', boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
+          {PAISES.map(p => (
+            <div key={p.code} onMouseDown={() => { onChange(p.codigoTel); setOpen(false) }}
+              style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'12px', color:T.text }}
+              onMouseEnter={e => e.currentTarget.style.background = '#0F1E32'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <img src={p.flag} alt="" style={{ width:'16px', height:'12px', objectFit:'cover', borderRadius:'2px', flexShrink:0 }} />
+              <span style={{ flex:1 }}>{p.nombre}</span>
+              <span style={{ color:T.muted }}>{p.codigoTel}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -211,14 +243,10 @@ function ComboBuscable({ value, onChange, opciones, placeholder }: {
   )
 }
 
+// Delega en formatMoneda (src/lib/paises.ts) — cubre los 11 países soportados, antes esta función
+// tenía su propia tabla parcial (solo 6 países) y el resto caía silenciosamente al formato COP.
 function fmt(v: number, pais = 'COL'): string {
-  const cfgs: Record<string,{locale:string;currency:string;dec:number}> = {
-    COL:{locale:'es-CO',currency:'COP',dec:0}, ECU:{locale:'en-US',currency:'USD',dec:2},
-    MEX:{locale:'es-MX',currency:'MXN',dec:2}, PER:{locale:'es-PE',currency:'PEN',dec:2},
-    CHL:{locale:'es-CL',currency:'CLP',dec:0}, ARG:{locale:'es-AR',currency:'ARS',dec:2},
-  }
-  const c = cfgs[pais] || cfgs.COL
-  return new Intl.NumberFormat(c.locale,{style:'currency',currency:c.currency,minimumFractionDigits:c.dec}).format(v)
+  return formatMoneda(v, pais)
 }
 
 // Honorarios/Contratista: independientes que facturan por prestación de servicios — no
@@ -238,9 +266,8 @@ function calcAuxTransporte(salario_base: number, tipo_contrato: string, pais_cod
   return salario_base > 0 && salario_base <= dosSmmlv ? (tasas.aux_transporte || 162000) : 0
 }
 
-function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): number {
+function calcCargaCOL(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): number {
   const s = colab.salario_base || 0
-  if (tipoEsIndependiente(colab.tipo_contrato || '')) return Math.round(s)
   const arl_pcts = [tasas.arl_nivel1||0.522,tasas.arl_nivel2||1.044,tasas.arl_nivel3||2.436,tasas.arl_nivel4||4.350,tasas.arl_nivel5||6.960]
   const nivel = (colab.nivel_arl || 1) - 1
   const smmlv10 = (tasas.salario_minimo||1300000) * (tasas.tope_exoneracion||10)
@@ -254,6 +281,28 @@ function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>): 
     (tasas.prima||8.33)/100 + (tasas.vacaciones||4.17)/100
   )
   return Math.round(s + carga + (colab.aux_transporte || 0))
+}
+
+// Ecuador 2026 — tasas verificadas (ver NOMINA_MULTIPAIS_PLAN.md en esta carpeta): IESS patronal 11.15%
+// + IECE 0.5% + SECAP 0.5%, décimo tercero 8.33% (1/12 del salario), fondo de reserva 8.33%
+// (se provisiona igual que las cesantías en Colombia, aunque legalmente solo es exigible desde el
+// mes 13), vacaciones 4.17% (15 días/año). El décimo cuarto NO es un % del salario del
+// colaborador — es un monto fijo de 1 SBU/año para todos, sin importar cuánto gane.
+const SBU_ECU_2026 = 482
+function calcCargaECU(colab: Partial<Colaborador>): number {
+  const s = colab.salario_base || 0
+  const carga = s * (0.1115 + 0.005 + 0.005 + 0.0833 + 0.0833 + 0.0417)
+  return Math.round(s + carga + SBU_ECU_2026 / 12)
+}
+
+function calcCarga(colab: Partial<Colaborador>, tasas: Partial<TasaHistorico>, paisCode: string): number {
+  const s = colab.salario_base || 0
+  if (tipoEsIndependiente(colab.tipo_contrato || '')) return Math.round(s)
+  if (paisCode === 'ECU') return calcCargaECU(colab)
+  // Otros países aún sin fórmula de carga prestacional verificada — se muestra solo el salario
+  // base en vez de aplicar por defecto la fórmula colombiana (que sería incorrecta ahí).
+  if (paisCode !== 'COL') return Math.round(s)
+  return calcCargaCOL(colab, tasas)
 }
 
 // Multiplicador de horas extra/recargos (Código Sustantivo del Trabajo, Colombia) — mismo mapa
@@ -404,17 +453,18 @@ function ModalColaborador({
     ciudad: editData?.ciudad || '', direccion: editData?.direccion || '',
     codigo_tel: editData?.codigo_tel || '+57', celular: editData?.celular || '',
     email: editData?.email || '', correo_personal: editData?.correo_personal || '',
-    contacto_emergencia: editData?.contacto_emergencia || { nombre:'', parentesco:'', celular:'' },
+    contacto_emergencia: editData?.contacto_emergencia || { nombre:'', parentesco:'', celular:'', codigo_tel: editData?.codigo_tel || '+57' },
     nivel_formacion: editData?.nivel_formacion || '',
     cargo: editData?.cargo || '', cargo_id: editData?.cargo_id || '', proceso_id: editData?.proceso_id || '',
-    tipo_contrato: editData?.tipo_contrato || 'Empleado',
+    tipo_contrato: editData?.tipo_contrato || configRHPorPais(editData?.pais_code || 'COL').tiposContrato[0],
     fecha_ingreso: editData?.fecha_ingreso || '', fecha_fin: editData?.fecha_fin || '',
     jornada: editData?.jornada || 'Tiempo completo',
     lugar_ejecucion: editData?.lugar_ejecucion || '', sede: editData?.sede || '',
     salario_base: editData?.salario_base || 0, aux_transporte: editData?.aux_transporte || 0,
     tipo_salario: editData?.tipo_salario || 'Fijo',
     nivel_arl: editData?.nivel_arl || 1, es_pensionado: editData?.es_pensionado || false,
-    aplica_ley1607: editData?.aplica_ley1607 || false, tipo_cotizante: editData?.tipo_cotizante || '1',
+    aplica_ley1607: editData?.aplica_ley1607 || false,
+    tipo_cotizante: editData?.tipo_cotizante || configRHPorPais(editData?.pais_code || 'COL').tiposCotizante[0]?.value || '',
     eps: editData?.eps || '', pension: editData?.pension || '', arl: editData?.arl || '',
     caja_comp: editData?.caja_comp || '', cesantias: editData?.cesantias || '',
     banco: editData?.banco || '', tipo_cuenta: editData?.tipo_cuenta || 'Ahorros',
@@ -424,7 +474,7 @@ function ModalColaborador({
   const paisConfig = configRHPorPais(f.pais_code)
   const paisNombre = paisPorCodigo(f.pais_code)?.nombre || f.pais_code
   const esIndependiente = tipoEsIndependiente(f.tipo_contrato)
-  const cargaTotal = calcCarga(f as Partial<Colaborador>, tasas)
+  const cargaTotal = calcCarga(f as Partial<Colaborador>, tasas, f.pais_code)
 
   // Alerta contrato término fijo
   const diasAlerta = f.fecha_fin ? Math.ceil((new Date(f.fecha_fin).getTime() - Date.now()) / 86400000) : null
@@ -468,8 +518,13 @@ function ModalColaborador({
   }, [f.foto_url])
 
   // Auxilio de transporte automático (Colombia, solo contratos dependientes) — el usuario puede
-  // seguir editándolo manualmente para el resto de países.
+  // seguir editándolo manualmente para el resto de países que sí lo tengan. En países donde el
+  // concepto no existe legalmente (ej. Ecuador) se fuerza a 0, no se deja editable.
   useEffect(() => {
+    if (!paisConfig.tieneAuxTransporte) {
+      setF(prev => prev.aux_transporte === 0 ? prev : { ...prev, aux_transporte: 0 })
+      return
+    }
     if (f.pais_code !== 'COL' || tipoEsIndependiente(f.tipo_contrato)) return
     const auto = calcAuxTransporte(f.salario_base, f.tipo_contrato, f.pais_code, tasas)
     setF(prev => prev.aux_transporte === auto ? prev : { ...prev, aux_transporte: auto })
@@ -646,7 +701,15 @@ function ModalColaborador({
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.pais_code} onChange={e => {
                     const code = e.target.value
                     const p = paisPorCodigo(code)
-                    setF(prev => ({ ...prev, pais_code: code, codigo_tel: p?.codigoTel || prev.codigo_tel, departamento: '' }))
+                    const cfgNuevo = configRHPorPais(code)
+                    setF(prev => ({
+                      ...prev, pais_code: code, codigo_tel: p?.codigoTel || prev.codigo_tel, departamento: '',
+                      // Tipo de contrato y tipo de cotizante son listas específicas de cada país —
+                      // el valor anterior (ej. "Empleado" de Colombia) no existe en la lista del país
+                      // nuevo, así que se reinicia al primero de la lista correspondiente.
+                      tipo_contrato: cfgNuevo.tiposContrato[0] || prev.tipo_contrato,
+                      tipo_cotizante: cfgNuevo.tiposCotizante[0]?.value || '',
+                    }))
                   }}>
                     {PAISES.map(p => <option key={p.code} value={p.code}>{p.nombre}</option>)}
                   </select>
@@ -669,12 +732,10 @@ function ModalColaborador({
                 <div><label style={lbl}>Dirección</label><input style={inp} value={f.direccion} onChange={set('direccion')} /></div>
               </div>
 
-              <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:'8px', marginBottom:'10px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'110px 1fr', gap:'8px', marginBottom:'10px' }}>
                 <div>
                   <label style={lbl}>Código<Ayuda texto="Se autocompleta al elegir el país de residencia. Puedes cambiarlo manualmente si el colaborador usa otro número." /></label>
-                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.codigo_tel} onChange={set('codigo_tel')}>
-                    {PAISES.map(p => <option key={p.code} value={p.codigoTel}>{p.codigoTel}</option>)}
-                  </select>
+                  <SelectorIndicativo value={f.codigo_tel} onChange={v => setF(p => ({ ...p, codigo_tel: v }))} />
                 </div>
                 <div><label style={lbl}>Celular</label><input style={inp} value={f.celular} onChange={set('celular')} /></div>
               </div>
@@ -710,7 +771,13 @@ function ModalColaborador({
                   <div style={{ fontSize:'11px', fontWeight:'600', color:T.blue, marginBottom:'8px' }}>Datos del cónyuge</div>
                   <div style={row2}>
                     <div><label style={lbl}>Nombres completos</label><input style={inp} value={f.datos_conyuge.nombres || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, nombres: e.target.value } }))} /></div>
-                    <div><label style={lbl}>Celular</label><input style={inp} value={f.datos_conyuge.celular || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, celular: e.target.value } }))} /></div>
+                    <div>
+                      <label style={lbl}>Celular</label>
+                      <div style={{ display:'grid', gridTemplateColumns:'110px 1fr', gap:'6px' }}>
+                        <SelectorIndicativo value={f.datos_conyuge.codigo_tel || f.codigo_tel} onChange={v => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, codigo_tel: v } }))} />
+                        <input style={inp} value={f.datos_conyuge.celular || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, celular: e.target.value } }))} />
+                      </div>
+                    </div>
                   </div>
                   <div style={row2}>
                     <div><label style={lbl}>Fecha nacimiento</label><input style={inpDate} type="date" value={f.datos_conyuge.fecha_nac || ''} onChange={e => setF(p => ({ ...p, datos_conyuge: { ...p.datos_conyuge, fecha_nac: e.target.value } }))} /></div>
@@ -721,20 +788,21 @@ function ModalColaborador({
 
               <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'10px' }}>
                 <input type="checkbox" checked={f.tiene_hijos} onChange={set('tiene_hijos')} id="hijos" />
-                <label htmlFor="hijos" style={{ fontSize:'12px', color:T.text, cursor:'pointer' }}>¿Tiene hijos? (útil para Caja Compensación)</label>
+                <label htmlFor="hijos" style={{ fontSize:'12px', color:T.text, cursor:'pointer' }}>¿Tiene hijos?{paisConfig.tieneCajaComp ? ' (útil para Caja Compensación)' : ''}</label>
               </div>
 
               {f.tiene_hijos && (
                 <div style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', padding:'12px', marginBottom:'10px' }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
                     <div style={{ fontSize:'11px', fontWeight:'600', color:T.blue }}>Datos de hijos ({f.datos_hijos.length})</div>
-                    <button onClick={() => setF(p => ({ ...p, datos_hijos: [...p.datos_hijos, { nombre:'', fecha_nac:'', celular:'' }] }))}
+                    <button onClick={() => setF(p => ({ ...p, datos_hijos: [...p.datos_hijos, { nombre:'', fecha_nac:'', celular:'', codigo_tel: p.codigo_tel }] }))}
                       style={{ fontSize:'11px', color:T.green, background:'none', border:`1px solid ${T.green}40`, borderRadius:'6px', padding:'3px 10px', cursor:'pointer' }}>+ Agregar hijo</button>
                   </div>
                   {f.datos_hijos.map((h, i) => (
-                    <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 32px', gap:'6px', marginBottom:'6px' }}>
+                    <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 100px 1fr 32px', gap:'6px', marginBottom:'6px' }}>
                       <input style={inp} placeholder="Nombre" value={h.nombre || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, nombre: e.target.value } : x) }))} />
                       <input style={inpDate} type="date" value={h.fecha_nac || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, fecha_nac: e.target.value } : x) }))} />
+                      <SelectorIndicativo value={h.codigo_tel || f.codigo_tel} onChange={v => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, codigo_tel: v } : x) }))} />
                       <input style={inp} placeholder="Celular" value={h.celular || ''} onChange={e => setF(p => ({ ...p, datos_hijos: p.datos_hijos.map((x, j) => j === i ? { ...x, celular: e.target.value } : x) }))} />
                       <button onClick={() => setF(p => ({ ...p, datos_hijos: p.datos_hijos.filter((_, j) => j !== i) }))} style={{ background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'6px', color:T.red, cursor:'pointer', fontSize:'12px' }}>✕</button>
                     </div>
@@ -744,9 +812,10 @@ function ModalColaborador({
 
               {/* Contacto emergencia */}
               <div style={{ ...sec, color:T.red }}>🚨 CONTACTO DE EMERGENCIA</div>
-              <div style={row3}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr)) 100px minmax(140px,1fr)', gap:'8px', marginBottom:'10px' }}>
                 <div><label style={lbl}>Nombre</label><input style={inp} value={f.contacto_emergencia.nombre || ''} onChange={e => setF(p => ({ ...p, contacto_emergencia: { ...p.contacto_emergencia, nombre: e.target.value } }))} /></div>
                 <div><label style={lbl}>Parentesco</label><input style={inp} value={f.contacto_emergencia.parentesco || ''} onChange={e => setF(p => ({ ...p, contacto_emergencia: { ...p.contacto_emergencia, parentesco: e.target.value } }))} /></div>
+                <div><label style={lbl}>Código</label><SelectorIndicativo value={f.contacto_emergencia.codigo_tel || f.codigo_tel} onChange={v => setF(p => ({ ...p, contacto_emergencia: { ...p.contacto_emergencia, codigo_tel: v } }))} /></div>
                 <div><label style={lbl}>Celular</label><input style={inp} value={f.contacto_emergencia.celular || ''} onChange={e => setF(p => ({ ...p, contacto_emergencia: { ...p.contacto_emergencia, celular: e.target.value } }))} /></div>
               </div>
             </div>
@@ -776,8 +845,8 @@ function ModalColaborador({
                     { key:'eps', label:'EPS / Seguro Médico *', lista: paisConfig.entidades.eps, docKey:'cert_eps' },
                     { key:'pension', label:'Fondo de Pensiones *', lista: paisConfig.entidades.pension, docKey:'cert_pension' },
                     { key:'arl', label:'ARL / Riesgos Laborales', lista: paisConfig.entidades.arl, docKey:'cert_arl' },
-                    { key:'caja_comp', label:'Caja de Compensación', lista: paisConfig.entidades.cajaComp, docKey:'cert_caja' },
-                    { key:'cesantias', label:'Fondo de Cesantías', lista: paisConfig.entidades.cesantias, docKey:'cert_cesantias' },
+                    ...(paisConfig.tieneCajaComp ? [{ key:'caja_comp', label:'Caja de Compensación', lista: paisConfig.entidades.cajaComp, docKey:'cert_caja' }] : []),
+                    ...(paisConfig.tieneCesantias ? [{ key:'cesantias', label:'Fondo de Cesantías', lista: paisConfig.entidades.cesantias, docKey:'cert_cesantias' }] : []),
                   ].map(item => (
                     <div key={item.key} style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px', alignItems:'start' }}>
                       <div>
@@ -803,16 +872,20 @@ function ModalColaborador({
                     </div>
                   )}
 
-                  <div style={{ ...sec, color:T.yellow }}>⚙️ CONFIGURACIÓN ARL</div>
-                  <div style={row2}>
-                    <div>
-                      <label style={lbl}>Nivel de riesgo ARL</label>
-                      <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.nivel_arl} onChange={set('nivel_arl')}>
-                        {[1,2,3,4,5].map(n => <option key={n} value={n}>Nivel {n} — {[0.522,1.044,2.436,4.350,6.960][n-1]}%</option>)}
-                      </select>
-                    </div>
-                    <div />
-                  </div>
+                  {paisConfig.tieneARLNiveles && (
+                    <>
+                      <div style={{ ...sec, color:T.yellow }}>⚙️ CONFIGURACIÓN ARL</div>
+                      <div style={row2}>
+                        <div>
+                          <label style={lbl}>Nivel de riesgo ARL</label>
+                          <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.nivel_arl} onChange={set('nivel_arl')}>
+                            {[1,2,3,4,5].map(n => <option key={n} value={n}>Nivel {n} — {[0.522,1.044,2.436,4.350,6.960][n-1]}%</option>)}
+                          </select>
+                        </div>
+                        <div />
+                      </div>
+                    </>
+                  )}
 
                   <div style={{ marginBottom:'10px' }}>
                     {fileBtn('examen_medico', 'Examen médico de ingreso (obligatorio por ley)', true)}
@@ -909,9 +982,9 @@ function ModalColaborador({
               </div>
               <div style={row2}>
                 <div>
-                  <label style={lbl}>Tipo contrato *<Ayuda texto="Honorarios/Contratista son prestadores independientes: sin vacaciones, prima, cesantías ni auxilio de transporte — esos costos van incluidos en su tarifa." /></label>
+                  <label style={lbl}>Tipo contrato *<Ayuda texto={f.pais_code === 'COL' ? 'Honorarios/Contratista son prestadores independientes: sin vacaciones, prima, cesantías ni auxilio de transporte — esos costos van incluidos en su tarifa.' : 'Tipos de contrato según la normativa laboral de ' + paisNombre + '.'} /></label>
                   <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.tipo_contrato} onChange={set('tipo_contrato')}>
-                    {['Empleado','Término fijo','Obra o labor','Contratista','Honorarios','Aprendiz SENA'].map(v => <option key={v}>{v}</option>)}
+                    {paisConfig.tiposContrato.map(v => <option key={v}>{v}</option>)}
                   </select>
                 </div>
                 <div>
@@ -936,16 +1009,22 @@ function ModalColaborador({
 
               <div style={{ ...sec, color:T.accent }}>💰 CONDICIONES SALARIALES</div>
               <div style={row2}>
-                <div><label style={lbl}>Salario base *</label><InputMiles value={f.salario_base} onChange={v => setF(p => ({ ...p, salario_base: v }))} /></div>
+                <div><label style={lbl}>Salario base *</label><InputMiles value={f.salario_base} onChange={v => setF(p => ({ ...p, salario_base: v }))} locale={paisPorCodigo(f.pais_code)?.locale} /></div>
                 <div>
                   <label style={lbl}>
                     Auxilio de transporte
-                    <Ayuda texto={f.pais_code === 'COL' && !esIndependiente ? 'Automático en Colombia: aplica si el salario base es ≤ 2 SMMLV vigentes. Se recalcula solo.' : 'Fuera de Colombia (o en contratos independientes) no calculamos esta regla automáticamente — verifica la normativa local.'} />
+                    <Ayuda texto={
+                      !paisConfig.tieneAuxTransporte ? `${paisNombre} no tiene un subsidio de transporte legal pagado en la nómina — este campo no aplica.` :
+                      f.pais_code === 'COL' && !esIndependiente ? 'Automático en Colombia: aplica si el salario base es ≤ 2 SMMLV vigentes. Se recalcula solo.' :
+                      'No calculamos esta regla automáticamente para este país/contrato — verifica la normativa local.'
+                    } />
                   </label>
-                  {f.pais_code === 'COL' && !esIndependiente ? (
+                  {!paisConfig.tieneAuxTransporte ? (
+                    <input style={{ ...inp, color:T.muted }} value="No aplica en este país" readOnly />
+                  ) : f.pais_code === 'COL' && !esIndependiente ? (
                     <input style={{ ...inp, color:T.muted }} value={fmt(f.aux_transporte, f.pais_code)} readOnly />
                   ) : (
-                    <InputMiles value={f.aux_transporte} onChange={v => setF(p => ({ ...p, aux_transporte: v }))} />
+                    <InputMiles value={f.aux_transporte} onChange={v => setF(p => ({ ...p, aux_transporte: v }))} locale={paisPorCodigo(f.pais_code)?.locale} />
                   )}
                 </div>
               </div>
@@ -956,17 +1035,16 @@ function ModalColaborador({
                     {['Fijo','Variable','Integral'].map(v => <option key={v}>{v}</option>)}
                   </select>
                 </div>
-                <div>
-                  <label style={lbl}>Tipo cotizante SS<Ayuda texto="Clasificación PILA (Colombia) que usan EPS/pensión/ARL para calcular tus aportes correctamente. Si tu país no usa PILA, deja el que más se acerque." /></label>
-                  <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.tipo_cotizante} onChange={set('tipo_cotizante')}>
-                    {[
-                      ['1','01 — Dependiente'],['2','02 — Independiente'],['3','03 — Servicio doméstico'],
-                      ['12','12 — Dependiente sector público sin tope'],['15','15 — Aprendiz etapa lectiva (sin cotización)'],['51','51 — Aprendiz etapa práctica'],
-                    ].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </div>
+                {paisConfig.tiposCotizante.length > 0 && (
+                  <div>
+                    <label style={lbl}>Tipo cotizante SS<Ayuda texto={`Clasificación de afiliación usada por la seguridad social de ${paisNombre} para calcular los aportes correctamente.`} /></label>
+                    <select style={{ ...inp, appearance:'none' as React.CSSProperties['appearance'] }} value={f.tipo_cotizante} onChange={set('tipo_cotizante')}>
+                      {paisConfig.tiposCotizante.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
-              {!esIndependiente && (
+              {!esIndependiente && paisConfig.tieneExoneracionParafiscal && (
                 <div style={{ display:'flex', gap:'16px', marginBottom:'10px' }}>
                   <label style={{ display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', fontSize:'12px', color:T.text }}>
                     <input type="checkbox" checked={f.aplica_ley1607} onChange={set('aplica_ley1607')} />
@@ -983,7 +1061,7 @@ function ModalColaborador({
                   <div style={{ fontSize:'11px', color:T.muted, padding:'6px 0' }}>
                     Contrato independiente: la carga es el valor de la tarifa acordada — sin prestaciones sociales ni parafiscales a cargo de la empresa.
                   </div>
-                ) : (
+                ) : f.pais_code === 'COL' ? (
                   <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'4px' }}>
                     {[
                       ['Salario base', f.salario_base],
@@ -1001,6 +1079,27 @@ function ModalColaborador({
                         <span style={{ color:T.text }}>{fmt(v as number, f.pais_code)}</span>
                       </div>
                     ))}
+                  </div>
+                ) : f.pais_code === 'ECU' ? (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'4px' }}>
+                    {[
+                      ['Salario base', f.salario_base],
+                      ['IESS patronal (11.15%)', Math.round(f.salario_base * 0.1115)],
+                      ['IECE + SECAP (1%)', Math.round(f.salario_base * 0.01)],
+                      ['Décimo tercero (1/12)', Math.round(f.salario_base * 0.0833)],
+                      ['Décimo cuarto (1 SBU/año ÷ 12)', Math.round(SBU_ECU_2026 / 12)],
+                      ['Fondo de reserva (desde el mes 13)', Math.round(f.salario_base * 0.0833)],
+                      ['Vacaciones (15 días/año)', Math.round(f.salario_base * 0.0417)],
+                    ].map(([l, v]) => (
+                      <div key={l as string} style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', padding:'3px 0', borderBottom:`1px solid ${T.border}` }}>
+                        <span style={{ color:T.muted }}>{l}</span>
+                        <span style={{ color:T.text }}>{fmt(v as number, f.pais_code)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize:'11px', color:T.yellow, padding:'6px 0' }}>
+                    Todavía no tenemos la fórmula de carga prestacional verificada para {paisNombre} — el total de abajo muestra solo el salario base, sin prestaciones ni aportes patronales estimados.
                   </div>
                 )}
                 <div style={{ display:'flex', justifyContent:'space-between', marginTop:'8px', fontSize:'13px', fontWeight:'700' }}>
