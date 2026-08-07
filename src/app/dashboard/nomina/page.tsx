@@ -2370,7 +2370,7 @@ export default function NominaPage() {
                     style={{ fontSize:'11px', color:T.muted }}
                   />
                 </div>
-                <button
+                {puede(clavePermiso('nomina','novedades'),'agregar') && <button
                   disabled={guardandoNovedad}
                   onClick={async () => {
                     if (!novedad.empleado_id || !novedad.tipo) return
@@ -2420,7 +2420,7 @@ export default function NominaPage() {
                   style={{ marginTop:'12px', padding:'9px 20px', background:T.accent, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: guardandoNovedad?'wait':'pointer', fontSize:'13px', opacity: guardandoNovedad?0.7:1 }}
                 >
                   {guardandoNovedad ? 'Guardando...' : '✅ Registrar novedad'}
-                </button>
+                </button>}
               </div>
             )}
           </div>
@@ -2467,7 +2467,7 @@ export default function NominaPage() {
                             </span>
                           </td>
                           <td style={{ padding:'8px 12px' }}>
-                            {estado === 'pendiente' && (
+                            {estado === 'pendiente' && puede(clavePermiso('nomina','novedades'),'modificar') && (
                               <div style={{ display:'flex', gap:'6px' }}>
                                 <button onClick={() => aprobarNovedad(n)} style={{ padding:'4px 9px', background:T.green, border:'none', borderRadius:'6px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'10px' }}>✓</button>
                                 <button onClick={() => rechazarNovedad(String(n.id))} style={{ padding:'4px 9px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'6px', color:T.red, cursor:'pointer', fontSize:'10px' }}>✕</button>
