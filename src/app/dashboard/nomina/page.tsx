@@ -477,7 +477,7 @@ function ModalColaborador({
   }, [f.salario_base, f.tipo_contrato, f.pais_code])
 
   async function guardar() {
-    if (!f.nombres || !f.num_doc || !f.cargo) { setError('Nombres, documento y cargo son obligatorios'); return }
+    if (!f.nombres || !f.num_doc || !f.cargo || !f.fecha_ingreso) { setError('Nombres, documento, cargo y fecha de ingreso son obligatorios'); return }
     setSaving(true); setError('')
     try {
       const { pension_doc, ss_independiente_doc, ...restDocs } = docUrls
@@ -485,6 +485,11 @@ function ModalColaborador({
         ...f, tenant_id: tenantId, activo: true, docs_urls: restDocs,
         doc_pension_url: pension_doc || null, doc_ss_independiente_url: ss_independiente_doc || null,
         carga_total_mes: cargaTotal,
+        // Postgres rechaza '' en columnas date ("invalid input syntax for type date") — estos 3
+        // campos quedan '' en el form cuando se dejan vacíos, hay que mandar null en ese caso.
+        fecha_nacimiento: f.fecha_nacimiento || null,
+        fecha_ingreso: f.fecha_ingreso || null,
+        fecha_fin: f.fecha_fin || null,
       }
       if (editData?.id) {
         const { error: err } = await supabase.from('colaboradores').update(payload).eq('id', editData.id)
@@ -494,7 +499,9 @@ function ModalColaborador({
         if (err) throw err
       }
       onSave()
-    } catch (e: unknown) { setError(e instanceof Error ? e.message : 'Error') }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : (e && typeof e === 'object' && 'message' in e) ? String((e as { message: unknown }).message) : 'Error desconocido al guardar')
+    }
     finally { setSaving(false) }
   }
 
