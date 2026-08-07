@@ -41,11 +41,13 @@ export async function POST(req: NextRequest) {
     })
     if (authErr || !authUser?.user) return NextResponse.json({ error: `Tenant creado pero falló el usuario: ${authErr?.message}`, tenantId: tenant.id }, { status: 500 })
 
-    const { error: profileErr } = await supabase.from('profiles').insert({
+    // handle_new_user() ya insertó una fila mínima en profiles (rol:'owner', sin tenant) apenas
+    // se creó el usuario en Auth — hay que hacer upsert, no insert, o choca con la llave primaria.
+    const { error: profileErr } = await supabase.from('profiles').upsert({
       id: authUser.user.id, email: body.email, tenant_id: tenant.id, rol: 'colaborador',
       nombre: nombreCompleto, es_cortesia: true, colaborador_id: null,
       permisos: matrizTodoTrue(), horario_acceso: 'todos', notificar_actividad_inusual: true,
-    })
+    }, { onConflict: 'id' })
     if (profileErr) return NextResponse.json({ error: `Usuario creado pero falló el perfil: ${profileErr.message}`, tenantId: tenant.id }, { status: 500 })
 
     const guia = PASOS_SEED.slice(0, 8).map(p => `${p.label}: ${p.desc}`)

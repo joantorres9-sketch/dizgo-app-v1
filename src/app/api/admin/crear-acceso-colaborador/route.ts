@@ -35,11 +35,13 @@ export async function POST(req: NextRequest) {
     })
     if (authErr || !authUser?.user) return NextResponse.json({ error: `No se pudo crear el usuario: ${authErr?.message}` }, { status: 500 })
 
-    const { error: profileErr } = await supabase.from('profiles').insert({
+    // handle_new_user() ya insertó una fila mínima en profiles (rol:'owner', sin tenant) apenas
+    // se creó el usuario en Auth — hay que hacer upsert, no insert, o choca con la llave primaria.
+    const { error: profileErr } = await supabase.from('profiles').upsert({
       id: authUser.user.id, email, tenant_id: tenantId, rol: 'colaborador',
       nombre: nombreCompleto, colaborador_id: colaboradorId,
       permisos: matrizTodoFalse(), horario_acceso: 'todos', notificar_actividad_inusual: true, es_cortesia: false,
-    })
+    }, { onConflict: 'id' })
     if (profileErr) return NextResponse.json({ error: `Usuario creado pero falló el perfil: ${profileErr.message}` }, { status: 500 })
 
     const correo = await enviarCorreoInvitacion({ email, nombre: nombreCompleto, passwordTemporal })
