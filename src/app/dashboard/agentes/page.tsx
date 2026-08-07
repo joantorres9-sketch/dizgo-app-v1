@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 type PedidoPendiente = {
   id: string; numero_pedido: string; cliente_nombre: string
@@ -28,7 +29,7 @@ function horasDesde(fecha: string){ return Math.round((Date.now()-new Date(fecha
 
 export default function AgentesPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'confirmador'|'novedades'|'contable'|'campanas'|'inventario'|'logistico'>('confirmador')
@@ -123,6 +124,15 @@ export default function AgentesPage() {
   }, [supabase])
 
   useEffect(() => { loadData() }, [loadData])
+
+  useEffect(() => {
+    if (cargandoPermisos) return
+    const agentesVisibles = AGENTES.filter(a => puede(clavePermiso('agentes', a.key), 'ver'))
+    if (agentesVisibles.length === 0) return
+    if (!agentesVisibles.some(a => a.key === tab)) {
+      setTab(agentesVisibles[0].key as typeof tab)
+    }
+  }, [cargandoPermisos, puede, tab])
 
   // ── LLAMADA AL AGENTE ─────────────────────────────────────
   async function ejecutarAgente(agente: 'confirmador'|'novedades'|'contable', pedido?: PedidoPendiente) {
@@ -277,7 +287,7 @@ Sé directo, usa números reales, sin rodeos.`
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {AGENTES.map(a => (
+        {AGENTES.filter(a => puede(clavePermiso('agentes', a.key), 'ver')).map(a => (
           <button key={a.key} onClick={()=>setTab(a.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
               background: tab===a.key?a.color:'rgba(255,255,255,0.05)', color: tab===a.key?'#0A0D14':'#8B96A8' }}>
@@ -306,7 +316,7 @@ Sé directo, usa números reales, sin rodeos.`
                   <div style={{ fontSize:'10px', color:'#F05C5C', marginTop:'2px' }}>⏰ {p.horas_espera}h esperando</div>
                 </div>
                 <button onClick={() => ejecutarAgente('confirmador', p)}
-                  disabled={corriendo === 'confirmador' || !puede('agentes','agregar')}
+                  disabled={corriendo === 'confirmador' || !puede(clavePermiso('agentes','confirmador'),'agregar')}
                   style={{ padding:'7px 14px', background:'rgba(61,142,240,0.15)', border:'1px solid rgba(61,142,240,0.3)', borderRadius:'8px', color:'#3D8EF0', cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='confirmador' ? '⏳ Generando...' : '🤖 Generar mensaje'}
                 </button>
@@ -361,7 +371,7 @@ Sé directo, usa números reales, sin rodeos.`
                   <div style={{ fontSize:'10px', color:'#F5A623', marginTop:'2px' }}>⏰ {p.horas_espera}h en novedad</div>
                 </div>
                 <button onClick={() => ejecutarAgente('novedades', p)}
-                  disabled={corriendo === 'novedades' || !puede('agentes','agregar')}
+                  disabled={corriendo === 'novedades' || !puede(clavePermiso('agentes','novedades'),'agregar')}
                   style={{ padding:'7px 14px', background:'rgba(245,166,35,0.15)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:'8px', color:'#F5A623', cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='novedades' ? '⏳ Generando...' : '🤖 Resolver novedad'}
                 </button>
@@ -418,7 +428,7 @@ Sé directo, usa números reales, sin rodeos.`
                   <span style={{ fontSize:'11px', fontWeight:'700', color:'#F05C5C' }}>{fmt(c.valor)}</span>
                 </div>
               ))}
-              <button onClick={ejecutarContable} disabled={corriendo==='contable' || !puede('agentes','agregar')}
+              <button onClick={ejecutarContable} disabled={corriendo==='contable' || !puede(clavePermiso('agentes','contable'),'agregar')}
                 style={{ width:'100%', marginTop:'14px', padding:'11px', background: corriendo==='contable'?'rgba(45,212,160,0.1)':'#2DD4A0', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor: corriendo==='contable'?'wait':'pointer', fontSize:'13px' }}>
                 {corriendo==='contable' ? '⏳ Analizando situación...' : '🤖 Ejecutar diagnóstico financiero'}
               </button>
@@ -480,7 +490,7 @@ Sé directo, usa números reales, sin rodeos.`
                       if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'campanas', trigger_tipo:'manual', input_resumen:p.campana, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
                     } catch { setResultado({ agente:'campanas', texto:'❌ Error al conectar' }) }
                     setCorriendo(null)
-                  }} disabled={corriendo==='campanas' || !puede('agentes','agregar')}
+                  }} disabled={corriendo==='campanas' || !puede(clavePermiso('agentes','campanas'),'agregar')}
                     style={{ padding:'6px 12px', background:`rgba(155,107,255,0.15)`, border:'none', borderRadius:'7px', color:'#9B6BFF', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                     {corriendo==='campanas'?'⏳':'🤖 Analizar'}
                   </button>
@@ -527,7 +537,7 @@ Sé directo, usa números reales, sin rodeos.`
                     if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'inventario', trigger_tipo:'manual', input_resumen:`Stock bajo: ${item.cantidad_disponible}/${item.stock_minimo}`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
                   } catch { setResultado({ agente:'inventario', texto:'❌ Error al conectar' }) }
                   setCorriendo(null)
-                }} disabled={corriendo==='inventario' || !puede('agentes','agregar')}
+                }} disabled={corriendo==='inventario' || !puede(clavePermiso('agentes','inventario'),'agregar')}
                   style={{ padding:'6px 12px', background:'rgba(240,92,92,0.15)', border:'none', borderRadius:'7px', color:'#F05C5C', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='inventario'?'⏳':'🤖 Analizar'}
                 </button>
@@ -579,7 +589,7 @@ Sé directo, usa números reales, sin rodeos.`
                       if (tenantId) await supabase.from('agentes_ia_logs').insert({ tenant_id:tenantId, agente:'logistico', trigger_tipo:'manual', input_resumen:`${t.transportadora}: ${t.tasa}% tasa entrega`, output_texto:(data.texto||'').slice(0,500), estado:'ok' })
                     } catch { setResultado({ agente:'logistico', texto:'❌ Error al conectar' }) }
                     setCorriendo(null)
-                  }} disabled={corriendo==='logistico' || !puede('agentes','agregar')}
+                  }} disabled={corriendo==='logistico' || !puede(clavePermiso('agentes','logistico'),'agregar')}
                     style={{ padding:'6px 12px', background:'rgba(45,212,160,0.15)', border:'none', borderRadius:'7px', color:'#2DD4A0', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                     {corriendo==='logistico'?'⏳':'🤖 Analizar'}
                   </button>

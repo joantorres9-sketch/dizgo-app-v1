@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant, paisPorCodigo } from '@/lib/paises'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 const T = {
   bg:'#0D1E35', card:'#081426', card2:'#0A1628',
@@ -101,6 +102,12 @@ type Snapshot = {
 const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
 const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'9px' }
 
+const TABS = [
+  { v:'kanban' as const, l:'📋 Tablero Kanban' },
+  { v:'plantillas' as const, l:'📝 Plantillas' },
+  { v:'lotes' as const, l:'📤 Envío por Lotes' },
+]
+
 function llenarVariables(contenido: string, vars: Record<string,string>): string {
   let out = contenido
   Object.entries(vars).forEach(([k,v]) => { out = out.replaceAll(`{{${k}}}`, v) })
@@ -109,7 +116,7 @@ function llenarVariables(contenido: string, vars: Record<string,string>): string
 
 export default function WhatsAppPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: permisosCargando } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'kanban'|'plantillas'|'lotes'>('kanban')
@@ -182,6 +189,14 @@ export default function WhatsAppPage() {
   }, [supabase])
 
   useEffect(() => { loadData() }, [loadData])
+
+  const tabsVisibles = TABS.filter(t => puede(clavePermiso('whatsapp', t.v), 'ver'))
+  const tabsVisiblesKey = tabsVisibles.map(t => t.v).join(',')
+  useEffect(() => {
+    if (permisosCargando) return
+    if (tabsVisibles.length === 0) return
+    if (!tabsVisibles.some(t => t.v === tab)) setTab(tabsVisibles[0].v)
+  }, [permisosCargando, tab, tabsVisiblesKey])
 
   async function abrirChat(p: Pedido) {
     setPedidoActivo(p)
@@ -314,11 +329,7 @@ export default function WhatsAppPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { v:'kanban' as const, l:'📋 Tablero Kanban' },
-          { v:'plantillas' as const, l:'📝 Plantillas' },
-          { v:'lotes' as const, l:'📤 Envío por Lotes' },
-        ].map(t => (
+        {tabsVisibles.map(t => (
           <button key={t.v} onClick={() => setTab(t.v)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
               background: tab===t.v ? T.wa : 'rgba(255,255,255,0.05)', color: tab===t.v ? '#fff' : T.muted }}>
@@ -354,7 +365,7 @@ export default function WhatsAppPage() {
                             </span>
                           )}
                         </div>
-                        {pis.v !== 'confirmados' && puede('whatsapp','modificar') && (
+                        {pis.v !== 'confirmados' && puede(clavePermiso('whatsapp','kanban'),'modificar') && (
                           <div style={{ display:'flex', gap:'4px', marginTop:'6px', flexWrap:'wrap' }}>
                             {PISCINAS.filter(x => x.v !== pis.v).map(dest => (
                               <button key={dest.v} onClick={(e) => { e.stopPropagation(); moverPiscina(p, dest.v, 'manual') }}

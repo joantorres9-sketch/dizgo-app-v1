@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 type Pedido = {
   id: string; cliente_nombre: string; cliente_telefono: string
@@ -26,6 +28,7 @@ function diasEntre(a: string, b: string) { return Math.round((new Date(b).getTim
 
 export default function LogisticaPage() {
   const supabase = createClient()
+  const { puede, cargando: permisosCargando } = usePermisos()
   const [loading, setLoading] = useState(true)
   const [pais, setPais] = useState('COL')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -157,6 +160,21 @@ export default function LogisticaPage() {
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(msg)}`, '_blank')
   }
 
+  const tabsTodas = [
+    { key:'flujo_caja' as const, label:'💰 Flujo de caja por etapa' },
+    { key:'transportadoras' as const, label:'🚚 Transportadoras' },
+    { key:'novedades' as const, label:`⚠️ Novedades (${conNovedad.length})` },
+    { key:'mapa' as const, label:'🗺️ Mapa de cobertura' },
+    { key:'equipo' as const, label:'👥 Equipo confirmador' },
+  ]
+  const tabsVisibles = tabsTodas.filter(t => puede(clavePermiso('logistica', t.key), 'ver'))
+  const tabsVisiblesKey = tabsVisibles.map(t => t.key).join(',')
+  useEffect(() => {
+    if (permisosCargando) return
+    if (tabsVisibles.length === 0) return
+    if (!tabsVisibles.some(t => t.key === tab)) setTab(tabsVisibles[0].key)
+  }, [permisosCargando, tab, tabsVisiblesKey])
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
       Cargando logística...
@@ -199,13 +217,7 @@ export default function LogisticaPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'flujo_caja', label:'💰 Flujo de caja por etapa' },
-          { key:'transportadoras', label:'🚚 Transportadoras' },
-          { key:'novedades', label:`⚠️ Novedades (${conNovedad.length})` },
-          { key:'mapa', label:'🗺️ Mapa de cobertura' },
-          { key:'equipo', label:'👥 Equipo confirmador' },
-        ].map(t => (
+        {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
               background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : '#8B96A8' }}>

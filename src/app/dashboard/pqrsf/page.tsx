@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 type PQRSF = {
   id: string; numero_radicado: string; tipo: 'P'|'Q'|'R'|'S'|'F'
@@ -42,7 +43,7 @@ const inp = { background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', bo
 
 export default function PQRSFPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [tenantSlug, setTenantSlug] = useState('')
   const [loading, setLoading] = useState(true)
@@ -172,6 +173,23 @@ export default function PQRSFPage() {
 
   const linkPublico = tenantSlug ? `https://dizgo.app/pqrsf/${tenantSlug}` : ''
 
+  const TABS = [
+    { key:'lista', label:'📋 Lista' },
+    { key:'nueva', label:'✏️ Nueva PQRSF' },
+    { key:'stats', label:'📊 Estadísticas' },
+  ]
+  const TABS_VISIBLES = TABS.filter(t => puede(clavePermiso('pqrsf', t.key), 'ver'))
+
+  // Si la sub-pestaña activa dejó de ser visible (permiso revocado o aún no otorgado),
+  // salta automáticamente a la primera sub-pestaña visible. Solo actúa cuando el permiso
+  // ya cargó, para no pelear con el setTab('lista') tras guardar una PQRSF nueva ni con
+  // el tab inicial mientras `puede()` todavía responde false por defecto.
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (TABS_VISIBLES.length === 0) return
+    if (!TABS_VISIBLES.some(t => t.key === tab)) setTab(TABS_VISIBLES[0].key as typeof tab)
+  }, [cargandoPermisos, tab, TABS_VISIBLES.map(t => t.key).join(',')])
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
       Cargando PQRSF...
@@ -196,7 +214,7 @@ export default function PQRSFPage() {
               {copiado ? '✅ Copiado' : '🔗 Copiar link público'}
             </button>
           )}
-          {puede('pqrsf','agregar') && (
+          {puede(clavePermiso('pqrsf','nueva'),'agregar') && (
             <button onClick={() => setTab('nueva')}
               style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
               + Nueva PQRSF
@@ -224,11 +242,7 @@ export default function PQRSFPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'lista', label:'📋 Lista' },
-          { key:'nueva', label:'✏️ Nueva PQRSF' },
-          { key:'stats', label:'📊 Estadísticas' },
-        ].map(t => (
+        {TABS_VISIBLES.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
               background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : '#8B96A8' }}>
@@ -356,7 +370,7 @@ export default function PQRSFPage() {
                     placeholder="Escribe tu respuesta al cliente..." rows={4}
                     style={{ ...inp, resize:'vertical', marginBottom:'8px' }} />
                   <div style={{ display:'flex', gap:'8px' }}>
-                    {puede('pqrsf','modificar') && (
+                    {puede(clavePermiso('pqrsf','lista'),'modificar') && (
                       <button onClick={responder} disabled={!respuesta || guardando}
                         style={{ flex:1, padding:'9px', background: respuesta ? '#F5A623' : 'rgba(255,255,255,0.05)',
                           border:'none', borderRadius:'8px', color: respuesta ? '#0A0D14' : '#5A6478',
@@ -364,7 +378,7 @@ export default function PQRSFPage() {
                         {guardando ? 'Enviando...' : '✉️ Enviar respuesta'}
                       </button>
                     )}
-                    {seleccionada.estado === 'RESPONDIDO' && puede('pqrsf','modificar') && (
+                    {seleccionada.estado === 'RESPONDIDO' && puede(clavePermiso('pqrsf','lista'),'modificar') && (
                       <button onClick={() => cerrar(seleccionada.id)}
                         style={{ padding:'9px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
                         ✅ Cerrar
@@ -444,10 +458,10 @@ export default function PQRSFPage() {
                 rows={4} onChange={e => setNuevaPQRSF(p => ({...p, descripcion:e.target.value}))} style={{ ...inp, resize:'vertical' }} />
             </div>
 
-            <button onClick={crearNueva} disabled={!nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !nuevaPQRSF.descripcion || guardando || !puede('pqrsf','agregar')}
+            <button onClick={crearNueva} disabled={!nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !nuevaPQRSF.descripcion || guardando || !puede(clavePermiso('pqrsf','nueva'),'agregar')}
               style={{ width:'100%', padding:'11px', background:'#F5A623', border:'none', borderRadius:'10px',
                 color:'#0A0D14', cursor:'pointer', fontWeight:'700', fontSize:'13px',
-                opacity: !nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !puede('pqrsf','agregar') ? 0.5 : 1 }}>
+                opacity: !nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !puede(clavePermiso('pqrsf','nueva'),'agregar') ? 0.5 : 1 }}>
               {guardando ? 'Radicando...' : '📬 Radicar PQRSF'}
             </button>
           </div>

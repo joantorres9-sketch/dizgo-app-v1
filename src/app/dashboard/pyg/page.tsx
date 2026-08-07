@@ -7,6 +7,7 @@ import { configLibroCaja, type FilaLibroCaja } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 // Paleta local de este archivo (pyg/page.tsx no usa un objeto T central, colorea inline) --
 // se arma aquí solo para pasarle theme a los componentes compartidos de carga masiva.
@@ -42,7 +43,7 @@ const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255
 
 export default function PYGPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'resultados'|'producto'|'mezcla'|'flujo_caja'|'balance'|'cxp'|'libro_caja'>('resultados')
@@ -268,6 +269,24 @@ export default function PYGPage() {
     XLSX.writeFile(wb, `DIZGO_PyG_${new Date().toISOString().slice(0,10)}.xlsx`)
   }
 
+  const TABS: { key: typeof tab; label: string }[] = [
+    { key:'resultados', label:'📈 Estado de Resultados' },
+    { key:'producto', label:'📦 P&G por Producto' },
+    { key:'mezcla', label:'🔀 Mezcla de Productos' },
+    { key:'flujo_caja', label:'💧 Flujo de Caja' },
+    { key:'balance', label:'⚖️ Balance General' },
+    { key:'cxp', label:`📋 Cuentas por Pagar (${cxp.filter(c=>c.estado==='pendiente').length})` },
+    { key:'libro_caja', label:'📒 Libro de Caja' },
+  ]
+  const tabsVisibles = TABS.filter(t => puede(clavePermiso('pyg', t.key), 'ver'))
+
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (tabsVisibles.length && !tabsVisibles.some(t => t.key === tab)) {
+      setTab(tabsVisibles[0].key)
+    }
+  }, [cargandoPermisos, tab, tabsVisibles])
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
       Consolidando información financiera...
@@ -309,15 +328,7 @@ export default function PYGPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'resultados', label:'📈 Estado de Resultados' },
-          { key:'producto', label:'📦 P&G por Producto' },
-          { key:'mezcla', label:'🔀 Mezcla de Productos' },
-          { key:'flujo_caja', label:'💧 Flujo de Caja' },
-          { key:'balance', label:'⚖️ Balance General' },
-          { key:'cxp', label:`📋 Cuentas por Pagar (${cxp.filter(c=>c.estado==='pendiente').length})` },
-          { key:'libro_caja', label:'📒 Libro de Caja' },
-        ].map(t => (
+        {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
               background: tab===t.key?'#F5A623':'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':'#8B96A8' }}>
@@ -604,7 +615,7 @@ export default function PYGPage() {
                   </div>
                   <div style={{ fontSize:'13px', fontWeight:'700' }}>{fmtFull(c.valor)}</div>
                   {c.estado==='pendiente' ? (
-                    <button onClick={() => pagarCxp(c)} disabled={!puede('pyg','modificar')} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?'#F05C5C':'#F5A623', cursor: puede('pyg','modificar')?'pointer':'not-allowed', opacity: puede('pyg','modificar')?1:0.5, fontSize:'10px', fontWeight:'700' }}>
+                    <button onClick={() => pagarCxp(c)} disabled={!puede(clavePermiso('pyg','cxp'),'modificar')} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?'#F05C5C':'#F5A623', cursor: puede(clavePermiso('pyg','cxp'),'modificar')?'pointer':'not-allowed', opacity: puede(clavePermiso('pyg','cxp'),'modificar')?1:0.5, fontSize:'10px', fontWeight:'700' }}>
                       {vencida?'⚠ Vencida — Pagar':'Pagar'}
                     </button>
                   ) : (

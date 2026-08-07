@@ -2,6 +2,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
+import { usePermisos } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 type Registro = { fecha:string; campana:string; inversion:number; impresiones:number; clics:number; resultados:number }
 type Pedido = { estado:string; producto_id:string; pvp:number; ganancia:number }
@@ -31,6 +33,7 @@ const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255
 
 export default function EmbudoPage() {
   const supabase = createClient()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'embudo'|'diagnostico'|'simulador'|'mezcla'>('embudo')
 
@@ -141,6 +144,23 @@ export default function EmbudoPage() {
     }
   }, [loading, inicializado, pedidos.length, ctrReal, tasaConfirmacion, tasaDespacho, tasaEntrega, tasaDevolucion])
 
+  const TABS = [
+    { key:'embudo', label:'🔬 Embudo visual' },
+    { key:'diagnostico', label:'🚨 Diagnóstico' },
+    { key:'simulador', label:'⚡ Simulador' },
+    { key:'mezcla', label:'🔀 Mezcla de productos' },
+  ]
+  const TABS_VISIBLES = TABS.filter(t => puede(clavePermiso('embudo', t.key), 'ver'))
+
+  // Si la sub-pestaña activa dejó de ser visible (permiso revocado o aún no otorgado),
+  // salta automáticamente a la primera sub-pestaña visible. Solo actúa cuando el permiso
+  // ya cargó, para no pisar el tab inicial mientras `puede()` todavía responde false por defecto.
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (TABS_VISIBLES.length === 0) return
+    if (!TABS_VISIBLES.some(t => t.key === tab)) setTab(TABS_VISIBLES[0].key as typeof tab)
+  }, [cargandoPermisos, tab, TABS_VISIBLES.map(t=>t.key).join(',')])
+
   const sim_clics = Math.round(totalImpresiones*simCTR/100)
   const sim_confirmados = Math.round(pedidos.length*simConf/100)
   const sim_despachados = Math.round(sim_confirmados*simDespacho/100)
@@ -197,12 +217,7 @@ export default function EmbudoPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'embudo', label:'🔬 Embudo visual' },
-          { key:'diagnostico', label:'🚨 Diagnóstico' },
-          { key:'simulador', label:'⚡ Simulador' },
-          { key:'mezcla', label:'🔀 Mezcla de productos' },
-        ].map(t => (
+        {TABS_VISIBLES.map(t => (
           <button key={t.key} onClick={()=>setTab(t.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
               background: tab===t.key?'#F5A623':'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':'#8B96A8' }}>

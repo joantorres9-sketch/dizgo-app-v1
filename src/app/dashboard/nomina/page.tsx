@@ -9,6 +9,7 @@ import { configColaboradores, type FilaColaborador } from '@/lib/plantillasConfi
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 // ── TEMA ──────────────────────────────────────────────────
 const T = {
@@ -1627,7 +1628,7 @@ function ModalAjuste({ concepto, valorSistema, onClose, onGuardar }: {
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function NominaPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'procesos'|'indicadores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
   const [solicitudes, setSolicitudes] = useState<Array<Record<string, unknown>>>([])
   const [detalleSolicitud, setDetalleSolicitud] = useState<Record<string, unknown> | null>(null)
@@ -2071,6 +2072,16 @@ export default function NominaPage() {
     { v:'liquidacion',   l:'💵 Liquidación',   c:T.green },
     { v:'tasas',         l:'⚙️ Tasas',         c:T.accent },
   ]
+  const TABS_VISIBLES = TABS.filter(t => puede(clavePermiso('nomina', t.v), 'ver'))
+
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (TABS_VISIBLES.length === 0) return
+    if (!TABS_VISIBLES.some(t => t.v === tab)) {
+      setTab(TABS_VISIBLES[0].v as typeof tab)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, tab, puede])
 
   return (
     <RequierePermiso modulo="nomina">
@@ -2137,7 +2148,7 @@ export default function NominaPage() {
 
       {/* Tabs */}
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {TABS.map(t => (
+        {TABS_VISIBLES.map(t => (
           <button key={t.v} onClick={() => setTab(t.v as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'8px', cursor:'pointer', fontSize:'13px', fontWeight:tab===t.v?'600':'400', border:`1px solid ${tab===t.v?t.c:T.border}`, background:tab===t.v?`${t.c}15`:'transparent', color:tab===t.v?t.c:T.muted }}>
             {t.l}
@@ -2224,9 +2235,9 @@ export default function NominaPage() {
                         </td>
                         <td style={{ padding:'8px 12px' }}>
                           <div style={{ display:'flex', gap:'6px' }}>
-                            {puede('nomina','modificar') && <button onClick={() => { setEditData(c); setShowModal(true) }} style={{ padding:'4px 8px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'5px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>✏️</button>}
+                            {puede(clavePermiso('nomina','colaboradores'),'modificar') && <button onClick={() => { setEditData(c); setShowModal(true) }} style={{ padding:'4px 8px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'5px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>✏️</button>}
                             <button onClick={() => copiarLinkSolicitudes(c.id)} title="Copiar link personal de solicitudes" style={{ padding:'4px 8px', background:`${T.yellow}15`, border:`1px solid ${T.yellow}30`, borderRadius:'5px', color:T.yellow, cursor:'pointer', fontSize:'10px' }}>🔗</button>
-                            {puede('nomina','eliminar') && <button onClick={() => eliminarColaborador(c.id)} style={{ padding:'4px 8px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'5px', color:T.red, cursor:'pointer', fontSize:'10px' }}>🗑</button>}
+                            {puede(clavePermiso('nomina','colaboradores'),'eliminar') && <button onClick={() => eliminarColaborador(c.id)} style={{ padding:'4px 8px', background:`${T.red}15`, border:`1px solid ${T.red}30`, borderRadius:'5px', color:T.red, cursor:'pointer', fontSize:'10px' }}>🗑</button>}
                           </div>
                         </td>
                       </tr>
@@ -2510,12 +2521,12 @@ export default function NominaPage() {
                   style={{ padding:'9px 16px', background:T.blue, border:'none', borderRadius:'8px', color:'#fff', fontWeight:'700', cursor: calculandoLiquidacion?'wait':'pointer', fontSize:'12px', opacity: calculandoLiquidacion?0.7:1 }}>
                   {calculandoLiquidacion ? 'Calculando...' : '🧮 Calcular liquidación del periodo'}
                 </button>
-                {liquidaciones.length > 0 && puede('nomina','descargar') && (
+                {liquidaciones.length > 0 && puede(clavePermiso('nomina','liquidacion'),'descargar') && (
                   <button onClick={exportarExcelLiquidacion} style={{ padding:'9px 16px', background:'none', border:`1px solid ${T.border}`, borderRadius:'8px', color:T.text, cursor:'pointer', fontSize:'12px' }}>
                     📊 Excel
                   </button>
                 )}
-                {colillasSeleccionadas.size > 0 && puede('nomina','descargar') && (
+                {colillasSeleccionadas.size > 0 && puede(clavePermiso('nomina','liquidacion'),'descargar') && (
                   <button onClick={enviarColillasSeleccionadas} disabled={enviandoColillas}
                     style={{ padding:'9px 16px', background:T.yellow, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor: enviandoColillas?'wait':'pointer', fontSize:'12px', opacity: enviandoColillas?0.7:1 }}>
                     {enviandoColillas ? 'Enviando...' : `✉️ Enviar ${colillasSeleccionadas.size} colilla(s)`}
@@ -2604,7 +2615,7 @@ export default function NominaPage() {
                               <div style={{ display:'flex', gap:'6px' }}>
                                 {estado === 'calculada' && <button onClick={() => revisarLiquidacion(l)} style={{ padding:'4px 9px', background:`${T.purple}15`, border:`1px solid ${T.purple}30`, borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px' }}>Revisar</button>}
                                 {estado === 'revisada' && <button onClick={() => aprobarLiquidacion(l)} style={{ padding:'4px 9px', background:`${T.blue}15`, border:`1px solid ${T.blue}30`, borderRadius:'6px', color:T.blue, cursor:'pointer', fontSize:'10px' }}>Aprobar</button>}
-                                {(estado === 'aprobada' || estado === 'pagada') && puede('nomina','descargar') && <button onClick={() => descargarColillaPDF(l)} style={{ padding:'4px 9px', background:`${T.green}15`, border:`1px solid ${T.green}30`, borderRadius:'6px', color:T.green, cursor:'pointer', fontSize:'10px' }}>📄 Colilla</button>}
+                                {(estado === 'aprobada' || estado === 'pagada') && puede(clavePermiso('nomina','liquidacion'),'descargar') && <button onClick={() => descargarColillaPDF(l)} style={{ padding:'4px 9px', background:`${T.green}15`, border:`1px solid ${T.green}30`, borderRadius:'6px', color:T.green, cursor:'pointer', fontSize:'10px' }}>📄 Colilla</button>}
                               </div>
                             </td>
                           </tr>

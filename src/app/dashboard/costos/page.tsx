@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
 import { CargaMasivaModal } from '@/components/CargaMasivaModal'
+import { clavePermiso } from '@/lib/modulos'
 import { configCostosFijos, configCostosVariables, type FilaCostoFijo, type FilaCostoVariable } from '@/lib/plantillasConfig'
 import { generarPlantilla, parsearArchivo, type ConfigPlantilla, type FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
@@ -278,7 +279,7 @@ function ModalTesteo({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function CostosPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tab, setTab] = useState<'dashboard'|'cf'|'cv'|'pef'|'historico'>('dashboard')
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -497,6 +498,16 @@ export default function CostosPage() {
     {v:'pef',      l:'🔍 Análisis PEF',  c:T.yellow},
     {v:'historico',l:'📋 Histórico',     c:T.purple},
   ]
+  const TABS_VISIBLES = TABS.filter(t=>puede(clavePermiso('costos', t.v), 'ver'))
+
+  // Si la sub-pestaña activa dejó de ser visible (permiso revocado o aún no otorgado),
+  // salta automáticamente a la primera sub-pestaña visible. Solo actúa cuando el permiso
+  // ya cargó, para no pisar el tab inicial mientras `puede()` todavía responde false por defecto.
+  useEffect(()=>{
+    if (cargandoPermisos) return
+    if (TABS_VISIBLES.length === 0) return
+    if (!TABS_VISIBLES.some(t=>t.v===tab)) setTab(TABS_VISIBLES[0].v as any)
+  },[cargandoPermisos, tab, TABS_VISIBLES.map(t=>t.v).join(',')])
 
   return (
     <RequierePermiso modulo="costos">
@@ -551,7 +562,7 @@ export default function CostosPage() {
 
       {/* Tabs */}
       <div style={{display:'flex',gap:'6px',marginBottom:'16px',flexWrap:'wrap'}}>
-        {TABS.map(t=>(
+        {TABS_VISIBLES.map(t=>(
           <button key={t.v} onClick={()=>setTab(t.v as any)}
             style={{padding:'8px 14px',borderRadius:'8px',cursor:'pointer',fontSize:'13px',fontWeight:tab===t.v?'600':'400',border:`1px solid ${tab===t.v?t.c:T.border}`,background:tab===t.v?`${t.c}15`:'transparent',color:tab===t.v?t.c:T.muted}}>
             {t.l}
@@ -705,14 +716,14 @@ export default function CostosPage() {
               )}
             </div>
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-              <BotonesPlantillaGated config={configCostosFijos} onArchivoValidado={setPreviewCF} theme={T} puedeAgregar={puede('costos','agregar')} puedeDescargar={puede('costos','descargar')} />
-              {puede('costos','agregar') && (
+              <BotonesPlantillaGated config={configCostosFijos} onArchivoValidado={setPreviewCF} theme={T} puedeAgregar={puede(clavePermiso('costos','cf'),'agregar')} puedeDescargar={puede(clavePermiso('costos','cf'),'descargar')} />
+              {puede(clavePermiso('costos','cf'),'agregar') && (
                 <button onClick={()=>setShowTesteo(true)}
                   style={{padding:'8px 14px',background:`${T.yellow}15`,border:`1px solid ${T.yellow}40`,borderRadius:'8px',color:T.yellow,cursor:'pointer',fontSize:'12px',fontWeight:'600'}}>
                   🧪 Agregar Testeo
                 </button>
               )}
-              {puede('costos','agregar') && (
+              {puede(clavePermiso('costos','cf'),'agregar') && (
                 <button onClick={()=>{setShowFormCF(true);setEditCF(null);setFormCF({concepto:'',categoria:'👥 Personal Operativo',cantidad:1,valor_unitario:0,pef_cat:'no_clasificado',tipo_registro:'historico',notas:''})}}
                   style={{padding:'8px 16px',background:T.blue,border:'none',borderRadius:'8px',color:'#fff',fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
                   + Agregar CF
@@ -720,7 +731,7 @@ export default function CostosPage() {
               )}
             </div>
           </div>
-          {previewCF && puede('costos','agregar') && <CargaMasivaModal filas={previewCF} columnas={configCostosFijos.columnas} onConfirm={confirmarImportCF} onClose={()=>setPreviewCF(null)} theme={T} />}
+          {previewCF && puede(clavePermiso('costos','cf'),'agregar') && <CargaMasivaModal filas={previewCF} columnas={configCostosFijos.columnas} onConfirm={confirmarImportCF} onClose={()=>setPreviewCF(null)} theme={T} />}
 
           {/* Formulario CF */}
           {showFormCF && (
@@ -840,7 +851,7 @@ export default function CostosPage() {
               </select>
             </div>
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
-              <BotonesPlantillaGated config={configCostosVariables} onArchivoValidado={setPreviewCV} theme={T} puedeAgregar={puede('costos','agregar')} puedeDescargar={puede('costos','descargar')} />
+              <BotonesPlantillaGated config={configCostosVariables} onArchivoValidado={setPreviewCV} theme={T} puedeAgregar={puede(clavePermiso('costos','cv'),'agregar')} puedeDescargar={puede(clavePermiso('costos','cv'),'descargar')} />
               <button onClick={()=>{setShowFormCV(true);setEditCV(null)}}
                 style={{padding:'8px 16px',background:T.green,border:'none',borderRadius:'8px',color:T.card,fontWeight:'600',cursor:'pointer',fontSize:'13px'}}>
                 + Agregar CV

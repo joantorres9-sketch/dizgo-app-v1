@@ -1,20 +1,21 @@
 'use client'
-import { useState } from 'react'
-import { MODULOS, ACCIONES, ACCION_LABELS, HORARIOS_ACCESO, matrizTodoTrue, matrizTodoFalse, permisoVacio, type MatrizPermisos as TMatriz, type Accion } from '@/lib/modulos'
+import { useState, Fragment } from 'react'
+import { MODULOS, SUBTABS, ACCIONES, ACCION_LABELS, HORARIOS_ACCESO, matrizTodoTrue, matrizTodoFalse, permisoVacio, todasLasClaves, clavePermiso, type MatrizPermisos as TMatriz, type Accion } from '@/lib/modulos'
 
 const T = { bg:'#0D1E35', card:'#111520', card2:'#0A0D14', accent:'#F5A623', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#8B96A8', border:'rgba(255,255,255,0.08)' }
 
 // Plantillas rápidas — mejora de UX pedida explícitamente: que conceder permisos sea ágil y dé
-// sensación de control (un clic para el caso común, siempre editable después).
+// sensación de control (un clic para el caso común, siempre editable después). Cubren también las
+// filas de sub-pestaña, no solo el módulo.
 const PLANTILLAS: { key: string; label: string; icon: string; build: () => TMatriz }[] = [
   { key: 'solo_lectura', label: 'Solo lectura', icon: '👁️', build: () => {
     const m = matrizTodoFalse()
-    for (const mod of MODULOS) m[mod.key].ver = true
+    for (const clave of todasLasClaves()) m[clave].ver = true
     return m
   } },
   { key: 'editor', label: 'Editor completo', icon: '✏️', build: () => {
     const m = matrizTodoTrue()
-    for (const mod of MODULOS) m[mod.key].eliminar = false
+    for (const clave of todasLasClaves()) m[clave].eliminar = false
     return m
   } },
   { key: 'total', label: 'Acceso total', icon: '🔓', build: () => matrizTodoTrue() },
@@ -41,23 +42,35 @@ export function MatrizPermisos({
   const [horario, setHorario] = useState(horarioInicial)
   const [notificar, setNotificar] = useState(notificarInicial)
   const [activo, setActivo] = useState(activoInicial)
+  const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
 
-  const toggleCelda = (modulo: string, accion: Accion) => {
-    setPermisos(p => ({ ...p, [modulo]: { ...(p[modulo] || permisoVacio()), [accion]: !p[modulo]?.[accion] } }))
+  const toggleCelda = (clave: string, accion: Accion) => {
+    setPermisos(p => ({ ...p, [clave]: { ...(p[clave] || permisoVacio()), [accion]: !p[clave]?.[accion] } }))
   }
   const toggleColumna = (accion: Accion) => {
-    const todosMarcados = MODULOS.every(m => permisos[m.key]?.[accion])
+    const claves = todasLasClaves()
+    const todosMarcados = claves.every(c => permisos[c]?.[accion])
     setPermisos(p => {
       const n = { ...p }
-      for (const m of MODULOS) n[m.key] = { ...(n[m.key] || permisoVacio()), [accion]: !todosMarcados }
+      for (const c of claves) n[c] = { ...(n[c] || permisoVacio()), [accion]: !todosMarcados }
       return n
     })
   }
-  const toggleFila = (modulo: string) => {
-    const actual = permisos[modulo] || permisoVacio()
+  const toggleFila = (clave: string) => {
+    const actual = permisos[clave] || permisoVacio()
     const todosMarcados = ACCIONES.every(a => actual[a])
-    setPermisos(p => ({ ...p, [modulo]: ACCIONES.reduce((acc, a) => ({ ...acc, [a]: !todosMarcados }), {} as TMatriz[string]) }))
+    setPermisos(p => ({ ...p, [clave]: ACCIONES.reduce((acc, a) => ({ ...acc, [a]: !todosMarcados }), {} as TMatriz[string]) }))
   }
+  const toggleExpandido = (moduloKey: string) => {
+    setExpandidos(s => {
+      const n = new Set(s)
+      if (n.has(moduloKey)) n.delete(moduloKey); else n.add(moduloKey)
+      return n
+    })
+  }
+  const modulosConSubtabs = MODULOS.filter(m => (SUBTABS[m.key] || []).length > 0)
+  const expandirTodo = () => setExpandidos(new Set(modulosConSubtabs.map(m => m.key)))
+  const colapsarTodo = () => setExpandidos(new Set())
 
   const nModulosVisibles = MODULOS.filter(m => permisos[m.key]?.ver).length
   const nEdicionCompleta = MODULOS.filter(m => permisos[m.key]?.modificar && permisos[m.key]?.agregar).length
@@ -76,7 +89,13 @@ export function MatrizPermisos({
         </div>
 
         <div style={{ padding:'14px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-          <div style={{ fontSize:'10.5px', color:T.muted, marginBottom:'8px', textTransform:'uppercase', letterSpacing:'.4px' }}>Plantillas rápidas</div>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+            <div style={{ fontSize:'10.5px', color:T.muted, textTransform:'uppercase', letterSpacing:'.4px' }}>Plantillas rápidas</div>
+            <div style={{ display:'flex', gap:'10px' }}>
+              <button onClick={expandirTodo} style={{ background:'none', border:'none', color:T.blue, fontSize:'11px', cursor:'pointer', fontWeight:600 }}>▾ Expandir sub-pestañas</button>
+              <button onClick={colapsarTodo} style={{ background:'none', border:'none', color:T.muted, fontSize:'11px', cursor:'pointer', fontWeight:600 }}>▸ Colapsar</button>
+            </div>
+          </div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
             {PLANTILLAS.map(pl => (
               <button key={pl.key} onClick={() => setPermisos(pl.build())}
@@ -101,20 +120,52 @@ export function MatrizPermisos({
               </tr>
             </thead>
             <tbody>
-              {MODULOS.map(mod => (
-                <tr key={mod.key} style={{ borderBottom:`1px solid rgba(255,255,255,0.03)` }}>
-                  <td style={{ padding:'7px 12px', fontSize:'12px', color:T.text, cursor:'pointer' }}
-                    onClick={() => toggleFila(mod.key)} title="Marcar/desmarcar todo este módulo">
-                    <span style={{ marginRight:'6px' }}>{mod.icon}</span>{mod.label}
-                  </td>
-                  {ACCIONES.map(a => (
-                    <td key={a} style={{ padding:'7px 10px', textAlign:'center' }}>
-                      <input type="checkbox" checked={!!permisos[mod.key]?.[a]} onChange={() => toggleCelda(mod.key, a)}
-                        style={{ width:'15px', height:'15px', cursor:'pointer', accentColor:T.accent }} />
-                    </td>
-                  ))}
-                </tr>
-              ))}
+              {MODULOS.map(mod => {
+                const subtabs = SUBTABS[mod.key] || []
+                const tieneSubtabs = subtabs.length > 0
+                const expandido = expandidos.has(mod.key)
+                return (
+                  <Fragment key={mod.key}>
+                    <tr style={{ borderBottom:`1px solid rgba(255,255,255,0.03)` }}>
+                      <td style={{ padding:'7px 12px', fontSize:'12px', color:T.text, cursor:'pointer' }}
+                        onClick={() => toggleFila(mod.key)} title="Marcar/desmarcar todo este módulo">
+                        {tieneSubtabs && (
+                          <button onClick={e => { e.stopPropagation(); toggleExpandido(mod.key) }}
+                            style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'10px', width:'16px', display:'inline-block' }}
+                            title={expandido ? 'Colapsar sub-pestañas' : `Ver ${subtabs.length} sub-pestañas`}>
+                            {expandido ? '▾' : '▸'}
+                          </button>
+                        )}
+                        <span style={{ marginRight:'6px' }}>{mod.icon}</span>{mod.label}
+                        {tieneSubtabs && <span style={{ marginLeft:'6px', fontSize:'10px', color:T.muted }}>({subtabs.length})</span>}
+                      </td>
+                      {ACCIONES.map(a => (
+                        <td key={a} style={{ padding:'7px 10px', textAlign:'center' }}>
+                          <input type="checkbox" checked={!!permisos[mod.key]?.[a]} onChange={() => toggleCelda(mod.key, a)}
+                            style={{ width:'15px', height:'15px', cursor:'pointer', accentColor:T.accent }} />
+                        </td>
+                      ))}
+                    </tr>
+                    {tieneSubtabs && expandido && subtabs.map(sub => {
+                      const clave = clavePermiso(mod.key, sub.key)
+                      return (
+                        <tr key={clave} style={{ borderBottom:`1px solid rgba(255,255,255,0.03)`, background:'rgba(255,255,255,0.015)' }}>
+                          <td style={{ padding:'6px 12px 6px 34px', fontSize:'11px', color:T.muted, cursor:'pointer' }}
+                            onClick={() => toggleFila(clave)} title="Marcar/desmarcar esta sub-pestaña">
+                            {sub.label}
+                          </td>
+                          {ACCIONES.map(a => (
+                            <td key={a} style={{ padding:'6px 10px', textAlign:'center' }}>
+                              <input type="checkbox" checked={!!permisos[clave]?.[a]} onChange={() => toggleCelda(clave, a)}
+                                style={{ width:'13px', height:'13px', cursor:'pointer', accentColor:T.blue }} />
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
         </div>

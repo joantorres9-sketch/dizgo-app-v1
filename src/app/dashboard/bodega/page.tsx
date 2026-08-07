@@ -7,6 +7,7 @@ import { configInventarioInicial, configInventarioCompra, type FilaInventario } 
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 // Paleta local (bodega/page.tsx colorea inline, sin objeto T central) -- solo para pasarle
 // theme a los componentes compartidos de carga masiva.
@@ -46,7 +47,7 @@ function horasDesde(fecha:string){ return Math.round((Date.now()-new Date(fecha)
 
 export default function BodegaPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'stock'|'importacion'|'piscinas'|'riesgo'|'proveedor'>('stock')
@@ -203,6 +204,24 @@ export default function BodegaPage() {
   function nombreProd(id:string){ return productos.find(p=>p.id===id)?.nombre || 'Producto' }
   function nombreBod(id:string){ return bodegas.find(b=>b.id===id)?.nombre || 'Bodega' }
 
+  const TABS = [
+    { key:'stock', label:'📦 Stock por bodega' },
+    { key:'importacion', label:'🚢 Flujo importación' },
+    { key:'piscinas', label:'☁️ Piscinas dropshipping' },
+    { key:'riesgo', label:`⚠️ Riesgo IA (${alertasRiesgo.length})` },
+    { key:'proveedor', label:'🤝 Mi catálogo proveedor' },
+  ]
+  const TABS_VISIBLES = TABS.filter(t => puede(clavePermiso('bodega', t.key), 'ver'))
+
+  // Si la sub-pestaña activa dejó de ser visible (permiso revocado o aún no otorgado),
+  // salta automáticamente a la primera sub-pestaña visible. Solo actúa cuando el permiso
+  // ya cargó, para no pisar el tab inicial mientras `puede()` todavía responde false por defecto.
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (TABS_VISIBLES.length === 0) return
+    if (!TABS_VISIBLES.some(t => t.key === tab)) setTab(TABS_VISIBLES[0].key as typeof tab)
+  }, [cargandoPermisos, tab, TABS_VISIBLES.map(t => t.key).join(',')])
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
       Cargando bodega...
@@ -271,13 +290,7 @@ export default function BodegaPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'stock', label:'📦 Stock por bodega' },
-          { key:'importacion', label:'🚢 Flujo importación' },
-          { key:'piscinas', label:'☁️ Piscinas dropshipping' },
-          { key:'riesgo', label:`⚠️ Riesgo IA (${alertasRiesgo.length})` },
-          { key:'proveedor', label:'🤝 Mi catálogo proveedor' },
-        ].map(t => (
+        {TABS_VISIBLES.map(t => (
           <button key={t.key} onClick={()=>setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
               background: tab===t.key?'#F5A623':'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':'#8B96A8' }}>

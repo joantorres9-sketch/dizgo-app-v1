@@ -6,6 +6,7 @@ import { configPauta, type FilaPauta } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 const T = {
   bg:'#0D1E35', card:'#111520', card2:'#0A0D14',
@@ -73,7 +74,7 @@ function parsearCSVMeta(texto: string): Partial<Registro>[] {
 
 export default function PautaPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'resumen'|'campanas'|'dia_dia'|'carga'>('resumen')
@@ -149,8 +150,25 @@ export default function PautaPage() {
     ...d, cpa: d.resultados>0 ? Math.round(d.inversion/d.resultados) : 0,
   }))
 
+  const TABS = [
+    { key:'resumen' as const, label:'📊 Resumen' },
+    { key:'campanas' as const, label:'🎯 Por Campaña' },
+    { key:'dia_dia' as const, label:'📅 Día a Día' },
+    { key:'carga' as const, label:'⚙️ Configurar' },
+  ]
+  const tabsVisibles = TABS.filter(t => puede(clavePermiso('pauta', t.key), 'ver'))
+
+  // Si la sub-pestaña activa dejó de ser visible (permiso revocado o aún no otorgado),
+  // salta automáticamente a la primera sub-pestaña visible. Solo actúa cuando el permiso
+  // ya cargó, para no pisar el tab inicial mientras `puede()` todavía responde false por defecto.
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (tabsVisibles.length === 0) return
+    if (!tabsVisibles.some(t => t.key === tab)) setTab(tabsVisibles[0].key)
+  }, [cargandoPermisos, tab, tabsVisibles.map(t => t.key).join(',')])
+
   async function handleCSV(file: File) {
-    if (!puede('pauta','agregar')) return
+    if (!puede(clavePermiso('pauta','carga'),'agregar')) return
     setUploadMsg('Procesando archivo...')
     const texto = await file.text()
     const parsed = parsearCSVMeta(texto)
@@ -171,7 +189,7 @@ export default function PautaPage() {
   }
 
   async function confirmarImportPauta() {
-    if (!puede('pauta','agregar')) return
+    if (!puede(clavePermiso('pauta','carga'),'agregar')) return
     if (!previewPauta || !tenantId) return
     const validas = previewPauta.filter(f => f.valido)
     const filas = validas.map(f => {
@@ -227,7 +245,7 @@ export default function PautaPage() {
   }
 
   async function guardarCpaMaximo(prodId: string, valor: number) {
-    if (!puede('pauta','modificar')) return
+    if (!puede(clavePermiso('pauta','carga'),'modificar')) return
     await supabase.from('productos').update({ cpa_maximo: valor }).eq('id', prodId)
     setProductos(prev => prev.map(p => p.id===prodId ? { ...p, cpa_maximo:valor } : p))
   }
@@ -298,12 +316,7 @@ export default function PautaPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'resumen', label:'📊 Resumen' },
-          { key:'campanas', label:'🎯 Por Campaña' },
-          { key:'dia_dia', label:'📅 Día a Día' },
-          { key:'carga', label:'⚙️ Configurar' },
-        ].map(t => (
+        {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
               background: tab === t.key ? T.accent : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : T.muted }}>

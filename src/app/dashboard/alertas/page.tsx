@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
+import { clavePermiso } from '@/lib/modulos'
 
 type Alerta = {
   id: string; tenant_id: string | null
@@ -47,7 +48,7 @@ const inp = { background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', bo
 
 export default function AlertasPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, cargando: cargandoPermisos } = usePermisos()
 
   const [tenantId, setTenantId] = useState('')
   const [esSuperadmin, setEsSuperadmin] = useState(false)
@@ -241,6 +242,23 @@ export default function AlertasPage() {
     return true
   })
 
+  const TABS = [
+    { key:'alertas', label:`🚨 Alertas (${noLeidas} nuevas)` },
+    { key:'pef', label:'🔍 Diagnóstico PEF' },
+    { key:'oportunidades', label:'💡 Oportunidades' },
+    { key:'nueva', label:'✏️ Nueva alerta' },
+  ] as const
+
+  const tabsVisibles = TABS.filter(t => puede(clavePermiso('alertas', t.key), 'ver'))
+  const clavesTabsVisibles = tabsVisibles.map(t => t.key).join(',')
+
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (tabsVisibles.length === 0) return
+    if (!tabsVisibles.some(t => t.key === tab)) setTab(tabsVisibles[0].key)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, clavesTabsVisibles, tab])
+
   async function marcarLeida(id: string) {
     setAlertas(prev => prev.map(a => a.id === id ? { ...a, leida: true } : a))
     setAlertaSel(prev => prev?.id === id ? { ...prev, leida: true } : prev)
@@ -294,7 +312,7 @@ export default function AlertasPage() {
               ✓ Marcar todas leídas
             </button>
           )}
-          {puede('alertas','agregar') && (
+          {puede(clavePermiso('alertas','nueva'),'agregar') && (
             <button onClick={() => setTab('nueva')}
               style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
               + Nueva alerta
@@ -323,12 +341,7 @@ export default function AlertasPage() {
       </div>
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {[
-          { key:'alertas', label:`🚨 Alertas (${noLeidas} nuevas)` },
-          { key:'pef', label:'🔍 Diagnóstico PEF' },
-          { key:'oportunidades', label:'💡 Oportunidades' },
-          { key:'nueva', label:'✏️ Nueva alerta' },
-        ].map(t => (
+        {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
               background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)',
@@ -596,7 +609,7 @@ export default function AlertasPage() {
                 placeholder="Ej: Despachar todo el 28 antes de las 2pm" style={inp} />
             </div>
 
-            <button onClick={crearAlerta} disabled={!nueva.titulo || !nueva.mensaje || !puede('alertas','agregar')}
+            <button onClick={crearAlerta} disabled={!nueva.titulo || !nueva.mensaje || !puede(clavePermiso('alertas','nueva'),'agregar')}
               style={{ width:'100%', padding:'11px', background: nueva.titulo && nueva.mensaje ? '#F5A623' : 'rgba(255,255,255,0.05)',
                 border:'none', borderRadius:'10px', color: nueva.titulo && nueva.mensaje ? '#0A0D14' : '#5A6478',
                 cursor: nueva.titulo && nueva.mensaje ? 'pointer' : 'not-allowed', fontWeight:'700', fontSize:'13px' }}>

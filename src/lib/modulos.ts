@@ -41,6 +41,97 @@ export const MODULOS: ModuloNav[] = [
   { key: 'formacion', href: '/dashboard/formacion', icon: '🎓', label: 'Formación', grupo: 'ACTUAR' },
 ]
 
+// Sub-pestañas reales de navegación dentro de un módulo (distintas de simples filtros/escenarios
+// como "modo de cálculo" en Equilibrio/Metas o "activo/costeo/temporada" en Precio, que no cambian
+// qué sección se renderiza). Solo los módulos listados aquí tienen filas de sub-pestaña en la
+// matriz de permisos — el resto se queda con una sola fila a nivel de módulo, como hoy.
+export interface SubTab { key: string; label: string }
+
+export const SUBTABS: Record<string, SubTab[]> = {
+  nomina: [
+    { key: 'organigrama', label: '🗂️ Organigrama' },
+    { key: 'colaboradores', label: '👥 Colaboradores' },
+    { key: 'solicitudes', label: '📥 Solicitudes' },
+    { key: 'procesos', label: '🧭 Procesos' },
+    { key: 'indicadores', label: '📈 Indicadores' },
+    { key: 'novedades', label: '📋 Novedades' },
+    { key: 'liquidacion', label: '💵 Liquidación' },
+    { key: 'tasas', label: '⚙️ Tasas' },
+  ],
+  costos: [
+    { key: 'dashboard', label: '📊 Dashboard' },
+    { key: 'cf', label: '💰 Costos Fijos' },
+    { key: 'cv', label: '📈 Costos Variables' },
+    { key: 'pef', label: '🔍 Análisis PEF' },
+    { key: 'historico', label: '📋 Histórico' },
+  ],
+  whatsapp: [
+    { key: 'kanban', label: '📋 Kanban' },
+    { key: 'lotes', label: '📦 Lotes' },
+    { key: 'plantillas', label: '📝 Plantillas' },
+  ],
+  logistica: [
+    { key: 'flujo_caja', label: '💰 Flujo de caja por etapa' },
+    { key: 'transportadoras', label: '🚚 Transportadoras' },
+    { key: 'novedades', label: '⚠️ Novedades' },
+    { key: 'mapa', label: '🗺️ Mapa de cobertura' },
+    { key: 'equipo', label: '👥 Equipo confirmador' },
+  ],
+  pauta: [
+    { key: 'resumen', label: '📊 Resumen' },
+    { key: 'campanas', label: '🎯 Por Campaña' },
+    { key: 'dia_dia', label: '📅 Día a Día' },
+    { key: 'carga', label: '⚙️ Configurar' },
+  ],
+  pqrsf: [
+    { key: 'lista', label: '📋 Lista' },
+    { key: 'nueva', label: '✏️ Nueva PQRSF' },
+    { key: 'stats', label: '📊 Estadísticas' },
+  ],
+  bodega: [
+    { key: 'stock', label: '📦 Stock por bodega' },
+    { key: 'importacion', label: '🚢 Flujo de importación' },
+    { key: 'piscinas', label: '☁️ Piscinas dropshipping' },
+    { key: 'riesgo', label: '⚠️ Riesgo IA' },
+    { key: 'proveedor', label: '🤝 Mi catálogo proveedor' },
+  ],
+  pyg: [
+    { key: 'resultados', label: '📈 Estado de Resultados' },
+    { key: 'producto', label: '📦 P&G por Producto' },
+    { key: 'mezcla', label: '🔀 Mezcla de Productos' },
+    { key: 'flujo_caja', label: '💧 Flujo de Caja' },
+    { key: 'balance', label: '⚖️ Balance General' },
+    { key: 'cxp', label: '📋 Cuentas por Pagar' },
+    { key: 'libro_caja', label: '📒 Libro de Caja' },
+  ],
+  embudo: [
+    { key: 'embudo', label: '🔬 Embudo visual' },
+    { key: 'diagnostico', label: '🚨 Diagnóstico' },
+    { key: 'simulador', label: '⚡ Simulador' },
+    { key: 'mezcla', label: '🔀 Mezcla de productos' },
+  ],
+  alertas: [
+    { key: 'alertas', label: '🚨 Alertas' },
+    { key: 'pef', label: '🔍 Diagnóstico PEF' },
+    { key: 'oportunidades', label: '💡 Oportunidades' },
+    { key: 'nueva', label: '✏️ Nueva alerta' },
+  ],
+  agentes: [
+    { key: 'confirmador', label: '📞 Confirmador' },
+    { key: 'novedades', label: '⚠️ Novedades' },
+    { key: 'contable', label: '📊 Contable' },
+    { key: 'campanas', label: '📡 Campañas' },
+    { key: 'inventario', label: '🏭 Inventario' },
+    { key: 'logistico', label: '🚚 Logístico' },
+  ],
+}
+
+// Clave compuesta de permiso para una sub-pestaña, ej. "nomina.liquidacion" — vive en la misma
+// matriz plana que las claves de módulo, sin cambiar la forma del dato en profiles.permisos.
+export function clavePermiso(moduloKey: string, subtabKey?: string): string {
+  return subtabKey ? `${moduloKey}.${subtabKey}` : moduloKey
+}
+
 export const ACCIONES = ['ver', 'modificar', 'agregar', 'eliminar', 'descargar'] as const
 export type Accion = typeof ACCIONES[number]
 
@@ -59,15 +150,26 @@ export function permisoVacio(): PermisoModulo {
   return { ver: false, modificar: false, agregar: false, eliminar: false, descargar: false }
 }
 
+// Todas las claves de fila (módulo + sus sub-pestañas, si tiene) en el orden en que deben
+// renderizarse en la matriz de permisos.
+export function todasLasClaves(): string[] {
+  const claves: string[] = []
+  for (const mod of MODULOS) {
+    claves.push(mod.key)
+    for (const sub of SUBTABS[mod.key] || []) claves.push(clavePermiso(mod.key, sub.key))
+  }
+  return claves
+}
+
 export function matrizTodoTrue(): MatrizPermisos {
   const m: MatrizPermisos = {}
-  for (const mod of MODULOS) m[mod.key] = { ver: true, modificar: true, agregar: true, eliminar: true, descargar: true }
+  for (const clave of todasLasClaves()) m[clave] = { ver: true, modificar: true, agregar: true, eliminar: true, descargar: true }
   return m
 }
 
 export function matrizTodoFalse(): MatrizPermisos {
   const m: MatrizPermisos = {}
-  for (const mod of MODULOS) m[mod.key] = permisoVacio()
+  for (const clave of todasLasClaves()) m[clave] = permisoVacio()
   return m
 }
 
