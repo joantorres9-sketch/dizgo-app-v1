@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
   const { data: perfiles, error } = await supabase.from('profiles')
-    .select('id, email, nombre, activo, created_at, tenant_id')
+    .select('id, email, nombre, activo, created_at, tenant_id, rol, colaborador_id, permisos, horario_acceso, notificar_actividad_inusual')
     .eq('es_cortesia', true).order('created_at', { ascending: false })
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

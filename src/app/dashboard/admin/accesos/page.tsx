@@ -15,6 +15,8 @@ type ProfileRow = {
 }
 type CortesiaRow = {
   id: string; email: string; nombre: string | null; activo: boolean; created_at: string
+  rol: string; colaborador_id: string | null; permisos: TMatriz
+  horario_acceso: string; notificar_actividad_inusual: boolean
   tenant: { id: string; nombre: string; plan: string; pais: string; slug: string } | null
 }
 
@@ -38,6 +40,10 @@ export default function AccesosPage() {
   const [creandoAccesoId, setCreandoAccesoId] = useState<string | null>(null)
   const [emailNuevo, setEmailNuevo] = useState('')
   const [perfilEditando, setPerfilEditando] = useState<ProfileRow | null>(null)
+  // Tenant del perfil que se está editando en la matriz — casi siempre es `tenantId` (el propio
+  // tenant del admin), pero un usuario de cortesía vive en OTRO tenant, y actualizar-permisos
+  // exige el tenantId real del perfil objetivo (o rechaza con 403).
+  const [tenantIdEditando, setTenantIdEditando] = useState('')
   const [guardandoMatriz, setGuardandoMatriz] = useState(false)
   const [procesando, setProcesando] = useState<string | null>(null)
   const [msg, setMsg] = useState('')
@@ -137,18 +143,21 @@ export default function AccesosPage() {
       setCreandoAccesoId(null); setEmailNuevo('')
       const nuevosPerfiles = await cargar(tenantId)
       const nuevoPerfil = nuevosPerfiles.find(p => p.id === data.profileId)
-      if (nuevoPerfil) setPerfilEditando(nuevoPerfil)
+      if (nuevoPerfil) { setPerfilEditando(nuevoPerfil); setTenantIdEditando(tenantId) }
     } catch (err: any) { alert(err.message) } finally { setProcesando(null) }
   }
 
   async function guardarMatriz(cambios: { permisos: TMatriz; horario_acceso: string; notificar_actividad_inusual: boolean; activo: boolean }) {
-    if (!perfilEditando) return
+    if (!perfilEditando || !tenantIdEditando) return
     setGuardandoMatriz(true)
     try {
-      await authFetch('/api/admin/actualizar-permisos', { tenantId, profileId: perfilEditando.id, ...cambios })
+      await authFetch('/api/admin/actualizar-permisos', { tenantId: tenantIdEditando, profileId: perfilEditando.id, ...cambios })
       setMsg('✅ Permisos actualizados')
+      const esCortesia = tenantIdEditando !== tenantId
       setPerfilEditando(null)
-      await cargar(tenantId)
+      setTenantIdEditando('')
+      if (esCortesia) await cargarCortesias()
+      else await cargar(tenantId)
     } catch (err: any) { alert(err.message) } finally { setGuardandoMatriz(false) }
   }
 
@@ -229,7 +238,7 @@ export default function AccesosPage() {
                       </td>
                       <td style={{ padding:'10px 12px' }}>
                         {perfil ? (
-                          <button onClick={() => setPerfilEditando(perfil)}
+                          <button onClick={() => { setPerfilEditando(perfil); setTenantIdEditando(tenantId) }}
                             style={{ padding:'6px 12px', background:`${T.accent}15`, border:`1px solid ${T.accent}30`, borderRadius:'6px', color:T.accent, fontSize:'11px', fontWeight:700, cursor:'pointer' }}>
                             🔐 Permisos
                           </button>
@@ -296,7 +305,7 @@ export default function AccesosPage() {
                   <td style={{ padding:'10px 12px' }}>
                     <div style={{ display:'flex', gap:'6px' }}>
                       {p.rol === 'colaborador' && (
-                        <button onClick={() => setPerfilEditando(p)}
+                        <button onClick={() => { setPerfilEditando(p); setTenantIdEditando(tenantId) }}
                           style={{ padding:'6px 10px', background:`${T.accent}15`, border:`1px solid ${T.accent}30`, borderRadius:'6px', color:T.accent, fontSize:'11px', fontWeight:700, cursor:'pointer' }}>
                           🔐 Permisos
                         </button>
@@ -388,7 +397,7 @@ export default function AccesosPage() {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                   <thead>
                     <tr style={{ background:T.card2, borderBottom:`1px solid ${T.border}` }}>
-                      {['Usuario', 'Tenant', 'País', 'Plan', 'Estado'].map(h => (
+                      {['Usuario', 'Tenant', 'País', 'Plan', 'Estado', 'Acción'].map(h => (
                         <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:700 }}>{h}</th>
                       ))}
                     </tr>
@@ -411,6 +420,22 @@ export default function AccesosPage() {
                           <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:700, background: c.activo ? `${T.green}15` : `${T.red}15`, color: c.activo ? T.green : T.red }}>
                             {c.activo ? '✓ Activo' : '✕ Desactivado'}
                           </span>
+                        </td>
+                        <td style={{ padding:'10px 12px' }}>
+                          {c.tenant ? (
+                            <button onClick={() => {
+                              setPerfilEditando({
+                                id: c.id, email: c.email, nombre: c.nombre, rol: c.rol, activo: c.activo,
+                                es_cortesia: true, colaborador_id: c.colaborador_id, permisos: c.permisos,
+                                horario_acceso: c.horario_acceso, notificar_actividad_inusual: c.notificar_actividad_inusual,
+                                created_at: c.created_at,
+                              })
+                              setTenantIdEditando(c.tenant!.id)
+                            }}
+                              style={{ padding:'6px 10px', background:`${T.accent}15`, border:`1px solid ${T.accent}30`, borderRadius:'6px', color:T.accent, fontSize:'11px', fontWeight:700, cursor:'pointer' }}>
+                              🔐 Permisos
+                            </button>
+                          ) : <span style={{ fontSize:'10px', color:T.muted }}>Sin tenant</span>}
                         </td>
                       </tr>
                     ))}
