@@ -58,6 +58,7 @@ export default function AccesosPage() {
     setColaboradores((cols || []) as ColabRow[])
     setPerfiles((profs || []) as ProfileRow[])
     setCargando(false)
+    return (profs || []) as ProfileRow[]
   }, [supabase])
 
   useEffect(() => {
@@ -125,7 +126,9 @@ export default function AccesosPage() {
       const data = await authFetch('/api/admin/crear-acceso-colaborador', { tenantId, colaboradorId: colab.id, email })
       setMsg(data.correoEnviado ? `✅ Acceso creado y correo enviado a ${email}` : `✅ Acceso creado — ${data.avisoCorreo || 'revisa el envío de correo'}`)
       setCreandoAccesoId(null); setEmailNuevo('')
-      await cargar(tenantId)
+      const nuevosPerfiles = await cargar(tenantId)
+      const nuevoPerfil = nuevosPerfiles.find(p => p.id === data.profileId)
+      if (nuevoPerfil) setPerfilEditando(nuevoPerfil)
     } catch (err: any) { alert(err.message) } finally { setProcesando(null) }
   }
 
