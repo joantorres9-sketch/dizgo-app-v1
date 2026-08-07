@@ -51,14 +51,23 @@ export default function AccesosPage() {
 
   const cargar = useCallback(async (tid: string) => {
     setCargando(true)
-    const [{ data: cols }, { data: profs }] = await Promise.all([
-      supabase.from('colaboradores').select('id,nombres,apellidos,cargo,email,correo_personal').eq('tenant_id', tid).eq('activo', true).order('nombres'),
-      supabase.from('profiles').select('id,email,nombre,rol,activo,es_cortesia,colaborador_id,permisos,horario_acceso,notificar_actividad_inusual,created_at').eq('tenant_id', tid).order('created_at'),
-    ])
-    setColaboradores((cols || []) as ColabRow[])
-    setPerfiles((profs || []) as ProfileRow[])
-    setCargando(false)
-    return (profs || []) as ProfileRow[]
+    try {
+      const [{ data: cols }, perfilesData] = await Promise.all([
+        supabase.from('colaboradores').select('id,nombres,apellidos,cargo,email,correo_personal').eq('tenant_id', tid).eq('activo', true).order('nombres'),
+        // profiles solo se puede leer vía ruta con service role — su RLS (profiles_self:
+        // auth.uid() = id) filtra un SELECT directo del cliente a una sola fila (la propia).
+        authFetch('/api/admin/listar-perfiles', { tenantId: tid }),
+      ])
+      setColaboradores((cols || []) as ColabRow[])
+      const profs = (perfilesData.perfiles || []) as ProfileRow[]
+      setPerfiles(profs)
+      return profs
+    } catch (err: any) {
+      setMsg(`⚠️ No se pudieron cargar los usuarios: ${err.message}`)
+      return [] as ProfileRow[]
+    } finally {
+      setCargando(false)
+    }
   }, [supabase])
 
   useEffect(() => {
