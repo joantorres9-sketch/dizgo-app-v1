@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { GuiaBienvenida } from '@/components/GuiaBienvenida'
+import { paisPorCodigo } from '@/lib/paises'
 
 // ── TIPOS ────────────────────────────────────────────────────
 type MesData = {
@@ -54,6 +55,7 @@ export default function DashboardPage() {
   const [tenantId, setTenantId] = useState('')
   const [nombreTienda, setNombreTienda] = useState('Mi Tienda')
   const [planInfo, setPlanInfo] = useState<{ plan: string; licencia: string; licencia_vence: string | null }>({ plan: 'explorador', licencia: 'activa', licencia_vence: null })
+  const [paisCodeTenant, setPaisCodeTenant] = useState('')
 
   const getMesesRango = useCallback(() => {
     const hoy = new Date()
@@ -77,9 +79,10 @@ export default function DashboardPage() {
     if (!profile?.tenant_id) { setLoading(false); return }
     const tid = profile.tenant_id
     setTenantId(tid)
-    const { data: tenant } = await supabase.from('tenants').select('nombre, plan, licencia, licencia_vence').eq('id', tid).single()
+    const { data: tenant } = await supabase.from('tenants').select('nombre, plan, licencia, licencia_vence, pais').eq('id', tid).single()
     if (tenant?.nombre) setNombreTienda(tenant.nombre)
     if (tenant) setPlanInfo({ plan: tenant.plan || 'explorador', licencia: tenant.licencia || 'activa', licencia_vence: tenant.licencia_vence })
+    if (tenant?.pais) setPaisCodeTenant(tenant.pais)
 
     const hoy = new Date()
     const mesesAtras = getMesesRango()
@@ -259,7 +262,19 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
       {/* ── HEADER ── */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
-          <h1 style={{ fontSize:'24px', fontWeight:'800', marginBottom:'2px' }}>⚡ Centro de Mando</h1>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'2px', flexWrap:'wrap' }}>
+            <h1 style={{ fontSize:'24px', fontWeight:'800' }}>⚡ Centro de Mando</h1>
+            {(() => {
+              const p = paisPorCodigo(paisCodeTenant)
+              if (!p) return null
+              return (
+                <span style={{ display:'inline-flex', alignItems:'center', gap:'6px', padding:'4px 10px', background:'rgba(255,255,255,0.06)', border:`1px solid ${C.borde}`, borderRadius:'20px', fontSize:'12px', fontWeight:'600', color:C.texto }}>
+                  <img src={p.flag} alt="" style={{ width:'16px', height:'12px', objectFit:'cover', borderRadius:'2px' }} />
+                  {p.nombre} · {p.moneda}
+                </span>
+              )
+            })()}
+          </div>
           <p style={{ fontSize:'13px', color:C.sub }}>{nombreTienda} · {new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</p>
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }} className="no-print">
