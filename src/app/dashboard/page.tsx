@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
 import { GuiaBienvenida } from '@/components/GuiaBienvenida'
+import { GuiaCosteo } from '@/components/GuiaCosteo'
 import { paisPorCodigo } from '@/lib/paises'
 
 // ── TIPOS ────────────────────────────────────────────────────
@@ -243,6 +244,9 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
 
       {/* ── GUÍA DE BIENVENIDA (solo tenants de cortesía) ── */}
       {planInfo.plan === 'cortesia' && <GuiaBienvenida />}
+
+      {/* ── GUÍA DE COSTEO (todos los tenants con datos reales) ── */}
+      {planInfo.plan !== 'cortesia' && tenantId && <GuiaCosteo tenantId={tenantId} />}
 
       {/* ── AVISO DE PLAN ── */}
       {planInfo.plan !== 'explorador' && planInfo.licencia_vence && (() => {

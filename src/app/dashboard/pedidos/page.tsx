@@ -630,6 +630,7 @@ export default function PedidosPage() {
   const [previewDropi, setPreviewDropi] = useState<FilaImportada<FilaPedidoDropi>[] | null>(null)
   const [previewGenerico, setPreviewGenerico] = useState<FilaImportada<FilaPedido>[] | null>(null)
   const [progresoImport, setProgresoImport] = useState<{ total: number; hechos: number } | null>(null)
+  const [resultadoImportDropi, setResultadoImportDropi] = useState<{ nuevos: number; actualizados: number; conservados: number; productosCreados: string[]; sinProducto: number } | null>(null)
 
   async function loadData() {
     setLoading(true)
@@ -822,10 +823,11 @@ export default function PedidosPage() {
       notas: sinProducto.length ? sinProducto.slice(0, 20).join(' | ') : null,
     })
     setPreviewDropi(null)
-    const resumen = `✅ ${nuevos} pedidos nuevos · ${actualizados} actualizados · ${conservados} conservados sin cambios.` +
-      (nuevosProductos.length ? `\n\n🆕 Se crearon ${nuevosProductos.length} productos nuevos en tu Catálogo (${nuevosProductos.slice(0, 5).map(p => p.nombre).join(', ')}${nuevosProductos.length > 5 ? '...' : ''}). Ve a Catálogo a completar sus costos, PVP y demás datos para que el costeo sea real.` : '') +
-      (sinProducto.length ? `\n\n⚠️ ${sinProducto.length} filas no se importaron (revisa el archivo).` : '')
-    alert(resumen)
+    setResultadoImportDropi({
+      nuevos, actualizados, conservados,
+      productosCreados: nuevosProductos.map(p => p.nombre),
+      sinProducto: sinProducto.length,
+    })
     loadData()
   }
 
@@ -934,6 +936,28 @@ export default function PedidosPage() {
           <div style={{background:T.card2,borderRadius:'6px',height:'8px',overflow:'hidden'}}>
             <div style={{background:T.accent,height:'100%',width:`${Math.round(progresoImport.hechos/progresoImport.total*100)}%`,transition:'width .2s'}} />
           </div>
+        </div>
+      )}
+      {resultadoImportDropi && (
+        <div style={{background:T.card,border:`1px solid ${T.green}40`,borderLeft:`3px solid ${T.green}`,borderRadius:'10px',padding:'14px 16px',marginBottom:'14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'10px'}}>
+            <div style={{fontSize:'13px',fontWeight:700,color:T.text}}>✅ Carga completada</div>
+            <button onClick={()=>setResultadoImportDropi(null)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:'13px'}}>✕</button>
+          </div>
+          <div style={{fontSize:'12px',color:T.muted,marginTop:'6px'}}>
+            <b style={{color:T.text}}>{resultadoImportDropi.nuevos}</b> pedidos nuevos · <b style={{color:T.text}}>{resultadoImportDropi.actualizados}</b> actualizados · <b style={{color:T.text}}>{resultadoImportDropi.conservados}</b> conservados sin cambios.
+          </div>
+          {resultadoImportDropi.productosCreados.length > 0 && (
+            <div style={{fontSize:'12px',color:T.text,marginTop:'10px',background:T.card2,borderRadius:'8px',padding:'10px 12px'}}>
+              🆕 Se crearon <b>{resultadoImportDropi.productosCreados.length}</b> productos nuevos en tu Catálogo ({resultadoImportDropi.productosCreados.slice(0,4).join(', ')}{resultadoImportDropi.productosCreados.length > 4 ? '...' : ''}), sin costos ni PVP todavía.
+              <div style={{marginTop:'8px'}}>
+                <a href="/dashboard/productos" style={{textDecoration:'none',fontSize:'11.5px',fontWeight:700,color:T.accent}}>→ Ir a Catálogo a completarlos</a>
+              </div>
+            </div>
+          )}
+          {resultadoImportDropi.sinProducto > 0 && (
+            <div style={{fontSize:'11.5px',color:T.yellow,marginTop:'8px'}}>⚠️ {resultadoImportDropi.sinProducto} filas no se importaron (revisa el archivo).</div>
+          )}
         </div>
       )}
       {previewDropi && <CargaMasivaModal filas={previewDropi} columnas={configPedidosDropi.columnas} onConfirm={confirmarImportPedidosDropi} onClose={()=>setPreviewDropi(null)} theme={T} />}
