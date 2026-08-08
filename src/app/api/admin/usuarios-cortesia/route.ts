@@ -4,6 +4,14 @@ import { getSupabaseAdmin, verificarSuperadmin } from '@/lib/apiAuth'
 // Lista todos los usuarios de cortesía de todos los tenants — RLS de profiles es `auth.uid()=id`
 // para todo comando, así que un superadmin no puede leer perfiles de otros tenants desde el
 // cliente. Este endpoint hace la lectura con service role, solo superadmin.
+//
+// GET, sin cache headers: el navegador puede cachear la respuesta por URL (la Authorization
+// header no participa en la clave de caché) y servir datos viejos en la siguiente carga — mismo
+// bug encontrado en listar-tenants. force-dynamic + no-store evita servir una lista de cortesía
+// desactualizada.
+export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+
 export async function GET(req: NextRequest) {
   const auth = await verificarSuperadmin(req)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
@@ -21,5 +29,5 @@ export async function GET(req: NextRequest) {
   const mapaTenants = new Map((tenants || []).map(t => [t.id, t]))
 
   const resultado = (perfiles || []).map(p => ({ ...p, tenant: mapaTenants.get(p.tenant_id) || null }))
-  return NextResponse.json({ usuarios: resultado })
+  return NextResponse.json({ usuarios: resultado }, { headers: { 'Cache-Control': 'no-store, must-revalidate' } })
 }

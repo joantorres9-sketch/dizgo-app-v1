@@ -107,6 +107,7 @@ export default function AccesosPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token}` },
       body: JSON.stringify(body),
+      cache: 'no-store',
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || 'Error en la solicitud')
@@ -117,7 +118,9 @@ export default function AccesosPage() {
     setCargandoCortesias(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/admin/usuarios-cortesia', { headers: { Authorization: `Bearer ${session?.access_token}` } })
+      // cache:'no-store' — el navegador cachea GET por URL sin importar la Authorization header;
+      // sin esto se vio servir la lista de cortesía desactualizada tras crear una nueva.
+      const res = await fetch('/api/admin/usuarios-cortesia', { headers: { Authorization: `Bearer ${session?.access_token}` }, cache: 'no-store' })
       const data = await res.json()
       if (res.ok) setCortesias(data.usuarios || [])
     } finally { setCargandoCortesias(false) }
@@ -132,7 +135,9 @@ export default function AccesosPage() {
     setCargandoTenants(true)
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      const res = await fetch('/api/admin/listar-tenants', { headers: { Authorization: `Bearer ${session?.access_token}` } })
+      // cache:'no-store' — mismo bug de caché del navegador que en cargarCortesias, confirmado
+      // en producción: guardar un techo de tenant no se reflejaba hasta forzar recarga dura.
+      const res = await fetch('/api/admin/listar-tenants', { headers: { Authorization: `Bearer ${session?.access_token}` }, cache: 'no-store' })
       const data = await res.json()
       if (res.ok) setTenants(data.tenants || [])
     } finally { setCargandoTenants(false) }
