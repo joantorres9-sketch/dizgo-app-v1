@@ -425,6 +425,7 @@ function ModalColaborador({
   onCargoCreado: (nombre: string, procesoId: string) => Promise<string | null>
 }) {
   const supabase = createClient()
+  const { puedePais } = usePermisos()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -516,6 +517,22 @@ function ModalColaborador({
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f.foto_url])
+
+  // Si el país seleccionado deja de estar habilitado para el tenant (DIZGO lo restringió
+  // mientras el formulario estaba abierto, o el valor por defecto 'COL' no es uno de los
+  // habilitados), cae al primer país permitido en vez de dejar el <select> sin coincidencia.
+  useEffect(() => {
+    if (!f.pais_code || puedePais(f.pais_code)) return
+    const primero = PAISES.find(p => puedePais(p.code))
+    if (!primero) return
+    const cfgNuevo = configRHPorPais(primero.code)
+    setF(prev => ({
+      ...prev, pais_code: primero.code, codigo_tel: primero.codigoTel, departamento: '',
+      tipo_contrato: cfgNuevo.tiposContrato[0] || prev.tipo_contrato,
+      tipo_cotizante: cfgNuevo.tiposCotizante[0]?.value || '',
+    }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f.pais_code])
 
   // Auxilio de transporte automático (Colombia, solo contratos dependientes) — el usuario puede
   // seguir editándolo manualmente para el resto de países que sí lo tengan. En países donde el
@@ -711,7 +728,7 @@ function ModalColaborador({
                       tipo_cotizante: cfgNuevo.tiposCotizante[0]?.value || '',
                     }))
                   }}>
-                    {PAISES.map(p => <option key={p.code} value={p.code}>{p.nombre}</option>)}
+                    {PAISES.filter(p => puedePais(p.code)).map(p => <option key={p.code} value={p.code}>{p.nombre}</option>)}
                   </select>
                 </div>
               </div>

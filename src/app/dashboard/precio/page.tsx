@@ -71,7 +71,7 @@ function clasificarTicket(pvp: number): string {
 
 export default function PrecioPage() {
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, puedePais } = usePermisos()
   const [productos, setProductos] = useState<Producto[]>([])
   const [prodSel, setProdSel] = useState<Producto|null>(null)
   const [loading, setLoading] = useState(true)
@@ -336,7 +336,7 @@ export default function PrecioPage() {
         </div>
         <select value={pais} onChange={e => { setPais(e.target.value); if (typeof window !== 'undefined') localStorage.setItem('dizgo_pais', e.target.value) }}
           style={{ background:T.card2, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'6px 10px', fontSize:'12px', outline:'none' }}>
-          {Object.entries(PAISES).map(([k,v]) => <option key={k} value={k}>{v.nombre}</option>)}
+          {Object.entries(PAISES).filter(([k]) => puedePais(k)).map(([k,v]) => <option key={k} value={k}>{v.nombre}</option>)}
         </select>
       </div>
 

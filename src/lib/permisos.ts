@@ -11,6 +11,14 @@ export interface PerfilAcceso {
   rol: string
   tenantId: string | null
   permisos: MatrizPermisos
+  // Techo que controla DIZGO sobre el tenant completo (tenants.permisos_dizgo) — null significa
+  // sin restricción. Se aplica por ENCIMA de la matriz por colaborador y de owner/superadmin: si
+  // DIZGO apaga un módulo para el tenant, nadie en ese tenant lo usa, ni siquiera el dueño.
+  permisosDizgo: MatrizPermisos | null
+  // Códigos de país (tenants.paises_habilitados) que DIZGO habilita para este tenant — null
+  // significa sin restricción, los 11 países disponibles. Mismo dueño de la decisión que
+  // permisosDizgo: solo lo edita el superadmin de DIZGO, nunca el propio tenant.
+  paisesHabilitados: string[] | null
   horarioAcceso: string
   esCortesia: boolean
   activo: boolean
@@ -32,10 +40,21 @@ export function usePermisos() {
       .select('rol, permisos, tenant_id, horario_acceso, es_cortesia, activo')
       .eq('id', user.id).single()
     if (!data) { setPerfil(null); setCargando(false); return }
+
+    let permisosDizgo: MatrizPermisos | null = null
+    let paisesHabilitados: string[] | null = null
+    if (data.tenant_id) {
+      const { data: tenant } = await supabase.from('tenants').select('permisos_dizgo, paises_habilitados').eq('id', data.tenant_id).single()
+      permisosDizgo = (tenant?.permisos_dizgo as MatrizPermisos) || null
+      paisesHabilitados = (tenant?.paises_habilitados as string[]) || null
+    }
+
     setPerfil({
       rol: data.rol,
       tenantId: data.tenant_id,
       permisos: (data.permisos || {}) as MatrizPermisos,
+      permisosDizgo,
+      paisesHabilitados,
       horarioAcceso: data.horario_acceso || 'todos',
       esCortesia: !!data.es_cortesia,
       activo: data.activo !== false,
@@ -47,13 +66,25 @@ export function usePermisos() {
 
   const puede = useCallback((modulo: string, accion: Accion): boolean => {
     if (!perfil) return false
+    // Techo de DIZGO primero — bloquea a TODOS en el tenant, incluido owner/superadmin. Solo
+    // bloquea si quedó explícitamente en false; una clave ausente (módulo agregado después de
+    // guardar el techo) no restringe por defecto.
+    if (perfil.permisosDizgo?.[modulo]?.[accion] === false) return false
     if (perfil.rol === 'owner' || perfil.rol === 'superadmin') return true
     return !!perfil.permisos?.[modulo]?.[accion]
   }, [perfil])
 
+  // Sin restricción (paisesHabilitados null) o país explícitamente incluido. Se aplica parejo a
+  // owner/superadmin/colaborador — a diferencia de puede(), acá no hay bypass por rol: los
+  // países que DIZGO habilita son un techo sobre TODO el tenant.
+  const puedePais = useCallback((paisCode: string): boolean => {
+    if (!perfil) return false
+    return perfil.paisesHabilitados === null || perfil.paisesHabilitados.includes(paisCode)
+  }, [perfil])
+
   const enHorario = perfil ? (perfil.rol === 'owner' || perfil.rol === 'superadmin' || horarioPermiteAhora(perfil.horarioAcceso)) : true
 
-  return { perfil, cargando, puede, enHorario, recargar: cargar }
+  return { perfil, cargando, puede, puedePais, enHorario, recargar: cargar }
 }
 
 // Inserta el evento en log_accesos y, para descargas, revisa si el propio perfil superó el

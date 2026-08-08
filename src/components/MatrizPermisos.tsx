@@ -1,6 +1,7 @@
 'use client'
 import { useState, Fragment } from 'react'
 import { MODULOS, SUBTABS, ACCIONES, ACCION_LABELS, HORARIOS_ACCESO, matrizTodoTrue, matrizTodoFalse, permisoVacio, todasLasClaves, clavePermiso, type MatrizPermisos as TMatriz, type Accion } from '@/lib/modulos'
+import { PAISES } from '@/lib/paises'
 
 const T = { bg:'#0D1E35', card:'#111520', card2:'#0A0D14', accent:'#F5A623', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#8B96A8', border:'rgba(255,255,255,0.08)' }
 
@@ -23,26 +24,37 @@ const PLANTILLAS: { key: string; label: string; icon: string; build: () => TMatr
 ]
 
 export function MatrizPermisos({
-  nombre, permisosIniciales, horarioInicial, notificarInicial, activoInicial, guardando, onGuardar, onCerrar,
+  nombre, permisosIniciales, horarioInicial, notificarInicial, activoInicial, guardando, onGuardar, onCerrar, modoTenant, paisesIniciales,
 }: {
   nombre: string
   permisosIniciales: TMatriz
-  horarioInicial: string
-  notificarInicial: boolean
-  activoInicial: boolean
+  horarioInicial?: string
+  notificarInicial?: boolean
+  activoInicial?: boolean
   guardando: boolean
-  onGuardar: (cambios: { permisos: TMatriz; horario_acceso: string; notificar_actividad_inusual: boolean; activo: boolean }) => void
+  onGuardar: (cambios: { permisos: TMatriz; horario_acceso: string; notificar_actividad_inusual: boolean; activo: boolean; paises?: string[] }) => void
   onCerrar: () => void
+  // true cuando esta matriz es el TECHO de módulos de un tenant completo (lo edita el superadmin
+  // de DIZGO), no la matriz de un colaborador puntual — horario/notificar/activo son conceptos de
+  // persona, no de tenant, así que ese bloque del footer se oculta en este modo.
+  modoTenant?: boolean
+  // Solo aplica con modoTenant — qué países puede operar el tenant. null/undefined = sin
+  // restricción (los 11 países), igual que hoy.
+  paisesIniciales?: string[] | null
 }) {
   const [permisos, setPermisos] = useState<TMatriz>(() => {
     // completa módulos que falten en la matriz guardada (ej. si se agregó un módulo nuevo después)
     const base = matrizTodoFalse()
     return { ...base, ...permisosIniciales }
   })
-  const [horario, setHorario] = useState(horarioInicial)
-  const [notificar, setNotificar] = useState(notificarInicial)
-  const [activo, setActivo] = useState(activoInicial)
+  const [horario, setHorario] = useState(horarioInicial || 'todos')
+  const [notificar, setNotificar] = useState(notificarInicial ?? true)
+  const [activo, setActivo] = useState(activoInicial ?? true)
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set())
+  const [paises, setPaises] = useState<string[]>(() => paisesIniciales ?? PAISES.map(p => p.code))
+  const togglePais = (code: string) => {
+    setPaises(p => p.includes(code) ? p.filter(c => c !== code) : [...p, code])
+  }
 
   const toggleCelda = (clave: string, accion: Accion) => {
     setPermisos(p => ({ ...p, [clave]: { ...(p[clave] || permisoVacio()), [accion]: !p[clave]?.[accion] } }))
@@ -80,13 +92,44 @@ export function MatrizPermisos({
       <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'14px', width:'min(880px,100%)', maxHeight:'90vh', overflow:'hidden', display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'16px 20px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <div>
-            <div style={{ fontSize:'14px', fontWeight:700, color:T.text }}>🔐 Permisos — {nombre}</div>
+            <div style={{ fontSize:'14px', fontWeight:700, color:T.text }}>{modoTenant ? '🏢 Techo de módulos — ' : '🔐 Permisos — '}{nombre}</div>
             <div style={{ fontSize:'11px', color:T.muted, marginTop:'2px' }}>
-              {nModulosVisibles}/{MODULOS.length} módulos visibles · {nEdicionCompleta} con edición completa
+              {modoTenant
+                ? `${nModulosVisibles}/${MODULOS.length} módulos habilitados para este tenant — si apagas uno aquí, nadie en el tenant lo puede usar, ni siquiera el dueño`
+                : `${nModulosVisibles}/${MODULOS.length} módulos visibles · ${nEdicionCompleta} con edición completa`}
             </div>
           </div>
           <button onClick={onCerrar} style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'18px' }}>✕</button>
         </div>
+
+        {modoTenant && (
+          <div style={{ padding:'14px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+              <div style={{ fontSize:'10.5px', color:T.muted, textTransform:'uppercase', letterSpacing:'.4px' }}>
+                Países habilitados ({paises.length}/{PAISES.length})
+              </div>
+              <div style={{ display:'flex', gap:'10px' }}>
+                <button onClick={() => setPaises(PAISES.map(p => p.code))} style={{ background:'none', border:'none', color:T.blue, fontSize:'11px', cursor:'pointer', fontWeight:600 }}>Todos</button>
+                <button onClick={() => setPaises([])} style={{ background:'none', border:'none', color:T.muted, fontSize:'11px', cursor:'pointer', fontWeight:600 }}>Ninguno</button>
+              </div>
+            </div>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              {PAISES.map(p => {
+                const activo = paises.includes(p.code)
+                return (
+                  <button key={p.code} onClick={() => togglePais(p.code)}
+                    style={{ display:'flex', alignItems:'center', gap:'6px', padding:'6px 10px', background: activo ? `${T.green}15` : T.card2, border:`1px solid ${activo ? T.green + '40' : T.border}`, borderRadius:'8px', color: activo ? T.green : T.muted, fontSize:'11px', fontWeight:600, cursor:'pointer' }}>
+                    <img src={p.flag} alt="" style={{ width:'14px', height:'10px', objectFit:'cover', borderRadius:'2px' }} />
+                    {p.nombre}
+                  </button>
+                )
+              })}
+            </div>
+            {paises.length === 0 && (
+              <div style={{ marginTop:'8px', fontSize:'11px', color:T.red }}>⚠️ Sin ningún país habilitado, nadie en este tenant puede operar — probablemente no es lo que quieres.</div>
+            )}
+          </div>
+        )}
 
         <div style={{ padding:'14px 20px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
@@ -170,30 +213,32 @@ export function MatrizPermisos({
           </table>
         </div>
 
-        <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.border}`, display:'flex', flexWrap:'wrap', gap:'14px', alignItems:'center', flexShrink:0 }}>
-          <div style={{ flex:'1 1 220px' }}>
-            <div style={{ fontSize:'10.5px', color:T.muted, marginBottom:'4px' }}>Horario de acceso</div>
-            <select value={horario} onChange={e => setHorario(e.target.value)}
-              style={{ width:'100%', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none' }}>
-              {HORARIOS_ACCESO.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
-            </select>
+        {!modoTenant && (
+          <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.border}`, display:'flex', flexWrap:'wrap', gap:'14px', alignItems:'center', flexShrink:0 }}>
+            <div style={{ flex:'1 1 220px' }}>
+              <div style={{ fontSize:'10.5px', color:T.muted, marginBottom:'4px' }}>Horario de acceso</div>
+              <select value={horario} onChange={e => setHorario(e.target.value)}
+                style={{ width:'100%', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none' }}>
+                {HORARIOS_ACCESO.map(h => <option key={h.value} value={h.value}>{h.label}</option>)}
+              </select>
+            </div>
+            <label style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:T.text, cursor:'pointer' }}>
+              <input type="checkbox" checked={notificar} onChange={e => setNotificar(e.target.checked)} style={{ width:'15px', height:'15px', accentColor:T.accent }} />
+              🔔 Notificar actividad inusual
+            </label>
+            <label style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:activo ? T.text : T.red, cursor:'pointer' }}>
+              <input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} style={{ width:'15px', height:'15px', accentColor:T.green }} />
+              {activo ? '✅ Usuario activo' : '🚫 Usuario desactivado (sin acceso)'}
+            </label>
           </div>
-          <label style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:T.text, cursor:'pointer' }}>
-            <input type="checkbox" checked={notificar} onChange={e => setNotificar(e.target.checked)} style={{ width:'15px', height:'15px', accentColor:T.accent }} />
-            🔔 Notificar actividad inusual
-          </label>
-          <label style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:activo ? T.text : T.red, cursor:'pointer' }}>
-            <input type="checkbox" checked={activo} onChange={e => setActivo(e.target.checked)} style={{ width:'15px', height:'15px', accentColor:T.green }} />
-            {activo ? '✅ Usuario activo' : '🚫 Usuario desactivado (sin acceso)'}
-          </label>
-        </div>
+        )}
 
         <div style={{ padding:'14px 20px', borderTop:`1px solid ${T.border}`, display:'flex', gap:'8px', justifyContent:'flex-end', flexShrink:0 }}>
           <button onClick={onCerrar} disabled={guardando}
             style={{ padding:'10px 16px', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', color:T.muted, cursor:'pointer', fontSize:'13px' }}>
             Cancelar
           </button>
-          <button onClick={() => onGuardar({ permisos, horario_acceso: horario, notificar_actividad_inusual: notificar, activo })} disabled={guardando}
+          <button onClick={() => onGuardar({ permisos, horario_acceso: horario, notificar_actividad_inusual: notificar, activo, ...(modoTenant ? { paises } : {}) })} disabled={guardando}
             style={{ padding:'10px 20px', background:T.accent, border:'none', borderRadius:'8px', color:T.card2, fontWeight:700, cursor: guardando ? 'wait' : 'pointer', fontSize:'13px' }}>
             {guardando ? 'Guardando...' : '✅ Guardar permisos'}
           </button>

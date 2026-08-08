@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MatrizPermisos } from '@/components/MatrizPermisos'
-import { matrizTodoFalse, type MatrizPermisos as TMatriz } from '@/lib/modulos'
+import { matrizTodoFalse, matrizTodoTrue, type MatrizPermisos as TMatriz } from '@/lib/modulos'
 import { CONFIG_PAIS } from '@/lib/seedDemoTenant'
 
 const T = { bg:'#0D1E35', card:'#111520', card2:'#0A0D14', accent:'#F5A623', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#8B96A8', border:'rgba(255,255,255,0.08)' }
@@ -19,11 +19,13 @@ type CortesiaRow = {
   horario_acceso: string; notificar_actividad_inusual: boolean
   tenant: { id: string; nombre: string; plan: string; pais: string; slug: string } | null
 }
+type TenantRow = { id: string; nombre: string; plan: string; pais: string; slug: string; permisos_dizgo: TMatriz | null; paises_habilitados: string[] | null }
 
 const TABS = [
   { key: 'colaboradores', label: '🧑‍🤝‍🧑 Permisos de Colaboradores' },
   { key: 'usuarios', label: '📋 Todos los usuarios' },
   { key: 'cortesia', label: '🎁 Usuarios de cortesía' },
+  { key: 'tenants', label: '🏢 Permisos por Tenant' },
 ] as const
 
 const FORM_CORTESIA_VACIO = { nombres: '', apellidos: '', tipo_doc: 'CC', numero_doc: '', celular: '', email: '', nombre_tienda: '', pais: 'COL' }
@@ -55,6 +57,13 @@ export default function AccesosPage() {
   const [formCortesia, setFormCortesia] = useState(FORM_CORTESIA_VACIO)
   const [creandoCortesia, setCreandoCortesia] = useState(false)
 
+  // ── Permisos por tenant (solo superadmin) — techo de módulos que DIZGO habilita para el
+  // tenant completo, distinto de la matriz por colaborador ──
+  const [tenants, setTenants] = useState<TenantRow[]>([])
+  const [cargandoTenants, setCargandoTenants] = useState(false)
+  const [tenantEditando, setTenantEditando] = useState<TenantRow | null>(null)
+  const [guardandoTecho, setGuardandoTecho] = useState(false)
+
   const cargar = useCallback(async (tid: string) => {
     setCargando(true)
     try {
@@ -80,8 +89,10 @@ export default function AccesosPage() {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setAutorizado(false); setCargando(false); return }
-      const { data: profile } = await supabase.from('profiles').select('tenant_id, rol').eq('id', user.id).single()
-      if (!profile?.tenant_id || !['owner', 'superadmin'].includes(profile.rol)) { setAutorizado(false); setCargando(false); return }
+      const { data: profile } = await supabase.from('profiles').select('tenant_id, rol, es_cortesia').eq('id', user.id).single()
+      if (!profile?.tenant_id || (!['owner', 'superadmin'].includes(profile.rol) && profile.es_cortesia !== true)) {
+        setAutorizado(false); setCargando(false); return
+      }
       setAutorizado(true)
       setTenantId(profile.tenant_id)
       setMiRol(profile.rol)
@@ -116,6 +127,32 @@ export default function AccesosPage() {
     if (tab === 'cortesia' && miRol === 'superadmin') cargarCortesias()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, miRol])
+
+  const cargarTenants = useCallback(async () => {
+    setCargandoTenants(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const res = await fetch('/api/admin/listar-tenants', { headers: { Authorization: `Bearer ${session?.access_token}` } })
+      const data = await res.json()
+      if (res.ok) setTenants(data.tenants || [])
+    } finally { setCargandoTenants(false) }
+  }, [supabase])
+
+  useEffect(() => {
+    if (tab === 'tenants' && miRol === 'superadmin') cargarTenants()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, miRol])
+
+  async function guardarTechoTenant(cambios: { permisos: TMatriz; paises?: string[] }) {
+    if (!tenantEditando) return
+    setGuardandoTecho(true)
+    try {
+      await authFetch('/api/admin/actualizar-permisos-tenant', { tenantId: tenantEditando.id, permisos: cambios.permisos, paises: cambios.paises })
+      setMsg(`✅ Techo de módulos y países actualizado para ${tenantEditando.nombre}`)
+      setTenantEditando(null)
+      await cargarTenants()
+    } catch (err: any) { alert(err.message) } finally { setGuardandoTecho(false) }
+  }
 
   async function crearUsuarioCortesia() {
     if (!formCortesia.email.trim()) { alert('El correo es obligatorio'); return }
@@ -193,7 +230,7 @@ export default function AccesosPage() {
       )}
 
       <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-        {TABS.map(t => (
+        {TABS.filter(t => (t.key !== 'cortesia' && t.key !== 'tenants') || miRol === 'superadmin').map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
               background: tab === t.key ? T.accent : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : T.muted }}>
@@ -445,6 +482,79 @@ export default function AccesosPage() {
             </div>
           </div>
         )
+      )}
+
+      {tab === 'tenants' && (
+        miRol !== 'superadmin' ? (
+          <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'12px', background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }}>
+            Solo un superadmin de DIZGO puede editar el techo de módulos por tenant.
+          </div>
+        ) : (
+          <div style={{ background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px', overflow:'hidden' }}>
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, fontWeight:700, fontSize:'13px' }}>
+              Techo de módulos por tenant
+            </div>
+            <div style={{ padding:'10px 16px', borderBottom:`1px solid ${T.border}`, fontSize:'11px', color:T.muted }}>
+              Qué módulos tiene disponibles cada tenant (comprador de plan o cortesía). Si apagas uno aquí, se cascada a todo el tenant — ni el dueño ni sus colaboradores lo pueden usar. Al conceder uno, el dueño decide internamente a cuáles de sus colaboradores se lo habilita — eso es responsabilidad suya, no de DIZGO.
+            </div>
+            {cargandoTenants ? (
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'12px' }}>Cargando...</div>
+            ) : tenants.length === 0 ? (
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'12px' }}>No hay tenants todavía.</div>
+            ) : (
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                <thead>
+                  <tr style={{ background:T.card2, borderBottom:`1px solid ${T.border}` }}>
+                    {['Tenant', 'País', 'Plan', 'Techo', 'Países habilitados', 'Acción'].map(h => (
+                      <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:700 }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tenants.map(t => (
+                    <tr key={t.id} style={{ borderBottom:`1px solid rgba(255,255,255,0.03)` }}>
+                      <td style={{ padding:'10px 12px', fontWeight:600 }}>{t.nombre}</td>
+                      <td style={{ padding:'10px 12px', color:T.muted }}>{t.pais}</td>
+                      <td style={{ padding:'10px 12px', color:T.muted, textTransform:'capitalize' }}>{t.plan}</td>
+                      <td style={{ padding:'10px 12px' }}>
+                        {t.permisos_dizgo ? (
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:700, background:`${T.yellow}15`, color:T.yellow }}>⚠️ Restringido</span>
+                        ) : (
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:700, background:`${T.green}15`, color:T.green }}>✓ Sin restricciones</span>
+                        )}
+                      </td>
+                      <td style={{ padding:'10px 12px' }}>
+                        {t.paises_habilitados ? (
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:700, background:`${T.yellow}15`, color:T.yellow }}>{t.paises_habilitados.length} de 11</span>
+                        ) : (
+                          <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:700, background:`${T.green}15`, color:T.green }}>✓ Todos</span>
+                        )}
+                      </td>
+                      <td style={{ padding:'10px 12px' }}>
+                        <button onClick={() => setTenantEditando(t)}
+                          style={{ padding:'6px 10px', background:`${T.accent}15`, border:`1px solid ${T.accent}30`, borderRadius:'6px', color:T.accent, fontSize:'11px', fontWeight:700, cursor:'pointer' }}>
+                          🔐 Permisos
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )
+      )}
+
+      {tenantEditando && (
+        <MatrizPermisos
+          nombre={tenantEditando.nombre}
+          permisosIniciales={tenantEditando.permisos_dizgo || matrizTodoTrue()}
+          paisesIniciales={tenantEditando.paises_habilitados}
+          guardando={guardandoTecho}
+          onGuardar={guardarTechoTenant}
+          onCerrar={() => setTenantEditando(null)}
+          modoTenant
+        />
       )}
 
       {perfilEditando && (

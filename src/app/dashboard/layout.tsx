@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MODULOS, GRUPOS } from '@/lib/modulos'
 import { usePermisos, logAccion } from '@/lib/permisos'
+import { PAISES } from '@/lib/paises'
 
 const ITEMS_FIJOS = {
   inicio: { href: '/dashboard', icon: '⊞', label: 'Inicio' },
@@ -21,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const supabase = createClient()
   const [menuOpen, setMenuOpen] = useState(false)
   const [saliendo, setSaliendo] = useState(false)
-  const { perfil, cargando, puede, enHorario } = usePermisos()
+  const { perfil, cargando, puede, puedePais, enHorario } = usePermisos()
 
   useEffect(() => { setMenuOpen(false) }, [pathname])
 
@@ -29,6 +30,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!cargando && perfil && !enHorario) logAccion('sistema', 'fuera_horario')
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cargando, enHorario])
+
+  // Precio/Productos/Pedidos/Costos/Centro Contacto usan localStorage('dizgo_pais') como selector
+  // de país operativo — si DIZGO restringió los países del tenant y el valor guardado ya no está
+  // permitido (por ejemplo, quedó de una sesión anterior sin restricción), lo corrige al primer
+  // país habilitado en vez de dejar esos módulos mostrando datos de un país al que no tiene acceso.
+  useEffect(() => {
+    if (cargando || !perfil || typeof window === 'undefined') return
+    const actual = localStorage.getItem('dizgo_pais')
+    if (actual && puedePais(actual)) return
+    const primero = PAISES.find(p => puedePais(p.code))
+    if (primero) localStorage.setItem('dizgo_pais', primero.code)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargando, perfil])
 
   async function cerrarSesion() {
     setSaliendo(true)
@@ -38,13 +52,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const esAdmin = perfil?.rol === 'owner' || perfil?.rol === 'superadmin'
   // Un usuario de cortesía es rol='colaborador' (queda sujeto a la matriz de permisos como
-  // cualquier otro), pero sí necesita llegar a /dashboard/admin para su propio botón de
-  // "Borrar datos de prueba" — sin ver Gestión de Accesos ni Centro DIZGO, que son de verdad
-  // superadmin-only.
+  // cualquier otro) pero SÍ necesita administrar el acceso de sus propios colaboradores, igual
+  // que un comprador de plan (rol='owner') — por eso también ve Gestión de Accesos, además de su
+  // botón de "Borrar datos de prueba". Centro DIZGO (CRM interno de ventas) sigue siendo de
+  // verdad superadmin-only, nunca visible para cortesía.
   const itemsSuperadmin = esAdmin
     ? ITEMS_FIJOS.superadmin
     : perfil?.esCortesia
-      ? ITEMS_FIJOS.superadmin.filter(i => i.href === '/dashboard/admin')
+      ? ITEMS_FIJOS.superadmin.filter(i => i.href === '/dashboard/admin' || i.href === '/dashboard/admin/accesos')
       : []
   const gruposConItems = GRUPOS.map(g => ({
     ...g,
