@@ -167,6 +167,7 @@ export const configInventarioCompra: ConfigPlantilla<FilaInventario> = {
 }
 
 export interface FilaPedidoDropi {
+  ID: string
   FECHA: string
   'NOMBRE CLIENTE': string
   TELÉFONO: string
@@ -177,18 +178,26 @@ export interface FilaPedidoDropi {
   TRANSPORTADORA: string
   'NÚMERO GUIA': string
   'TOTAL DE LA ORDEN': number
+  GANANCIA: number
+  'PRECIO FLETE': number
+  'PRECIO PROVEEDOR X CANTIDAD': number
+  'PRODUCTO ID': string
   SKU: string
+  'VARIACION ID': string
   PRODUCTO: string
   CANTIDAD: number
 }
 
 // Mismas cabeceras EXACTAS del export real de Dropi ("Exportar" en Órdenes) -- se puede
-// subir directo el archivo que Dropi genera, sin reformatear nada.
+// subir directo el archivo que Dropi genera, sin reformatear nada. ID + PRODUCTO ID +
+// VARIACION ID son la llave de línea (una orden puede traer varias filas, una por producto)
+// que permite hacer upsert real en vez de duplicar en cada carga del día.
 export const configPedidosDropi: ConfigPlantilla<FilaPedidoDropi> = {
   moduloKey: 'pedidos_dropi',
   nombreHoja: 'Sheet1',
   nombreArchivo: 'plantilla_pedidos_dropi.xlsx',
   columnas: [
+    { key: 'ID', header: 'ID', tipo: 'texto', requerido: true, ejemplo: 6397955, ayuda: 'ID de la orden en Dropi -- clave para no duplicar al recargar el mismo archivo.' },
     { key: 'FECHA', header: 'FECHA', tipo: 'texto', requerido: true, ejemplo: '04-08-2026', ayuda: 'Formato DD-MM-AAAA, igual al export de Dropi.' },
     { key: 'NOMBRE CLIENTE', header: 'NOMBRE CLIENTE', tipo: 'texto', requerido: true, ejemplo: 'Wellington Basurto', ayuda: '' },
     { key: 'TELÉFONO', header: 'TELÉFONO', tipo: 'texto', requerido: false, ejemplo: '980508656', ayuda: 'Opcional.' },
@@ -199,7 +208,12 @@ export const configPedidosDropi: ConfigPlantilla<FilaPedidoDropi> = {
     { key: 'TRANSPORTADORA', header: 'TRANSPORTADORA', tipo: 'texto', requerido: false, ejemplo: 'SERVIENTREGA', ayuda: 'Opcional.' },
     { key: 'NÚMERO GUIA', header: 'NÚMERO GUIA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
     { key: 'TOTAL DE LA ORDEN', header: 'TOTAL DE LA ORDEN', tipo: 'moneda', requerido: true, ejemplo: 89900, ayuda: 'Valor total de la orden.' },
+    { key: 'GANANCIA', header: 'GANANCIA', tipo: 'moneda', requerido: false, ejemplo: '', ayuda: 'Dropi la reporta solo cuando la orden ya se liquidó -- alimenta el histórico de utilidad en P&G.' },
+    { key: 'PRECIO FLETE', header: 'PRECIO FLETE', tipo: 'moneda', requerido: false, ejemplo: 6.48, ayuda: 'Costo de envío de esta línea.' },
+    { key: 'PRECIO PROVEEDOR X CANTIDAD', header: 'PRECIO PROVEEDOR X CANTIDAD', tipo: 'moneda', requerido: false, ejemplo: 1, ayuda: 'Costo del proveedor para la cantidad de esta línea.' },
+    { key: 'PRODUCTO ID', header: 'PRODUCTO ID', tipo: 'texto', requerido: true, ejemplo: 113346, ayuda: 'ID del producto en Dropi -- junto con ID de orden evita duplicar la línea.' },
     { key: 'SKU', header: 'SKU', tipo: 'texto', requerido: false, ejemplo: 'PULS-GU-517', ayuda: 'Preferido para identificar el producto -- si no hay match por SKU se intenta por nombre.' },
+    { key: 'VARIACION ID', header: 'VARIACION ID', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional -- solo si el producto tiene variaciones (talla, color, etc).' },
     { key: 'PRODUCTO', header: 'PRODUCTO', tipo: 'texto', requerido: true, ejemplo: 'Pulsera Grano de Café Mujer', ayuda: 'Debe existir ya en tu Catálogo (por SKU o por nombre).' },
     { key: 'CANTIDAD', header: 'CANTIDAD', tipo: 'numero', requerido: false, default: 1, ejemplo: 1, ayuda: '' },
   ],

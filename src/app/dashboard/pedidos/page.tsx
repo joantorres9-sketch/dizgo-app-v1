@@ -696,32 +696,125 @@ export default function PedidosPage() {
     return ok
   }
 
+  // ── Carga masiva Dropi: UPSERT por (tenant_id, dropi_orden_id, dropi_producto_id,
+  // dropi_variacion_id) -- el mismo archivo se puede recargar varias veces al día sin duplicar.
+  // Una línea que ya existía se reemplaza entera (el ESTATUS y la guía van evolucionando en
+  // Dropi); una línea nueva se inserta; lo que no viene en el archivo se conserva intacto.
+  async function upsertPedidosDropiEnLotes(filas: Record<string, unknown>[]) {
+    setProgresoImport({ total: filas.length, hechos: 0 })
+    const CHUNK = 500, CONCURRENCIA = 3
+    let ok = 0
+    for (let i = 0; i < filas.length; i += CHUNK * CONCURRENCIA) {
+      const promesas: Promise<{ ok: boolean; n: number }>[] = []
+      for (let j = 0; j < CONCURRENCIA; j++) {
+        const lote = filas.slice(i + j * CHUNK, i + (j + 1) * CHUNK)
+        if (!lote.length) continue
+        promesas.push((async () => {
+          const r = await supabase.from('pedidos').upsert(lote, { onConflict: 'tenant_id,dropi_orden_id,dropi_producto_id,dropi_variacion_id' })
+          return { ok: !r.error, n: lote.length }
+        })())
+      }
+      const resultados = await Promise.all(promesas)
+      resultados.forEach(r => { if (r.ok) ok += r.n })
+      setProgresoImport(p => p ? { ...p, hechos: Math.min(p.total, p.hechos + resultados.reduce((a, r) => a + r.n, 0)) } : p)
+    }
+    setProgresoImport(null)
+    return ok
+  }
+
   async function confirmarImportPedidosDropi() {
     if (!previewDropi || !tenantId) return
-    const { data: prods } = await supabase.from('productos').select('id,nombre,sku').eq('tenant_id', tenantId)
+    const { data: prods } = await supabase.from('productos').select('id,nombre,sku,dropi_producto_id').eq('tenant_id', tenantId)
+    // Prioridad de match: dropi_producto_id (el id de catálogo de Dropi -- estable aunque el
+    // producto se renombre en DIZGO) > SKU > nombre. Una vez que un producto quedó vinculado a
+    // su dropi_producto_id, las cargas siguientes lo encuentran aunque el usuario haya editado
+    // nombre/SKU en el Catálogo.
+    const mapaDropiId = new Map((prods || []).filter(p => p.dropi_producto_id).map(p => [String(p.dropi_producto_id), p.id]))
     const mapaSku = new Map((prods || []).filter(p => p.sku).map(p => [String(p.sku).toLowerCase().trim(), p.id]))
     const mapaNombre = new Map((prods || []).map(p => [String(p.nombre).toLowerCase().trim(), p.id]))
 
-    const filas: Record<string, unknown>[] = []
-    const sinProducto: string[] = []
+    // Líneas Dropi ya cargadas antes de esta corrida -- para clasificar nuevos/actualizados/conservados.
+    // Paginado en bloques de 1000 (límite por defecto de PostgREST) -- un tenant con varios
+    // meses de historial Dropi puede superar de sobra ese límite en una sola página.
+    const clavesExistentes = new Set<string>()
+    for (let desde = 0; ; desde += 1000) {
+      const { data: pagina } = await supabase.from('pedidos')
+        .select('dropi_orden_id,dropi_producto_id,dropi_variacion_id')
+        .eq('tenant_id', tenantId).not('dropi_orden_id', 'is', null)
+        .range(desde, desde + 999)
+      ;(pagina || []).forEach(p => clavesExistentes.add(`${p.dropi_orden_id}|${p.dropi_producto_id}|${p.dropi_variacion_id || ''}`))
+      if (!pagina || pagina.length < 1000) break
+    }
+    const totalExistentesAntes = clavesExistentes.size
+
+    // Primera pasada: separa filas estructuralmente válidas y detecta qué PRODUCTO ID de Dropi
+    // no existen todavía en el Catálogo (se crean en bloque antes de armar los pedidos).
+    type FilaParseada = { dropiOrdenId: number; dropiProductoId: string; dropiVariacionId: string; d: Record<string, unknown> }
+    const parseadas: FilaParseada[] = []
+    const sinDatos: string[] = []
+    const porCrear = new Map<string, { sku: string; nombre: string }>()
     for (const f of previewDropi) {
       if (!f.valido) continue
       const d = f.datos
+      const dropiOrdenId = Number(d.ID)
+      const dropiProductoId = String(d['PRODUCTO ID'] || '').trim()
+      const dropiVariacionId = String(d['VARIACION ID'] || '').trim()
+      if (!dropiOrdenId || !dropiProductoId) { sinDatos.push(`fila ${f.fila}: falta ID de orden o PRODUCTO ID de Dropi`); continue }
+      parseadas.push({ dropiOrdenId, dropiProductoId, dropiVariacionId, d })
+      const yaExiste = mapaDropiId.has(dropiProductoId) || mapaSku.has(String(d.SKU || '').toLowerCase().trim()) || mapaNombre.has(String(d.PRODUCTO || '').toLowerCase().trim())
+      if (!yaExiste && !porCrear.has(dropiProductoId)) {
+        porCrear.set(dropiProductoId, { sku: String(d.SKU || '').trim(), nombre: String(d.PRODUCTO || 'Sin nombre').trim() })
+      }
+    }
+
+    // Crea en el Catálogo los productos nuevos que trae el archivo -- con lo poco que Dropi
+    // reporta (nombre + SKU + su propio id). Quedan con costos/PVP en $0, a completar luego en
+    // Catálogo (así lo pidió Joan: cargar pedidos primero, ir a completar costeo después).
+    const nuevosProductos = Array.from(porCrear.entries()).map(([pid, info]) => ({
+      tenant_id: tenantId, nombre: info.nombre, sku: info.sku || null, dropi_producto_id: pid, dropi_sku: info.sku || null,
+    }))
+    if (nuevosProductos.length) {
+      const CHUNK = 500
+      for (let i = 0; i < nuevosProductos.length; i += CHUNK) {
+        const { data: creados } = await supabase.from('productos').insert(nuevosProductos.slice(i, i + CHUNK)).select('id,dropi_producto_id')
+        ;(creados || []).forEach(p => { if (p.dropi_producto_id) mapaDropiId.set(String(p.dropi_producto_id), p.id) })
+      }
+    }
+
+    // Segunda pasada: ahora sí arma los pedidos -- el Catálogo ya tiene todo lo que hacía falta.
+    // Map en vez de array: si el archivo trae la misma línea (orden+producto+variación) dos
+    // veces -- Dropi permite recargar el mismo rango de fechas -- se queda con la última
+    // ocurrencia. Un duplicado dentro del mismo lote rompería el UPSERT completo en Postgres
+    // ("ON CONFLICT DO UPDATE command cannot affect row a second time").
+    const filasPorClave = new Map<string, Record<string, unknown>>()
+    const sinProducto: string[] = [...sinDatos]
+    const clavesActualizadas = new Set<string>()
+    for (const { dropiOrdenId, dropiProductoId, dropiVariacionId, d } of parseadas) {
       const sku = String(d.SKU || '').toLowerCase().trim()
       const nombreProd = String(d.PRODUCTO || '').toLowerCase().trim()
-      const productoId = (sku && mapaSku.get(sku)) || mapaNombre.get(nombreProd)
-      if (!productoId) { sinProducto.push(`fila ${f.fila}: "${d.PRODUCTO}" (SKU ${d.SKU || '—'})`); continue }
+      const productoId = mapaDropiId.get(dropiProductoId) || (sku && mapaSku.get(sku)) || mapaNombre.get(nombreProd)
+      if (!productoId) { sinProducto.push(`fila: "${d.PRODUCTO}" (SKU ${d.SKU || '—'})`); continue }
       const estado = ESTATUS_DROPI_A_ESTADO[String(d.ESTATUS || '').toUpperCase().trim()] || 'ingresado'
-      filas.push({
-        tenant_id: tenantId, cliente_nombre: d['NOMBRE CLIENTE'], cliente_telefono: d['TELÉFONO'] || null,
+      const clave = `${dropiOrdenId}|${dropiProductoId}|${dropiVariacionId}`
+      if (clavesExistentes.has(clave)) clavesActualizadas.add(clave)
+      filasPorClave.set(clave, {
+        tenant_id: tenantId, dropi_orden_id: dropiOrdenId, dropi_producto_id: dropiProductoId, dropi_variacion_id: dropiVariacionId,
+        cliente_nombre: d['NOMBRE CLIENTE'], cliente_telefono: d['TELÉFONO'] || null,
         cliente_ciudad: d['CIUDAD DESTINO'], cliente_departamento: d['DEPARTAMENTO DESTINO'] || null,
         producto_id: productoId, producto_nombre: d.PRODUCTO, cantidad: d.CANTIDAD || 1,
         pvp: d['TOTAL DE LA ORDEN'], estado, origen: 'Dropi',
         transportadora: d.TRANSPORTADORA || null, numero_guia: d['NÚMERO GUIA'] || null,
+        // GANANCIA solo llega cuando Dropi ya liquidó la orden -- pyg/page.tsx lee pedidos.ganancia
+        // directo para el histórico de utilidad real, así que esto la alimenta sin tocar P&G.
+        ganancia: d.GANANCIA || 0, costo_flete: d['PRECIO FLETE'] || 0, costo_producto: d['PRECIO PROVEEDOR X CANTIDAD'] || 0,
         fecha_pedido: d.FECHA, risk_score: 'low', cliente_tipo: 'nuevo', sla_nivel: 'verde', horas_sin_gest: 0,
       })
     }
-    const ok = await insertarPedidosEnLotes(filas)
+    const filas = Array.from(filasPorClave.values())
+    const ok = await upsertPedidosDropiEnLotes(filas)
+    const nuevos = filas.length - clavesActualizadas.size
+    const actualizados = clavesActualizadas.size
+    const conservados = totalExistentesAntes - actualizados
     await supabase.from('uploads').insert({
       tenant_id: tenantId, tipo: 'plantilla_pedidos_dropi', nombre_archivo: configPedidosDropi.nombreArchivo,
       registros_total: previewDropi.length, registros_ok: ok, registros_error: previewDropi.length - ok,
@@ -729,7 +822,10 @@ export default function PedidosPage() {
       notas: sinProducto.length ? sinProducto.slice(0, 20).join(' | ') : null,
     })
     setPreviewDropi(null)
-    if (sinProducto.length) alert(`${ok} pedidos importados. ${sinProducto.length} filas no se importaron por producto no encontrado (revisa el SKU o el nombre en Catálogo).`)
+    const resumen = `✅ ${nuevos} pedidos nuevos · ${actualizados} actualizados · ${conservados} conservados sin cambios.` +
+      (nuevosProductos.length ? `\n\n🆕 Se crearon ${nuevosProductos.length} productos nuevos en tu Catálogo (${nuevosProductos.slice(0, 5).map(p => p.nombre).join(', ')}${nuevosProductos.length > 5 ? '...' : ''}). Ve a Catálogo a completar sus costos, PVP y demás datos para que el costeo sea real.` : '') +
+      (sinProducto.length ? `\n\n⚠️ ${sinProducto.length} filas no se importaron (revisa el archivo).` : '')
+    alert(resumen)
     loadData()
   }
 
