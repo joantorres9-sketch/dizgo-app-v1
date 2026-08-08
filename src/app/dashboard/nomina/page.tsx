@@ -415,7 +415,7 @@ function calcularLiquidacion(
 
 // ── MODAL COLABORADOR (Formulario completo) ───────────────
 function ModalColaborador({
-  onClose, onSave, tenantId, editData, procesos, tasas, onProcesoCreado, cargos, onCargoCreado,
+  onClose, onSave, tenantId, editData, procesos, tasas, onProcesoCreado, cargos, onCargoCreado, paisTenant,
 }: {
   onClose: () => void; onSave: () => void; tenantId: string
   editData: Colaborador | null; procesos: Proceso[]
@@ -423,6 +423,9 @@ function ModalColaborador({
   onProcesoCreado: (nombre: string, tipo: string) => Promise<string | null>
   cargos: Cargo[]
   onCargoCreado: (nombre: string, procesoId: string) => Promise<string | null>
+  // País del tenant — default para un colaborador NUEVO (editData null). Sin esto el formulario
+  // arrancaba siempre en modo Colombia sin importar el país real del tenant.
+  paisTenant: string
 }) {
   const supabase = createClient()
   const { puedePais } = usePermisos()
@@ -449,15 +452,15 @@ function ModalColaborador({
     genero: editData?.genero || 'M', estado_civil: editData?.estado_civil || 'Soltero',
     tiene_conyuge: editData?.tiene_conyuge || false, datos_conyuge: editData?.datos_conyuge || {},
     tiene_hijos: editData?.tiene_hijos || false, datos_hijos: editData?.datos_hijos || [],
-    pais_code: editData?.pais_code || 'COL', pais_nacimiento_code: editData?.pais_nacimiento_code || '',
+    pais_code: editData?.pais_code || paisTenant || 'COL', pais_nacimiento_code: editData?.pais_nacimiento_code || '',
     departamento: editData?.departamento || '',
     ciudad: editData?.ciudad || '', direccion: editData?.direccion || '',
-    codigo_tel: editData?.codigo_tel || '+57', celular: editData?.celular || '',
+    codigo_tel: editData?.codigo_tel || paisPorCodigo(paisTenant)?.codigoTel || '+57', celular: editData?.celular || '',
     email: editData?.email || '', correo_personal: editData?.correo_personal || '',
-    contacto_emergencia: editData?.contacto_emergencia || { nombre:'', parentesco:'', celular:'', codigo_tel: editData?.codigo_tel || '+57' },
+    contacto_emergencia: editData?.contacto_emergencia || { nombre:'', parentesco:'', celular:'', codigo_tel: editData?.codigo_tel || paisPorCodigo(paisTenant)?.codigoTel || '+57' },
     nivel_formacion: editData?.nivel_formacion || '',
     cargo: editData?.cargo || '', cargo_id: editData?.cargo_id || '', proceso_id: editData?.proceso_id || '',
-    tipo_contrato: editData?.tipo_contrato || configRHPorPais(editData?.pais_code || 'COL').tiposContrato[0],
+    tipo_contrato: editData?.tipo_contrato || configRHPorPais(editData?.pais_code || paisTenant || 'COL').tiposContrato[0],
     fecha_ingreso: editData?.fecha_ingreso || '', fecha_fin: editData?.fecha_fin || '',
     jornada: editData?.jornada || 'Tiempo completo',
     lugar_ejecucion: editData?.lugar_ejecucion || '', sede: editData?.sede || '',
@@ -465,7 +468,7 @@ function ModalColaborador({
     tipo_salario: editData?.tipo_salario || 'Fijo',
     nivel_arl: editData?.nivel_arl || 1, es_pensionado: editData?.es_pensionado || false,
     aplica_ley1607: editData?.aplica_ley1607 || false,
-    tipo_cotizante: editData?.tipo_cotizante || configRHPorPais(editData?.pais_code || 'COL').tiposCotizante[0]?.value || '',
+    tipo_cotizante: editData?.tipo_cotizante || configRHPorPais(editData?.pais_code || paisTenant || 'COL').tiposCotizante[0]?.value || '',
     eps: editData?.eps || '', pension: editData?.pension || '', arl: editData?.arl || '',
     caja_comp: editData?.caja_comp || '', cesantias: editData?.cesantias || '',
     banco: editData?.banco || '', tipo_cuenta: editData?.tipo_cuenta || 'Ahorros',
@@ -1793,6 +1796,11 @@ export default function NominaPage() {
   const [colillasSeleccionadas, setColillasSeleccionadas] = useState<Set<string>>(new Set())
   const [enviandoColillas, setEnviandoColillas] = useState(false)
   const [empresa, setEmpresa] = useState<{ nombre: string; nit: string | null; moneda: string }>({ nombre: '', nit: null, moneda: 'COP' })
+  // País propio del tenant — el formulario de "Nuevo colaborador" lo usa como país por defecto en
+  // vez de asumir Colombia siempre; sin esto, un tenant de Ecuador (o cualquier país no-COL)
+  // arrancaba el formulario en modo Colombia (ARL con niveles, departamentos colombianos, etc.)
+  // hasta que el usuario cambiara manualmente el selector.
+  const [tenantPais, setTenantPais] = useState('COL')
 
   async function loadData() {
     setLoading(true)
@@ -1811,7 +1819,7 @@ export default function NominaPage() {
       supabase.from('nomina_cargos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
       supabase.from('nomina_indicadores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
       supabase.from('nomina_indicador_mediciones').select('*').eq('tenant_id', profile.tenant_id).order('fecha', { ascending: false }),
-      supabase.from('tenants').select('esquema_nomina, nombre, nit, moneda').eq('id', profile.tenant_id).single(),
+      supabase.from('tenants').select('esquema_nomina, nombre, nit, moneda, pais').eq('id', profile.tenant_id).single(),
     ])
 
     setColaboradores((cols || []) as Colaborador[])
@@ -1824,6 +1832,7 @@ export default function NominaPage() {
     setMediciones((meds || []) as Medicion[])
     if (tenant?.esquema_nomina) setEsquemaNomina(tenant.esquema_nomina as 'mensual' | 'quincenal')
     if (tenant) setEmpresa({ nombre: tenant.nombre || '', nit: tenant.nit || null, moneda: tenant.moneda || 'COP' })
+    if (tenant?.pais) setTenantPais(tenant.pais)
     setLoading(false)
   }
 
@@ -2220,6 +2229,7 @@ export default function NominaPage() {
           onProcesoCreado={crearProceso}
           cargos={cargos}
           onCargoCreado={crearCargo}
+          paisTenant={tenantPais}
         />
       )}
 

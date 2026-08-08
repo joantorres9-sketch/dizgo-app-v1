@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PAISES } from '@/lib/paises'
@@ -20,6 +20,19 @@ export default function RegistroColaboradorPage() {
     nombres:'', apellidos:'', tipo_doc:'CC', numero_doc:'', celular:'', email:'',
     pais_code:'COL', ciudad:'', nivel_formacion:'', estado_civil:'Soltero',
   })
+
+  // Precarga el país propio del tenant en vez de asumir Colombia — mismo bug que tenía el
+  // formulario de "Nuevo colaborador" del admin: sin esto, alguien registrándose en un tenant de
+  // Ecuador veía "Colombia" preseleccionado hasta que lo cambiara manualmente. Va por una ruta
+  // pública (no la tabla directo) porque RLS de tenants bloquea el SELECT anónimo.
+  useEffect(() => {
+    if (!tenantId) return
+    fetch(`/api/public/tenant-pais?tenantId=${tenantId}`)
+      .then(r => r.json())
+      .then(data => { if (data?.pais) setF(prev => ({ ...prev, pais_code: data.pais })) })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId])
 
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF(prev => ({ ...prev, [k]: e.target.value }))
