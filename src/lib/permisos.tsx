@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { type Accion, type MatrizPermisos, horarioPermiteAhora } from '@/lib/modulos'
 
@@ -27,7 +27,23 @@ export interface PerfilAcceso {
 const UMBRAL_DESCARGAS = 5
 const VENTANA_DESCARGAS_MIN = 15
 
-export function usePermisos() {
+interface ContextoPermisos {
+  perfil: PerfilAcceso | null
+  cargando: boolean
+  puede: (modulo: string, accion: Accion) => boolean
+  puedePais: (paisCode: string) => boolean
+  enHorario: boolean
+  recargar: () => Promise<void>
+}
+const PermisosContext = createContext<ContextoPermisos | null>(null)
+
+// Fuente de verdad ÚNICA para permisos, igual que TemaProvider (src/lib/tema.tsx) resolvió el
+// mismo problema con el tema. Antes cada usePermisos() traía su propio auth→profiles→tenants
+// por separado -- una sola vista de página lo disparaba 3-4 veces (layout + la página +
+// RequierePermiso), todo secuencial y sin caché: confirmado en producción, ~950ms de puro
+// esperar-una-cosa-tras-otra duplicados. Con Context se pide una sola vez por navegación y todo
+// lo que llama usePermisos() lee ese mismo resultado ya cargado.
+export function PermisosProvider({ children }: { children: ReactNode }) {
   const supabase = createClient()
   const [perfil, setPerfil] = useState<PerfilAcceso | null>(null)
   const [cargando, setCargando] = useState(true)
@@ -84,7 +100,17 @@ export function usePermisos() {
 
   const enHorario = perfil ? (perfil.rol === 'owner' || perfil.rol === 'superadmin' || horarioPermiteAhora(perfil.horarioAcceso)) : true
 
-  return { perfil, cargando, puede, puedePais, enHorario, recargar: cargar }
+  return (
+    <PermisosContext.Provider value={{ perfil, cargando, puede, puedePais, enHorario, recargar: cargar }}>
+      {children}
+    </PermisosContext.Provider>
+  )
+}
+
+export function usePermisos(): ContextoPermisos {
+  const ctx = useContext(PermisosContext)
+  if (!ctx) throw new Error('usePermisos() debe usarse dentro de <PermisosProvider> (ya está en dashboard/layout.tsx)')
+  return ctx
 }
 
 // Inserta el evento en log_accesos y, para descargas, revisa si el propio perfil superó el

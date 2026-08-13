@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { CONFIG_PAIS, PASOS_SEED, sembrarTenantDemo } from '@/lib/seedDemoTenant'
+import { usePermisos } from '@/lib/permisos'
 
 const DOC_LABELS_REGISTRO: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: '📄 Doc. legal' }
 
@@ -45,6 +46,7 @@ function rndInt(min: number, max: number) { return Math.floor(Math.random() * (m
 
 export default function AdminPage() {
   const supabase = createClient()
+  const { perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [paisCodigo, setPaisCodigo] = useState('COL')
   const [loading, setLoading] = useState(true)
@@ -62,20 +64,11 @@ export default function AdminPage() {
 
   const addLog = (msg: string) => setLog(prev => [`${new Date().toLocaleTimeString('es-CO')} — ${msg}`, ...prev.slice(0, 49)])
 
-  const loadEstado = useCallback(async () => {
+  // El perfil (rol, tenant_id, es_cortesia) ya lo trajo usePermisos() -- una sola vez, compartido
+  // con el resto del dashboard -- así que acá solo se piden datos que esta página necesita y
+  // nadie más: el plan del tenant y los 4 conteos.
+  const loadEstado = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); setAutorizado(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id, rol, es_cortesia').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); setAutorizado(false); return }
-    // Superadmin/owner siempre; un `colaborador` solo si es la cuenta de cortesía dueña de este
-    // tenant (necesita llegar aquí para su propio botón de "Borrar datos de prueba").
-    const puedeEntrar = profile.rol === 'owner' || profile.rol === 'superadmin' || profile.es_cortesia === true
-    if (!puedeEntrar) { setLoading(false); setAutorizado(false); return }
-    setAutorizado(true)
-    const tid = profile.tenant_id
-    setTenantId(tid)
-
     const { data: tenant } = await supabase.from('tenants').select('plan').eq('id', tid).single()
     setTenantPlan(tenant?.plan || '')
 
@@ -90,7 +83,17 @@ export default function AdminPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadEstado() }, [loadEstado])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); setAutorizado(false); return }
+    // Superadmin/owner siempre; un `colaborador` solo si es la cuenta de cortesía dueña de este
+    // tenant (necesita llegar aquí para su propio botón de "Borrar datos de prueba").
+    const puedeEntrar = perfil.rol === 'owner' || perfil.rol === 'superadmin' || perfil.esCortesia === true
+    if (!puedeEntrar) { setLoading(false); setAutorizado(false); return }
+    setAutorizado(true)
+    setTenantId(perfil.tenantId)
+    loadEstado(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadEstado])
 
   const loadSolicitudes = useCallback(async () => {
     setCargandoSolicitudes(true)
@@ -182,7 +185,7 @@ export default function AdminPage() {
       supabase.from('whatsapp_templates_config').delete().eq('tenant_id', tenantId),
     ])
     addLog('✅ Datos eliminados. Listo para nueva carga.')
-    loadEstado()
+    loadEstado(tenantId)
   }
 
   async function borrarDatosPrueba() {
@@ -201,7 +204,7 @@ export default function AdminPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error borrando datos de prueba')
       addLog('✅ Datos de prueba eliminados. Tu tienda ya está lista para datos reales.')
-      await loadEstado()
+      await loadEstado(tenantId)
     } catch (err: any) {
       addLog(`❌ ${err.message}`)
     } finally { setBorrandoPrueba(false) }
@@ -228,7 +231,7 @@ export default function AdminPage() {
       addLog(`❌ Error durante el seed: ${String(err)}`)
     }
     setSeedActivo(false)
-    loadEstado()
+    loadEstado(tenantId)
   }
 
   const solicitudesPendientes = solicitudes.filter(s => s.estado === 'pendiente')

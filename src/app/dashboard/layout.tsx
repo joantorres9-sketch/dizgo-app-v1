@@ -4,7 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { MODULOS, GRUPOS } from '@/lib/modulos'
-import { usePermisos, logAccion } from '@/lib/permisos'
+import { usePermisos, logAccion, PermisosProvider } from '@/lib/permisos'
 import { PAISES } from '@/lib/paises'
 import { useTema } from '@/lib/tema'
 import { SelectorTema } from '@/components/SelectorTema'
@@ -19,6 +19,14 @@ const ITEMS_FIJOS = {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <PermisosProvider>
+      <DashboardLayoutInner>{children}</DashboardLayoutInner>
+    </PermisosProvider>
+  )
+}
+
+function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
