@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Space_Grotesk, JetBrains_Mono } from 'next/font/google'
+import { TemaProvider } from '@/lib/tema'
 import './globals.css'
 
 const spaceGrotesk = Space_Grotesk({
@@ -47,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA_INICIAL }} />
       </head>
       <body className="font-sans antialiased">
-        {children}
+        <TemaProvider>{children}</TemaProvider>
       </body>
     </html>
   )

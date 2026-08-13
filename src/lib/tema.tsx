@@ -1,5 +1,5 @@
 'use client'
-import { useCallback, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 
 export type ModoTema = 'oscuro' | 'claro'
 
@@ -48,18 +48,17 @@ function aplicarAtributoHtml(modo: ModoTema) {
   if (typeof document !== 'undefined') document.documentElement.setAttribute('data-theme', modo)
 }
 
-// Hook central de theming. Cada página migrada reemplaza su `const T = {...}` hardcodeado por
-// `const { T } = useTema()` -- el resto del archivo (todos los `T.xxx` en los style props) no
-// cambia. Persiste en localStorage; si el usuario nunca eligió, sigue prefers-color-scheme del
-// sistema. El <script> inline en el layout raíz ya deja el atributo puesto antes del primer
-// pintado, así que aquí solo sincronizamos el estado de React con lo que el DOM ya tiene.
-export function useTema() {
-  // Arranca SIEMPRE en 'oscuro', igual en server y en el primer render del cliente -- leer
-  // document.documentElement aquí (aunque ya tenga el valor correcto puesto por el script
-  // inline) rompe la hidratación: React exige que el primer render del cliente coincida
-  // pixel a pixel con el del server, y el server nunca sabe el tema real (no hay
-  // localStorage ni matchMedia ahí). El valor correcto llega un instante después, vía el
-  // useEffect de abajo -- mismo patrón que ya usa el <html data-theme> con suppressHydrationWarning.
+interface ContextoTema { modo: ModoTema; T: PaletaColores; alternar: () => void; cambiarModo: (nuevo: ModoTema) => void }
+const TemaContext = createContext<ContextoTema | null>(null)
+
+// Fuente de verdad ÚNICA para el tema -- probado en vivo: antes cada `useTema()` tenía su
+// propio useState aislado, así que el switch cambiaba SU PROPIO texto pero ninguna otra página
+// se enteraba (el resto seguía con los colores viejos). Con Context, un solo cambiarModo()
+// dispara un re-render de todo lo que consume el tema, en toda la app.
+export function TemaProvider({ children }: { children: ReactNode }) {
+  // Arranca SIEMPRE en 'oscuro' -- igual en server y en el primer render del cliente, para no
+  // romper la hidratación (ver nota larga que tenía este archivo antes). El valor real llega
+  // en el useEffect, un instante después.
   const [modo, setModoState] = useState<ModoTema>('oscuro')
 
   useEffect(() => {
@@ -76,10 +75,23 @@ export function useTema() {
   }, [])
 
   const alternar = useCallback(() => {
-    cambiarModo(modo === 'oscuro' ? 'claro' : 'oscuro')
-  }, [modo, cambiarModo])
+    setModoState(actual => {
+      const nuevo: ModoTema = actual === 'oscuro' ? 'claro' : 'oscuro'
+      aplicarAtributoHtml(nuevo)
+      if (typeof window !== 'undefined') localStorage.setItem(CLAVE_STORAGE, nuevo)
+      return nuevo
+    })
+  }, [])
 
   const T = modo === 'oscuro' ? PALETA_OSCURA : PALETA_CLARA
 
-  return { modo, T, alternar, cambiarModo }
+  return <TemaContext.Provider value={{ modo, T, alternar, cambiarModo }}>{children}</TemaContext.Provider>
+}
+
+// Cada página migrada reemplaza su `const T = {...}` hardcodeado por `const { T } = useTema()`
+// -- el resto del archivo (todos los `T.xxx` en los style props) no cambia.
+export function useTema(): ContextoTema {
+  const ctx = useContext(TemaContext)
+  if (!ctx) throw new Error('useTema() debe usarse dentro de <TemaProvider> (ya está en el layout raíz)')
+  return ctx
 }
