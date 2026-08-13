@@ -1,21 +1,10 @@
 import { NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/apiAuth'
+import { getSupabaseAdmin, verificarSuperadmin } from '@/lib/apiAuth'
 import { paisPorCodigo } from '@/lib/paises'
 import { slugUnico } from '@/lib/tenantSlug'
 
-async function requiereSuperadmin(req: Request) {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '')
-  if (!token) return { ok: false as const, error: 'No autenticado', status: 401 }
-  const supabase = getSupabaseAdmin()
-  const { data: { user }, error } = await supabase.auth.getUser(token)
-  if (error || !user) return { ok: false as const, error: 'Sesión inválida', status: 401 }
-  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (profile?.rol !== 'superadmin') return { ok: false as const, error: 'Solo superadmin puede aprobar registros', status: 403 }
-  return { ok: true as const, userId: user.id }
-}
-
 export async function POST(req: Request) {
-  const auth = await requiereSuperadmin(req)
+  const auth = await verificarSuperadmin(req)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const { solicitudId, accion } = await req.json()

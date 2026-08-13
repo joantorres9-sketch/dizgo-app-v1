@@ -1,26 +1,15 @@
 import { NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/apiAuth'
+import { getSupabaseAdmin, verificarSuperadmin } from '@/lib/apiAuth'
 
-async function requiereSuperadmin(req: Request) {
-  const token = req.headers.get('authorization')?.replace('Bearer ', '')
-  if (!token) return { ok: false as const, error: 'No autenticado', status: 401 }
-  const supabase = getSupabaseAdmin()
-  const { data: { user }, error } = await supabase.auth.getUser(token)
-  if (error || !user) return { ok: false as const, error: 'Sesión inválida', status: 401 }
-  const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-  if (profile?.rol !== 'superadmin') return { ok: false as const, error: 'Solo superadmin puede solicitar ajustes', status: 403 }
-  return { ok: true as const }
-}
-
-function emailAjustesHtml(nombres: string, nota: string, linkAjuste: string) {
+function emailAjustesHtml(nombres: string, nota: string, linkAjuste: string, origin: string) {
   const notaHtml = nota.replace(/</g, '&lt;').replace(/\n/g, '<br>')
   return `
 <div style="background:#0D1E35;padding:32px 16px;font-family:'DM Sans',Arial,sans-serif">
   <table role="presentation" width="100%" style="max-width:480px;margin:0 auto;border-collapse:collapse">
     <tr><td style="text-align:center;padding-bottom:20px">
       <table role="presentation" style="margin:0 auto"><tr>
-        <td style="width:40px;height:40px;background:#F58720;border-radius:10px;text-align:center;vertical-align:middle;font-weight:800;font-size:15px;color:#081426">DZ</td>
-        <td style="padding-left:10px;font-weight:800;font-size:18px;color:#E8EDF5">DI<span style="color:#F58720">Z</span>GO</td>
+        <td style="vertical-align:middle"><img src="${origin}/brand/dizgo-icon.png" alt="DIZGO" width="40" height="40" style="border-radius:10px;display:block"></td>
+        <td style="padding-left:10px;font-weight:800;font-size:18px;color:#E8EDF5">d<span style="color:#F58720">i</span>zgo</td>
       </tr></table>
     </td></tr>
     <tr><td style="background:#081426;border:1px solid #152238;border-radius:14px;padding:28px 26px">
@@ -52,7 +41,7 @@ function emailAjustesHtml(nombres: string, nota: string, linkAjuste: string) {
 }
 
 export async function POST(req: Request) {
-  const auth = await requiereSuperadmin(req)
+  const auth = await verificarSuperadmin(req)
   if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status })
 
   const { solicitudId, nota } = await req.json()
@@ -80,7 +69,7 @@ export async function POST(req: Request) {
       from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
       to: solicitud.email_personal,
       subject: 'DIZGO — Necesitamos un ajuste en tu solicitud de registro',
-      html: emailAjustesHtml(solicitud.nombres, nota, linkAjuste),
+      html: emailAjustesHtml(solicitud.nombres, nota, linkAjuste, origin),
     }),
   })
   const data = await res.json().catch(() => ({}))
