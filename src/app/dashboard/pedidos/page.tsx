@@ -7,6 +7,7 @@ import { configPedidosDropi, configPedidos, type FilaPedidoDropi, type FilaPedid
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
 // Traduce el ESTATUS real de Dropi (export de Órdenes) al estado interno de DIZGO. Confirmado
 // contra un archivo de ejemplo real -- si Dropi cambia o agrega estatus nuevos, cualquiera no
@@ -22,12 +23,6 @@ const ESTATUS_DROPI_A_ESTADO: Record<string, string> = {
   'NOVEDAD': 'novedad', 'ENTREGADO': 'entregado', 'DEVOLUCION': 'devolucion',
 }
 
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238'
-}
 
 function getPais() {
   if (typeof window === 'undefined') return 'COL'
@@ -133,27 +128,31 @@ type Timeline = {
   trigger_by: string; created_at: string
 }
 
+// Colores de estado/riesgo e inputs de formulario: fijos en la paleta oscura aunque el usuario
+// esté en modo claro -- son etiquetas de estado y campos de formulario, no texto de lectura del
+// cuerpo de la página (que sí es theme-aware vía useTema() en cada componente de abajo).
 const ESTADOS = [
-  {v:'ingresado',    l:'Ingresado',   c:T.blue,    icon:'🛍️'},
-  {v:'en_gestion',  l:'En gestión',  c:T.purple,  icon:'📞'},
-  {v:'confirmado',  l:'Confirmado',  c:T.green,   icon:'✅'},
-  {v:'cancelado',   l:'Cancelado',   c:T.red,     icon:'❌'},
-  {v:'en_bodega',   l:'En bodega',   c:T.yellow,  icon:'📦'},
-  {v:'despachado',  l:'Despachado',  c:T.accent,  icon:'🚚'},
+  {v:'ingresado',    l:'Ingresado',   c:PALETA_OSCURA.blue,    icon:'🛍️'},
+  {v:'en_gestion',  l:'En gestión',  c:PALETA_OSCURA.purple,  icon:'📞'},
+  {v:'confirmado',  l:'Confirmado',  c:PALETA_OSCURA.green,   icon:'✅'},
+  {v:'cancelado',   l:'Cancelado',   c:PALETA_OSCURA.red,     icon:'❌'},
+  {v:'en_bodega',   l:'En bodega',   c:PALETA_OSCURA.yellow,  icon:'📦'},
+  {v:'despachado',  l:'Despachado',  c:PALETA_OSCURA.accent,  icon:'🚚'},
   {v:'en_transito', l:'En tránsito', c:'#60A5FA', icon:'📍'},
-  {v:'novedad',     l:'Novedad',     c:T.yellow,  icon:'⚠️'},
-  {v:'entregado',   l:'Entregado',   c:T.green,   icon:'💰'},
-  {v:'devolucion',  l:'Devolución',  c:T.red,     icon:'🔄'},
+  {v:'novedad',     l:'Novedad',     c:PALETA_OSCURA.yellow,  icon:'⚠️'},
+  {v:'entregado',   l:'Entregado',   c:PALETA_OSCURA.green,   icon:'💰'},
+  {v:'devolucion',  l:'Devolución',  c:PALETA_OSCURA.red,     icon:'🔄'},
 ]
 
 const ORIGENES = ['Shopify','WooCommerce','Funnel','Manual','Recompra_Directa','Referido','Redes']
-const RIESGOS = [{v:'low',l:'Bajo',c:T.green},{v:'medium',l:'Medio',c:T.yellow},{v:'high',l:'Alto',c:T.accent},{v:'critical',l:'Crítico',c:T.red}]
+const RIESGOS = [{v:'low',l:'Bajo',c:PALETA_OSCURA.green},{v:'medium',l:'Medio',c:PALETA_OSCURA.yellow},{v:'high',l:'Alto',c:PALETA_OSCURA.accent},{v:'critical',l:'Crítico',c:PALETA_OSCURA.red}]
 
-const inp: React.CSSProperties = {width:'100%',background:'#0A1628',border:`1.5px solid ${T.border}`,borderRadius:'7px',padding:'7px 10px',fontSize:'12px',color:T.text,outline:'none',boxSizing:'border-box'}
-const lbl: React.CSSProperties = {fontSize:'11px',color:T.muted,marginBottom:'3px',display:'block'}
+const inp: React.CSSProperties = {width:'100%',background:'#0A1628',border:`1.5px solid ${PALETA_OSCURA.border}`,borderRadius:'7px',padding:'7px 10px',fontSize:'12px',color:PALETA_OSCURA.text,outline:'none',boxSizing:'border-box'}
+const lbl: React.CSSProperties = {fontSize:'11px',color:PALETA_OSCURA.muted,marginBottom:'3px',display:'block'}
 
 // ── MODAL NUEVO PEDIDO ────────────────────────────────────
 function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void;onSave:()=>void}) {
+  const { T } = useTema()
   const supabase = createClient()
   const [form, setForm] = useState({
     numero_pedido:'', cliente_nombre:'', cliente_telefono:'', cliente_ciudad:'',
@@ -271,6 +270,7 @@ function ModalNuevoPedido({tenantId,onClose,onSave}:{tenantId:string;onClose:()=
 
 // ── PANEL LATERAL — HISTORIA CLÍNICA ─────────────────────
 function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;onUpdate:()=>void}) {
+  const { T } = useTema()
   const supabase = createClient()
   const [timeline, setTimeline] = useState<Timeline[]>([])
   const [nuevoEstado, setNuevoEstado] = useState(pedido.estado)
@@ -618,6 +618,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function PedidosPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede } = usePermisos()
   const [tenantId, setTenantId] = useState('')

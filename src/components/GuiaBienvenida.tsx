@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react'
 import Link from 'next/link'
-
-const C = { verde:'#2DD4A0', card:'#111520', borde:'rgba(255,255,255,0.07)', texto:'#E8EDF5', sub:'#8B96A8' }
+import { useTema } from '@/lib/tema'
 
 // Checklist de bienvenida para usuarios de cortesía — el tenant llega pre-cargado con datos demo
 // (sembrarTenantDemo) y sin esta guía un usuario nuevo no sabe qué mirar primero. Enlaza directo
@@ -19,6 +18,7 @@ const PASOS_GUIA = [
 ]
 
 export function GuiaBienvenida() {
+  const { T } = useTema()
   const [cerrada, setCerrada] = useState(() => typeof window !== 'undefined' && localStorage.getItem('dizgo_guia_bienvenida_cerrada') === '1')
 
   if (cerrada) return null
@@ -29,21 +29,21 @@ export function GuiaBienvenida() {
   }
 
   return (
-    <div className="no-print" style={{ background: C.card, border: `1px solid ${C.borde}`, borderLeft: `3px solid ${C.verde}`, borderRadius: '12px', padding: '16px 18px', marginBottom: '16px' }}>
+    <div className="no-print" style={{ background: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${T.green}`, borderRadius: '12px', padding: '16px 18px', marginBottom: '16px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px', gap: '10px' }}>
         <div>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: C.texto }}>🎁 Bienvenido a tu DIZGO de prueba</div>
-          <div style={{ fontSize: '11.5px', color: C.sub, marginTop: '2px' }}>Tu tienda ya viene con datos de ejemplo. Explora estos módulos para ver todo lo que DIZGO puede hacer:</div>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: T.text }}>🎁 Bienvenido a tu DIZGO de prueba</div>
+          <div style={{ fontSize: '11.5px', color: T.muted, marginTop: '2px' }}>Tu tienda ya viene con datos de ejemplo. Explora estos módulos para ver todo lo que DIZGO puede hacer:</div>
         </div>
-        <button onClick={cerrar} style={{ background: 'none', border: 'none', color: C.sub, cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>✕ Ocultar</button>
+        <button onClick={cerrar} style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: '13px', flexShrink: 0 }}>✕ Ocultar</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: '8px' }}>
         {PASOS_GUIA.map(p => (
           <Link key={p.href} href={p.href} style={{ textDecoration: 'none', display: 'flex', gap: '8px', padding: '9px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
             <span style={{ fontSize: '15px', flexShrink: 0 }}>{p.icon}</span>
             <div>
-              <div style={{ fontSize: '11.5px', fontWeight: 600, color: C.texto }}>{p.label}</div>
-              <div style={{ fontSize: '10.5px', color: C.sub, lineHeight: 1.4 }}>{p.desc}</div>
+              <div style={{ fontSize: '11.5px', fontWeight: 600, color: T.text }}>{p.label}</div>
+              <div style={{ fontSize: '10.5px', color: T.muted, lineHeight: 1.4 }}>{p.desc}</div>
             </div>
           </Link>
         ))}

@@ -7,14 +7,7 @@ import { configProductos, type FilaProducto } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
-
-// ── TEMA ──────────────────────────────────────────────────
-const T = {
-  bg: '#0D1E35', card: '#081426', card2: '#0A1628',
-  accent: '#F58720', blue: '#3D8EF0', green: '#2DD4A0',
-  red: '#F05C5C', yellow: '#F5A623', purple: '#9B6BFF',
-  text: '#E8EDF5', muted: '#5A7A9A', border: '#152238',
-}
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
 // ── TIPOS ─────────────────────────────────────────────────
 interface Producto {
@@ -115,10 +108,10 @@ function calcMargenP(p: Partial<Producto>): number {
 }
 
 function getSem(m: number): { color: string; label: string; bg: string } {
-  if (m >= 25) return { color: T.green, label: '✅ VERDE — Escalar', bg: `${T.green}15` }
-  if (m >= 15) return { color: T.yellow, label: '⚠️ AMARILLO — Revisar', bg: `${T.yellow}15` }
-  if (m > 0) return { color: T.red, label: '❌ ROJO — Ajustar', bg: `${T.red}15` }
-  return { color: T.muted, label: '⬛ SIN DATOS', bg: `${T.muted}15` }
+  if (m >= 25) return { color: PALETA_OSCURA.green, label: '✅ VERDE — Escalar', bg: `${PALETA_OSCURA.green}15` }
+  if (m >= 15) return { color: PALETA_OSCURA.yellow, label: '⚠️ AMARILLO — Revisar', bg: `${PALETA_OSCURA.yellow}15` }
+  if (m > 0) return { color: PALETA_OSCURA.red, label: '❌ ROJO — Ajustar', bg: `${PALETA_OSCURA.red}15` }
+  return { color: PALETA_OSCURA.muted, label: '⬛ SIN DATOS', bg: `${PALETA_OSCURA.muted}15` }
 }
 
 function generarSKU(nombre: string, tipo: string, index: number): string {
@@ -136,12 +129,12 @@ function generarSKU(nombre: string, tipo: string, index: number): string {
 
 // Estilos base reutilizables
 const inp: React.CSSProperties = {
-  width: '100%', background: '#0A1628', border: `1.5px solid ${T.border}`,
+  width: '100%', background: '#0A1628', border: `1.5px solid ${PALETA_OSCURA.border}`,
   borderRadius: '8px', padding: '8px 10px', fontSize: '12px',
-  color: T.text, outline: 'none', boxSizing: 'border-box',
+  color: PALETA_OSCURA.text, outline: 'none', boxSizing: 'border-box',
 }
 const lbl: React.CSSProperties = {
-  fontSize: '11px', color: T.muted, marginBottom: '4px', display: 'block',
+  fontSize: '11px', color: PALETA_OSCURA.muted, marginBottom: '4px', display: 'block',
 }
 const row2: React.CSSProperties = {
   display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(300px,1fr))', gap: '8px', marginBottom: '10px',
@@ -149,6 +142,7 @@ const row2: React.CSSProperties = {
 
 // ── TOOLTIP ───────────────────────────────────────────────
 function Tooltip({ text, children }: { text: string; children: React.ReactNode }) {
+  const { T } = useTema()
   const [show, setShow] = useState(false)
   return (
     <span
@@ -182,6 +176,7 @@ function BuscadorCombo({
   seleccionados: ProductoCombo[]
   onAgregar: (p: ProductoCombo) => void
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [q, setQ] = useState('')
   const [resultados, setResultados] = useState<Producto[]>([])
@@ -282,6 +277,7 @@ function ListaCombo({
   onChange: (id: string, campo: keyof ProductoCombo, valor: number) => void
   onRemove: (id: string) => void
 }) {
+  const { T } = useTema()
   if (productos.length === 0) {
     return (
       <div style={{
@@ -363,6 +359,7 @@ function analizarIA(nombre: string, costo: number, pvp: number): { margenSug: nu
 
 // ── MODAL IA CHAT ─────────────────────────────────────────
 function ModalIAChat({ onClose }: { onClose: () => void }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [input, setInput] = useState('')
   const [msgs, setMsgs] = useState([
@@ -484,6 +481,7 @@ function ModalFormulario({
   totalProductos: number
   puedeGuardar: boolean
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [tipo, setTipo] = useState<'producto' | 'combo'>(editData?.tipo === 'combo' ? 'combo' : 'producto')
   const [loading, setLoading] = useState(false)
@@ -838,6 +836,7 @@ function ModalResumen({
   onClose: () => void
   onEdit: () => void
 }) {
+  const { T } = useTema()
   const margen = calcMargenP(producto)
   const sem = getSem(margen)
   return (
@@ -925,6 +924,7 @@ function ModalResumen({
 
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function ProductosPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede } = usePermisos()
   const [productos, setProductos] = useState<Producto[]>([])

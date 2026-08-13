@@ -4,8 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { MatrizPermisos } from '@/components/MatrizPermisos'
 import { matrizTodoFalse, matrizTodoTrue, type MatrizPermisos as TMatriz } from '@/lib/modulos'
 import { CONFIG_PAIS } from '@/lib/seedDemoTenant'
-
-const T = { bg:'#0D1E35', card:'#111520', card2:'#0A0D14', accent:'#F5A623', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#8B96A8', border:'rgba(255,255,255,0.08)' }
+import { useTema } from '@/lib/tema'
 
 type ColabRow = { id: string; nombres: string; apellidos: string; cargo: string | null; email: string | null; correo_personal: string | null }
 type ProfileRow = {
@@ -31,6 +30,7 @@ const TABS = [
 const FORM_CORTESIA_VACIO = { nombres: '', apellidos: '', tipo_doc: 'CC', numero_doc: '', celular: '', email: '', nombre_tienda: '', pais: 'COL' }
 
 export default function AccesosPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const [autorizado, setAutorizado] = useState<boolean | null>(null)
   const [tenantId, setTenantId] = useState('')

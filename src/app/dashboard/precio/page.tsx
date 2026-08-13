@@ -4,13 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
-
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238',
-}
+import { useTema } from '@/lib/tema'
 
 // ── 12 PAÍSES ─────────────────────────────────────────────────
 const PAISES: Record<string, { nombre:string; locale:string; currency:string; dec:number; margenBenchmark:number }> = {
@@ -56,10 +50,6 @@ type Producto = {
 
 type Tab = 'costeo' | 'historia' | 'volumen' | 'proyeccion' | 'resultados'
 
-const inp: React.CSSProperties = { width:'100%', background:'#0A1628', border:`1.5px solid ${T.border}`, borderRadius:'7px', padding:'8px 10px', fontSize:'12px', color:T.text, outline:'none', boxSizing:'border-box' }
-const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
-const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px' }
-
 // ── CLASIFICACIÓN TICKET ──────────────────────────────────────
 function clasificarTicket(pvp: number): string {
   if (pvp < 30000) return 'Muy bajo'
@@ -70,6 +60,10 @@ function clasificarTicket(pvp: number): string {
 }
 
 export default function PrecioPage() {
+  const { T } = useTema()
+  const inp: React.CSSProperties = { width:'100%', background:T.card2, border:`1.5px solid ${T.border}`, borderRadius:'7px', padding:'8px 10px', fontSize:'12px', color:T.text, outline:'none', boxSizing:'border-box' }
+  const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
+  const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px' }
   const supabase = createClient()
   const { puede, puedePais } = usePermisos()
   const [productos, setProductos] = useState<Producto[]>([])

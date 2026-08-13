@@ -2,8 +2,7 @@
 import { useState, Fragment } from 'react'
 import { MODULOS, SUBTABS, ACCIONES, ACCION_LABELS, HORARIOS_ACCESO, matrizTodoTrue, matrizTodoFalse, permisoVacio, todasLasClaves, clavePermiso, type MatrizPermisos as TMatriz, type Accion } from '@/lib/modulos'
 import { PAISES } from '@/lib/paises'
-
-const T = { bg:'#0D1E35', card:'#111520', card2:'#0A0D14', accent:'#F5A623', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#8B96A8', border:'rgba(255,255,255,0.08)' }
+import { useTema } from '@/lib/tema'
 
 // Plantillas rápidas — mejora de UX pedida explícitamente: que conceder permisos sea ágil y dé
 // sensación de control (un clic para el caso común, siempre editable después). Cubren también las
@@ -42,6 +41,7 @@ export function MatrizPermisos({
   // restricción (los 11 países), igual que hoy.
   paisesIniciales?: string[] | null
 }) {
+  const { T } = useTema()
   const [permisos, setPermisos] = useState<TMatriz>(() => {
     // completa módulos que falten en la matriz guardada (ej. si se agregó un módulo nuevo después)
     const base = matrizTodoFalse()

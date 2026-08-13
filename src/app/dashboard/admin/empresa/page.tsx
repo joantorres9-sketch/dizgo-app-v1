@@ -4,17 +4,18 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { formatMoneda } from '@/lib/paises'
 import { useTasasCambio, copAUsdConTasas } from '@/lib/tasas'
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
-const T = { bg:'#0D1E35', card:'#081426', card2:'#0A1628', accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#5A7A9A', border:'#152238', wa:'#25D366' }
+const WA = '#25D366' // verde de marca de WhatsApp -- fijo, no depende del tema
 
 const ETAPAS: { v: string; l: string; c: string }[] = [
-  { v:'nuevo',       l:'Nuevo',        c:T.blue },
-  { v:'conversando', l:'Conversando',  c:T.purple },
-  { v:'calificado',  l:'Calificado',   c:T.accent },
-  { v:'propuesta',   l:'Propuesta',    c:T.yellow },
-  { v:'negociacion', l:'Negociación',  c:T.yellow },
-  { v:'ganado',      l:'Ganado',       c:T.green },
-  { v:'perdido',     l:'Perdido',      c:T.red },
+  { v:'nuevo',       l:'Nuevo',        c:PALETA_OSCURA.blue },
+  { v:'conversando', l:'Conversando',  c:PALETA_OSCURA.purple },
+  { v:'calificado',  l:'Calificado',   c:PALETA_OSCURA.accent },
+  { v:'propuesta',   l:'Propuesta',    c:PALETA_OSCURA.yellow },
+  { v:'negociacion', l:'Negociación',  c:PALETA_OSCURA.yellow },
+  { v:'ganado',      l:'Ganado',       c:PALETA_OSCURA.green },
+  { v:'perdido',     l:'Perdido',      c:PALETA_OSCURA.red },
 ]
 const INTERES_LABEL: Record<string, string> = { app:'📱 App', mentoria:'🎓 Mentoría', consultoria:'💼 Consultoría', otro:'❓ Otro' }
 const PRECIOS_PLAN: Record<string, number> = { emprendedor: 89000, empresarial: 249000 }
@@ -60,9 +61,6 @@ type Campana = {
   rendimiento: { spend: string; impressions: string; clicks: string } | null
 }
 
-const inp: React.CSSProperties = { width:'100%', background:T.card2, border:`1.5px solid ${T.border}`, borderRadius:'8px', padding:'8px 10px', fontSize:'12px', color:T.text, outline:'none', boxSizing:'border-box' }
-const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
-
 function tiempoDesde(iso: string | null): string {
   if (!iso) return 'sin actividad'
   const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
@@ -72,6 +70,9 @@ function tiempoDesde(iso: string | null): string {
 }
 
 export default function CentroDizgoPage() {
+  const { T } = useTema()
+  const inp: React.CSSProperties = { width:'100%', background:T.card2, border:`1.5px solid ${T.border}`, borderRadius:'8px', padding:'8px 10px', fontSize:'12px', color:T.text, outline:'none', boxSizing:'border-box' }
+  const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
   const router = useRouter()
   const supabase = createClient()
   const { tasas } = useTasasCambio()
@@ -390,7 +391,7 @@ export default function CentroDizgoPage() {
                   {mensajes.map(m => (
                     <div key={m.id} style={{ alignSelf: m.direccion === 'saliente' ? 'flex-end' : 'flex-start', maxWidth:'80%' }}>
                       <div style={{
-                        background: m.direccion === 'saliente' ? (m.generado_por === 'ia' ? `${T.purple}20` : `${T.wa}20`) : T.card2,
+                        background: m.direccion === 'saliente' ? (m.generado_por === 'ia' ? `${T.purple}20` : `${WA}20`) : T.card2,
                         border:`1px solid ${T.border}`, borderRadius:'10px', padding:'8px 12px', fontSize:'12px', color:T.text,
                       }}>{m.texto}</div>
                       <div style={{ fontSize:'9px', color:T.muted, marginTop:'2px', textAlign: m.direccion === 'saliente' ? 'right' : 'left' }}>
@@ -404,7 +405,7 @@ export default function CentroDizgoPage() {
                     onChange={e => setTextoManual(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter' && !enviando) enviarManual() }} />
                   <button onClick={enviarManual} disabled={enviando || !textoManual.trim()}
-                    style={{ padding:'0 16px', background:T.wa, border:'none', borderRadius:'8px', color:'#04140A', fontWeight:700, cursor: enviando ? 'wait' : 'pointer', fontSize:'12px', opacity: enviando ? 0.7 : 1 }}>
+                    style={{ padding:'0 16px', background:WA, border:'none', borderRadius:'8px', color:'#04140A', fontWeight:700, cursor: enviando ? 'wait' : 'pointer', fontSize:'12px', opacity: enviando ? 0.7 : 1 }}>
                     {enviando ? '…' : 'Enviar'}
                   </button>
                 </div>

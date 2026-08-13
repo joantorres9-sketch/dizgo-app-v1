@@ -4,19 +4,33 @@
 
 :root {
   --sidebar-w: 220px;
+  --dz-bg: #0A0D14;
+  --dz-text: #E8EDF5;
+  --dz-scroll-track: #111520;
+  --dz-scroll-thumb: #2A3550;
+}
+
+/* Paleta clara -- ver src/lib/tema.ts para los mismos valores usados por useTema() en JS.
+   Las páginas aún no migradas siguen con sus colores fijos hasta que se barran en la fase
+   siguiente; esto solo controla el fondo/scroll del documento. */
+:root[data-theme="claro"] {
+  --dz-bg: #F4F6FA;
+  --dz-text: #0F1524;
+  --dz-scroll-track: #E4E8F0;
+  --dz-scroll-thumb: #C3CADC;
 }
 
 * { box-sizing: border-box; }
 
 body {
-  background: #0A0D14;
-  color: #E8EDF5;
+  background: var(--dz-bg);
+  color: var(--dz-text);
 }
 
 /* Scrollbar personalizado */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #111520; }
-::-webkit-scrollbar-thumb { background: #2A3550; border-radius: 3px; }
+::-webkit-scrollbar-track { background: var(--dz-scroll-track); }
+::-webkit-scrollbar-thumb { background: var(--dz-scroll-thumb); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #3D8EF0; }
 
 /* Animaciones */

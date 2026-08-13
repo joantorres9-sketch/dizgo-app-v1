@@ -6,8 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useGeoPais } from '@/lib/geo'
 import { useTasasCambio, copAUsdConTasas, copAMonedaConTasas } from '@/lib/tasas'
 import { paisPorCodigo, formatMoneda } from '@/lib/paises'
-
-const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',blue:'#3D8EF0',green:'#2DD4A0',red:'#F05C5C',yellow:'#F5A623',purple:'#9B6BFF',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
+import { useTema } from '@/lib/tema'
 
 const PLANES: Record<string, { nombre: string; precio: string; cop?: number; detalle: string }> = {
   explorador:   { nombre: 'Explorador',   precio: 'Gratis',        detalle: 'Dashboard básico, 1 tienda' },
@@ -37,10 +36,11 @@ const fld: React.CSSProperties = { marginBottom:'10px' }
 const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const row3: React.CSSProperties = { display:'grid', gridTemplateColumns:'90px 1fr', gap:'8px', marginBottom:'10px' }
 const stepH: React.CSSProperties = { display:'flex', alignItems:'center', gap:'10px', margin:'18px 0 12px' }
-const stepN = (color: string): React.CSSProperties => ({ width:'26px', height:'26px', borderRadius:'50%', background: color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', color: T.card, flexShrink:0 })
 const upfile: React.CSSProperties = { width:'100%', background:'#0A1628', border:`1.5px dashed #1E3050`, borderRadius:'8px', padding:'12px 10px', fontSize:'11px', color:'#5A7A9A', textAlign:'center', cursor:'pointer', boxSizing:'border-box' }
 
 function RegistroForm() {
+  const { T } = useTema()
+  const stepN = (color: string): React.CSSProperties => ({ width:'26px', height:'26px', borderRadius:'50%', background: color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700', color: T.card, flexShrink:0 })
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
@@ -174,8 +174,9 @@ function RegistroForm() {
         {/* Columna izquierda: aviso previo */}
         <div className="dz-registro-side" style={{ width:'240px', flexShrink:0, position:'sticky', top:'20px' }}>
           <div style={{ textAlign:'center', marginBottom:'20px' }}>
-            <div style={{ width:'44px', height:'44px', background: T.accent, borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'16px', color: T.card, margin:'0 auto 10px' }}>DZ</div>
-            <div style={{ fontWeight:'800', fontSize:'18px', color: T.text }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/dizgo-icon.png" alt="DIZGO" width={44} height={44} style={{ borderRadius:'12px', margin:'0 auto 10px', display:'block' }} />
+            <div style={{ fontWeight:'800', fontSize:'18px', color: T.text }}>d<span style={{ color: T.accent }}>i</span>zgo</div>
             <div style={{ fontSize:'11px', color: T.muted }}>Registro de nueva tienda</div>
           </div>
           <div style={{ background:`${T.blue}10`, border:`1px solid ${T.blue}30`, borderRadius:'10px', padding:'14px', fontSize:'12px', color:`${T.blue}`, lineHeight:1.7 }}>
@@ -453,6 +454,7 @@ function RegistroForm() {
 }
 
 export default function RegistroPage() {
+  const { T } = useTema()
   return (
     <Suspense fallback={<div style={{ minHeight:'100vh', background: T.bg }} />}>
       <RegistroForm />

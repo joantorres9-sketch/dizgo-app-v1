@@ -2,18 +2,19 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-
-const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',green:'#2DD4A0',yellow:'#F5A623',red:'#F05C5C',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
+import { useTema } from '@/lib/tema'
 
 function PendienteContent() {
+  const { T } = useTema()
   const searchParams = useSearchParams()
   const pago = searchParams.get('pago')
   const radicado = `DIZGO-${Date.now().toString().slice(-6)}`
   return (
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       <div style={{ width:'min(440px, calc(100vw - 32px))', textAlign:'center' }}>
-        <div style={{ width:'64px', height:'64px', background: T.accent, borderRadius:'16px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'22px', color: T.card, margin:'0 auto 16px' }}>DZ</div>
-        <div style={{ fontWeight:'800', fontSize:'22px', color: T.text, marginBottom:'4px' }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/brand/dizgo-icon.png" alt="DIZGO" width={64} height={64} style={{ borderRadius:'16px', margin:'0 auto 16px', display:'block' }} />
+        <div style={{ fontWeight:'800', fontSize:'22px', color: T.text, marginBottom:'4px' }}>d<span style={{ color: T.accent }}>i</span>zgo</div>
         <div style={{ fontSize:'12px', color: T.muted, marginBottom:'28px' }}>Hallazgo de dinero</div>
 
         <div style={{ background: T.card, border:`1px solid ${T.border}`, borderRadius:'16px', padding:'28px 24px' }}>
@@ -67,6 +68,7 @@ function PendienteContent() {
 }
 
 export default function PendientePage() {
+  const { T } = useTema()
   return (
     <Suspense fallback={<div style={{ minHeight:'100vh', background: T.bg }} />}>
       <PendienteContent />

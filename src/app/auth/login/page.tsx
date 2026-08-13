@@ -4,12 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useGeoPais } from '@/lib/geo'
-
-const T = {
-  bg:'#0D1E35', card:'#081426', accent:'#F58720',
-  blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238'
-}
+import { useTema } from '@/lib/tema'
 
 const PAISES = [
   { code:'COL', nombre:'Colombia',    moneda:'COP', flag:'https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.2.3/flags/4x3/co.svg' },
@@ -35,6 +30,7 @@ const lbl: React.CSSProperties = { fontSize:'11px', color:'#5A7A9A', marginBotto
 const field: React.CSSProperties = { marginBottom:'12px' }
 
 export default function LoginPage() {
+  const { T } = useTema()
   const router = useRouter()
   const supabase = createClient()
 
@@ -76,13 +72,10 @@ export default function LoginPage() {
 
         {/* Logo */}
         <div style={{ textAlign:'center', marginBottom:'24px' }}>
-          <div style={{
-            width:'52px', height:'52px', background: T.accent, borderRadius:'14px',
-            display:'flex', alignItems:'center', justifyContent:'center',
-            fontWeight:'800', fontSize:'18px', color: T.card, margin:'0 auto 12px'
-          }}>DZ</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/dizgo-icon.png" alt="DIZGO" width={52} height={52} style={{ borderRadius:'14px', margin:'0 auto 12px', display:'block' }} />
           <div style={{ fontWeight:'800', fontSize:'22px', color: T.text }}>
-            DI<span style={{ color: T.accent }}>Z</span>GO
+            d<span style={{ color: T.accent }}>i</span>zgo
           </div>
           <div style={{ fontSize:'12px', color: T.muted, marginTop:'4px' }}>
             Hallazgo de dinero · Plataforma e-commerce LATAM

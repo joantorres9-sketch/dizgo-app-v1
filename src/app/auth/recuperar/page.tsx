@@ -2,11 +2,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { useTema } from '@/lib/tema'
 
-const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',green:'#2DD4A0',red:'#F05C5C',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
 const inp: React.CSSProperties = { width:'100%', background:'#0D1E35', border:`1.5px solid #1E3050`, borderRadius:'8px', padding:'9px 12px', fontSize:'13px', color:'#E8EDF5', outline:'none', boxSizing:'border-box' }
 
 export default function RecuperarPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,8 +28,9 @@ export default function RecuperarPage() {
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       <div style={{ width:'min(360px, calc(100vw - 32px))' }}>
         <div style={{ textAlign:'center', marginBottom:'24px' }}>
-          <div style={{ width:'52px', height:'52px', background: T.accent, borderRadius:'14px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'18px', color: T.card, margin:'0 auto 12px' }}>DZ</div>
-          <div style={{ fontWeight:'800', fontSize:'20px', color: T.text }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/dizgo-icon.png" alt="DIZGO" width={52} height={52} style={{ borderRadius:'14px', margin:'0 auto 12px', display:'block' }} />
+          <div style={{ fontWeight:'800', fontSize:'20px', color: T.text }}>d<span style={{ color: T.accent }}>i</span>zgo</div>
         </div>
         <div style={{ background: T.card, border:`1px solid ${T.border}`, borderRadius:'14px', padding:'24px' }}>
           {!enviado ? (

@@ -5,6 +5,7 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContai
 import { GuiaBienvenida } from '@/components/GuiaBienvenida'
 import { GuiaCosteo } from '@/components/GuiaCosteo'
 import { paisPorCodigo } from '@/lib/paises'
+import { useTema } from '@/lib/tema'
 
 // ── TIPOS ────────────────────────────────────────────────────
 type MesData = {
@@ -18,15 +19,9 @@ type KPI = { label:string; valor:string; sub:string; color:string; icon:string; 
 
 // ── HELPERS ──────────────────────────────────────────────────
 const MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-const C = { azul:'#3D8EF0', verde:'#2DD4A0', amarillo:'#F5A623', rojo:'#F05C5C', morado:'#9B6BFF', fondo:'#0A0D14', card:'#111520', borde:'rgba(255,255,255,0.07)', muted:'#5A6478', texto:'#E8EDF5', sub:'#8B96A8' }
-const s = (extra?:React.CSSProperties): React.CSSProperties => ({ background:C.card, border:`1px solid ${C.borde}`, borderRadius:'12px', ...extra })
 function fmt(n:number){ return n>=1000000?`$${(n/1000000).toFixed(1)}M`:n>=1000?`$${Math.round(n/1000)}K`:`$${Math.round(n)}` }
 function fmtFull(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
 function pct(n:number){ return `${Math.round(n)}%` }
-function semC(v:number,bueno:number,malo:number,inv=false){
-  if(inv) return v<=malo?C.verde:v<=bueno?C.amarillo:C.rojo
-  return v>=bueno?C.verde:v>=malo?C.amarillo:C.rojo
-}
 
 const PERIODOS = [
   { key:'mes', label:'Este mes' },
@@ -38,6 +33,17 @@ const PERIODOS = [
 
 export default function DashboardPage() {
   const supabase = createClient()
+  const { T, modo } = useTema()
+  // Adaptador -- esta página ya usaba nombres en español (fondo/borde/texto/sub) en vez de la
+  // convención bg/border/text/muted del resto del app; se mantiene igual para no reescribir los
+  // ~475 usos de C.xxx en este archivo, pero la fuente de verdad ya es la paleta compartida.
+  // muted y sub eran dos grises distintos y ambos de bajo contraste -- se colapsan en T.muted.
+  const C = { azul:T.blue, verde:T.green, amarillo:T.yellow, rojo:T.red, morado:T.purple, fondo:T.bg, card:T.card, borde:T.border, muted:T.muted, texto:T.text, sub:T.muted }
+  const s = (extra?:React.CSSProperties): React.CSSProperties => ({ background:C.card, border:`1px solid ${C.borde}`, borderRadius:'12px', ...extra })
+  function semC(v:number,bueno:number,malo:number,inv=false){
+    if(inv) return v<=malo?C.verde:v<=bueno?C.amarillo:C.rojo
+    return v>=bueno?C.verde:v>=malo?C.amarillo:C.rojo
+  }
   const printRef = useRef<HTMLDivElement>(null)
   const [loading, setLoading] = useState(true)
   const [periodo, setPeriodo] = useState('semestre')
@@ -292,9 +298,9 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
           {periodo==='custom' && (
             <>
               <input type="date" value={fechaIni} onChange={e=>setFechaIni(e.target.value)}
-                style={{ background:'#0A0D14', border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme:'dark' }} />
+                style={{ background:C.fondo, border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme: modo === 'oscuro' ? 'dark' : 'light' }} />
               <input type="date" value={fechaFin} onChange={e=>setFechaFin(e.target.value)}
-                style={{ background:'#0A0D14', border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme:'dark' }} />
+                style={{ background:C.fondo, border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme: modo === 'oscuro' ? 'dark' : 'light' }} />
               <button onClick={loadData} style={{ padding:'7px 12px', background:C.azul, border:'none', borderRadius:'8px', color:'#fff', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Aplicar</button>
             </>
           )}

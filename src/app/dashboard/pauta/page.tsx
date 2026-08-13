@@ -7,13 +7,7 @@ import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
-
-const T = {
-  bg:'#0D1E35', card:'#111520', card2:'#0A0D14',
-  accent:'#F5A623', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#8B96A8', border:'rgba(255,255,255,0.07)',
-}
+import { useTema } from '@/lib/tema'
 
 type Registro = {
   id: string; fecha: string; plataforma: string; campana: string
@@ -22,14 +16,6 @@ type Registro = {
 }
 type Producto = { id: string; nombre: string; cpa_maximo: number }
 
-const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
-
-function semCPA(cpa: number, max: number) {
-  if (max <= 0) return T.muted
-  return cpa <= max * 0.8 ? T.green : cpa <= max ? T.yellow : T.red
-}
-function semROAS(roas: number) { return roas >= 3 ? T.green : roas >= 2 ? T.yellow : T.red }
-function semCTR(ctr: number) { return ctr >= 2 ? T.green : ctr >= 1 ? T.yellow : T.red }
 function fmt(n: number) { return `$${Math.round(n).toLocaleString('es-CO')}` }
 const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 
@@ -73,6 +59,14 @@ function parsearCSVMeta(texto: string): Partial<Registro>[] {
 }
 
 export default function PautaPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
+  function semCPA(cpa: number, max: number) {
+    if (max <= 0) return T.muted
+    return cpa <= max * 0.8 ? T.green : cpa <= max ? T.yellow : T.red
+  }
+  function semROAS(roas: number) { return roas >= 3 ? T.green : roas >= 2 ? T.yellow : T.red }
+  function semCTR(ctr: number) { return ctr >= 2 ? T.green : ctr >= 1 ? T.yellow : T.red }
   const supabase = createClient()
   const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')

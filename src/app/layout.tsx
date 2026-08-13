@@ -22,10 +22,31 @@ export const viewport: Viewport = {
   initialScale: 1,
 }
 
+// Deja el atributo data-theme puesto ANTES del primer pintado (localStorage no está disponible
+// en el server) -- sin esto, la página siempre arranca oscura y "salta" a claro un frame
+// después si el usuario ya eligió modo claro, un parpadeo molesto (FOUC de tema).
+const SCRIPT_TEMA_INICIAL = `
+(function(){
+  try {
+    var t = localStorage.getItem('dizgo_tema');
+    if (t !== 'claro' && t !== 'oscuro') {
+      t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'claro' : 'oscuro';
+    }
+    document.documentElement.setAttribute('data-theme', t);
+  } catch (e) {}
+})();
+`
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" className={`${spaceGrotesk.variable} ${jetbrains.variable}`}>
-      <body className="bg-dizgo-bg text-dizgo-text font-sans antialiased">
+    // suppressHydrationWarning es a propósito: el script de abajo reescribe data-theme antes de
+    // que React hidrate (localStorage/prefers-color-scheme no existen en el server), así que un
+    // mismatch entre el "oscuro" del server y lo que el script ya puso es esperado, no un bug.
+    <html lang="es" className={`${spaceGrotesk.variable} ${jetbrains.variable}`} data-theme="oscuro" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SCRIPT_TEMA_INICIAL }} />
+      </head>
+      <body className="font-sans antialiased">
         {children}
       </body>
     </html>

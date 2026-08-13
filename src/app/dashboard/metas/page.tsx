@@ -6,14 +6,7 @@ import { configMetas, type FilaMeta } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
-
-// ── TEMA ──────────────────────────────────────────────────────
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238', gold:'#FFD700',
-}
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
 type Tab = 'metas' | 'tiempo_real' | 'proyeccion' | 'historial' | 'hoy'
 type Modo = 'sobrevivir' | 'rentabilidad' | 'crecer' | 'tiburon'
@@ -45,10 +38,10 @@ const META_DEFAULT: MetasMes = {
 }
 
 const MODOS: { v:Modo; l:string; desc:string; color:string }[] = [
-  { v:'sobrevivir',   l:'🔴 Sobrevivir',   desc:'Cubrir el PE mínimo. No quebrar.',          color:T.red },
-  { v:'rentabilidad', l:'🟡 Rentabilidad', desc:'Generar utilidad real este mes.',            color:T.yellow },
-  { v:'crecer',       l:'🟢 Crecer',       desc:'Escalar controladamente con excedentes.',    color:T.green },
-  { v:'tiburon',      l:'🟠 Tiburón',      desc:'Escalar agresivo al máximo de capacidad.',   color:T.gold },
+  { v:'sobrevivir',   l:'🔴 Sobrevivir',   desc:'Cubrir el PE mínimo. No quebrar.',          color:PALETA_OSCURA.red },
+  { v:'rentabilidad', l:'🟡 Rentabilidad', desc:'Generar utilidad real este mes.',            color:PALETA_OSCURA.yellow },
+  { v:'crecer',       l:'🟢 Crecer',       desc:'Escalar controladamente con excedentes.',    color:PALETA_OSCURA.green },
+  { v:'tiburon',      l:'🟠 Tiburón',      desc:'Escalar agresivo al máximo de capacidad.',   color:'#FFD700' },
 ]
 
 const fmt = (n:number) => `$${Math.round(n).toLocaleString('es-CO')}`
@@ -63,9 +56,10 @@ function calcISO(tc:number, td:number, te:number, dev:number, margen:number): nu
   return safe(Math.round(iso))
 }
 function estadoISO(iso:number) { return iso >= 80 ? 'verde' : iso >= 60 ? 'amarillo' : 'rojo' }
-function colorISO(iso:number) { return iso >= 80 ? T.green : iso >= 60 ? T.yellow : T.red }
 
 export default function MetasPage() {
+  const { T } = useTema()
+  function colorISO(iso:number) { return iso >= 80 ? T.green : iso >= 60 ? T.yellow : T.red }
   const supabase = createClient()
   const { puede } = usePermisos()
 

@@ -6,15 +6,7 @@ import { configInversionActivos, type FilaInversionActivo } from '@/lib/plantill
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
-
-// ── TEMA ──────────────────────────────────────────────────────
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238',
-  gold:'#FFD700',
-}
+import { useTema } from '@/lib/tema'
 
 // ── TIPOS ─────────────────────────────────────────────────────
 type Tab = 'inversion' | 'capital_propio' | 'oportunidad' | 'credito' | 'roi'
@@ -95,6 +87,7 @@ const CAPITAL_DEFAULT: Omit<Capital,'id'>[] = [
 
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────
 export default function InversionPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede } = usePermisos()
 

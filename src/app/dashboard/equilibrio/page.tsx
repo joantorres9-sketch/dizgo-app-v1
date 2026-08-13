@@ -3,15 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
-
-// ── TEMA ──────────────────────────────────────────────────────
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238',
-  gold:'#FFD700',
-}
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
 // ── TIPOS ─────────────────────────────────────────────────────
 type Modo = 'minimo' | 'rentabilidad' | 'tiburon'
@@ -55,9 +47,9 @@ function calcGanancia(p: ProductoPE): number {
 
 // ── CONSTANTES ────────────────────────────────────────────────
 const MODOS: { v: Modo; l: string; sub: string; color: string }[] = [
-  { v:'minimo',        l:'🔴 PE Mínimo',         sub:'Solo cubrir CF+CV. No quebrar.',          color: T.red },
-  { v:'rentabilidad',  l:'🟡 Meta Rentabilidad',  sub:'CF+CV+utilidad deseada.',                 color: T.yellow },
-  { v:'tiburon',       l:'🟢 Modo Tiburón',       sub:'Escalar al máximo con recursos actuales.', color: T.gold },
+  { v:'minimo',        l:'🔴 PE Mínimo',         sub:'Solo cubrir CF+CV. No quebrar.',          color: PALETA_OSCURA.red },
+  { v:'rentabilidad',  l:'🟡 Meta Rentabilidad',  sub:'CF+CV+utilidad deseada.',                 color: PALETA_OSCURA.yellow },
+  { v:'tiburon',       l:'🟢 Modo Tiburón',       sub:'Escalar al máximo con recursos actuales.', color: '#FFD700' },
 ]
 
 const CONFIG_DEFAULT: Config = {
@@ -69,6 +61,7 @@ const CONFIG_DEFAULT: Config = {
 
 // ── COMPONENTE PRINCIPAL ──────────────────────────────────────
 export default function EquilibrioPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede } = usePermisos()
 
@@ -289,7 +282,7 @@ export default function EquilibrioPage() {
   const ritmoNecesario     = diasRestantes > 0 ? Math.ceil(faltanEntregados / diasRestantes) : 0
   const vaBien             = entregadosActuales >= (peMeta * diaActual / 30)
 
-  const modoColor = { minimo: T.red, rentabilidad: T.yellow, tiburon: T.gold }[config.modo_activo]
+  const modoColor = { minimo: T.red, rentabilidad: T.yellow, tiburon: '#FFD700' }[config.modo_activo]
 
   // ── ESCENARIOS ─────────────────────────────────────────────
   const escenarios = [

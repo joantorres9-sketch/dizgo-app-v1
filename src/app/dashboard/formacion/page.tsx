@@ -1,9 +1,9 @@
 'use client'
 import { RequierePermiso } from '@/components/RequierePermiso'
-
-const T = { bg:'#0D1E35', card:'#081426', accent:'#F58720', blue:'#3D8EF0', text:'#E8EDF5', muted:'#5A7A9A', border:'#152238' }
+import { useTema } from '@/lib/tema'
 
 export default function FormacionPage() {
+  const { T } = useTema()
   return (
     <RequierePermiso modulo="formacion">
     <div style={{ color:T.text, fontFamily:'"DM Sans", system-ui, sans-serif' }}>

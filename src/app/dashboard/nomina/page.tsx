@@ -10,14 +10,7 @@ import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
-
-// ── TEMA ──────────────────────────────────────────────────
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238',
-}
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
 // ── TIPOS ─────────────────────────────────────────────────
 interface Colaborador {
@@ -126,11 +119,11 @@ const TASAS_COL_2025: Partial<TasaHistorico> = {
 
 // ── ESTILOS BASE ──────────────────────────────────────────
 const inp: React.CSSProperties = {
-  width:'100%', background:'#0A1628', border:`1.5px solid ${T.border}`,
+  width:'100%', background:'#0A1628', border:`1.5px solid ${PALETA_OSCURA.border}`,
   borderRadius:'8px', padding:'8px 10px', fontSize:'12px',
-  color:T.text, outline:'none', boxSizing:'border-box',
+  color:PALETA_OSCURA.text, outline:'none', boxSizing:'border-box',
 }
-const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
+const lbl: React.CSSProperties = { fontSize:'11px', color:PALETA_OSCURA.muted, marginBottom:'4px', display:'block' }
 const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const row3: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }
 const sec: React.CSSProperties = { fontSize:'11px', fontWeight:'700', letterSpacing:'0.05em', marginBottom:'8px', marginTop:'16px' }
@@ -140,6 +133,7 @@ const inpDate: React.CSSProperties = { ...inp, colorScheme: 'dark' }
 
 // ── Tooltip de ayuda reutilizable (ícono ⓘ, texto al hover) ──
 function Ayuda({ texto }: { texto: string }) {
+  const { T } = useTema()
   const [open, setOpen] = useState(false)
   return (
     <span style={{ position:'relative', display:'inline-block', marginLeft:'5px' }}>
@@ -184,6 +178,7 @@ function InputMiles({ value, onChange, style, locale = 'es-CO' }: { value: numbe
 // puede mostrar imágenes en las opciones, así que se arma un dropdown propio (mismo patrón que
 // ComboBuscable) para que se vea el país, no solo el código pelado ("+593") ──
 function SelectorIndicativo({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { T } = useTema()
   const [open, setOpen] = useState(false)
   const actual = PAISES.find(p => p.codigoTel === value) || PAISES[0]
   return (
@@ -215,6 +210,7 @@ function SelectorIndicativo({ value, onChange }: { value: string; onChange: (v: 
 function ComboBuscable({ value, onChange, opciones, placeholder }: {
   value: string; onChange: (v: string) => void; opciones: string[]; placeholder?: string
 }) {
+  const { T } = useTema()
   const [q, setQ] = useState(value)
   const [open, setOpen] = useState(false)
   useEffect(() => { setQ(value) }, [value])
@@ -427,6 +423,7 @@ function ModalColaborador({
   // arrancaba siempre en modo Colombia sin importar el país real del tenant.
   paisTenant: string
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const { puedePais } = usePermisos()
   const [step, setStep] = useState(0)
@@ -1186,6 +1183,7 @@ function CajaCargo({ cargo, cargos, colaboradores, procesos, tenantId, onReload,
   cargo: Cargo; cargos: Cargo[]; colaboradores: Colaborador[]; procesos: Proceso[]; tenantId: string
   onReload: () => void; dragId: string | null; setDragId: (id: string | null) => void; nivel: number
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [showNuevo, setShowNuevo] = useState(false)
   const [nuevoNombre, setNuevoNombre] = useState('')
@@ -1267,6 +1265,7 @@ function CajaCargo({ cargo, cargos, colaboradores, procesos, tenantId, onReload,
 function ArbolOrganigrama({ cargos, colaboradores, procesos, tenantId, onReload }: {
   cargos: Cargo[]; colaboradores: Colaborador[]; procesos: Proceso[]; tenantId: string; onReload: () => void
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [dragId, setDragId] = useState<string | null>(null)
   const [showNuevaRaiz, setShowNuevaRaiz] = useState(false)
@@ -1327,14 +1326,15 @@ function ArbolOrganigrama({ cargos, colaboradores, procesos, tenantId, onReload 
 
 // ── TABLERO DE PROCESOS (drag-and-drop nativo, sin librerías) ─
 const TIPOS_PROCESO = [
-  { v:'Estratégico', c:T.red },
-  { v:'Misional',    c:T.blue },
-  { v:'Apoyo',       c:T.yellow },
+  { v:'Estratégico', c:PALETA_OSCURA.red },
+  { v:'Misional',    c:PALETA_OSCURA.blue },
+  { v:'Apoyo',       c:PALETA_OSCURA.yellow },
 ] as const
 
 function TableroProcesos({ procesos, colaboradores, tenantId, onReload }: {
   procesos: Proceso[]; colaboradores: Colaborador[]; tenantId: string; onReload: () => void
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [dragId, setDragId] = useState<string | null>(null)
   const [editando, setEditando] = useState<Proceso | null>(null)
@@ -1440,14 +1440,15 @@ function TableroProcesos({ procesos, colaboradores, tenantId, onReload }: {
 
 // ── MATRIZ DE INDICADORES ─────────────────────────────────
 function semaforoIndicador(valor: number, meta: number): string {
-  if (!meta) return T.muted
+  if (!meta) return PALETA_OSCURA.muted
   const pct = valor / meta
-  return pct >= 0.9 ? T.green : pct >= 0.7 ? T.yellow : T.red
+  return pct >= 0.9 ? PALETA_OSCURA.green : pct >= 0.7 ? PALETA_OSCURA.yellow : PALETA_OSCURA.red
 }
 
 function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onReload }: {
   indicadores: Indicador[]; mediciones: Medicion[]; procesos: Proceso[]; tenantId: string; onReload: () => void
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ proceso_id:'', nombre:'', objetivo:'', formula:'', unidad:'%', frecuencia:'Mensual', meta:0 })
@@ -1616,6 +1617,7 @@ function MatrizIndicadores({ indicadores, mediciones, procesos, tenantId, onRelo
 function LineaAjustable({ concepto, valor, editable, onAjustar }: {
   l: Record<string, unknown>; concepto: string; valor: number; editable: boolean; onAjustar: () => void
 }) {
+  const { T } = useTema()
   return (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'11px', color:T.text, padding:'3px 0' }}>
       <span>{concepto}</span>
@@ -1637,6 +1639,7 @@ function ModalDetalleSolicitud({ s, onClose, onAprobar, onRechazar }: {
   s: Record<string, unknown>; onClose: () => void
   onAprobar: () => void; onRechazar: () => void
 }) {
+  const { T } = useTema()
   const supabase = createClient()
   const esNovedad = ['vacaciones', 'incapacidad', 'auxilio'].includes(String(s.tipo))
   const label = TIPOS_NOVEDAD.flatMap(c => c.items).find(it => it.v === s.tipo)?.l
@@ -1725,6 +1728,7 @@ function ModalAjuste({ concepto, valorSistema, onClose, onGuardar }: {
   concepto: string; valorSistema: number; onClose: () => void
   onGuardar: (valorAjustado: number, motivo: string) => void
 }) {
+  const { T } = useTema()
   const [valor, setValor] = useState(valorSistema)
   const [motivo, setMotivo] = useState('')
   return (
@@ -1753,6 +1757,7 @@ function ModalAjuste({ concepto, valorSistema, onClose, onGuardar }: {
 
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function NominaPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'procesos'|'indicadores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')

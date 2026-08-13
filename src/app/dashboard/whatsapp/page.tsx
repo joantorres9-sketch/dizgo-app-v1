@@ -5,53 +5,52 @@ import { inicializarPaisTenant, paisPorCodigo } from '@/lib/paises'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
+import { useTema, PALETA_OSCURA } from '@/lib/tema'
 
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238', wa:'#25D366',
-}
+const WA = '#25D366' // verde de marca de WhatsApp -- fijo, no depende del tema
 
+// Colores de estas dos constantes de configuración: se quedan fijos en los tonos oscuros aunque
+// el usuario esté en modo claro -- son etiquetas/categorías (columnas del kanban, tipo de
+// plantilla), no texto de lectura, así que no hacía falta ligarlas al hook de tema.
 const PISCINAS = [
-  { v:'ingresados_ia',       l:'🤖 Ingresados IA',      c:T.blue },
-  { v:'filtro_ia',           l:'⚡ Filtro IA',           c:T.purple },
-  { v:'intervencion_humana', l:'👤 Intervención Humana', c:T.red },
-  { v:'confirmados',         l:'✅ Confirmados',         c:T.green },
+  { v:'ingresados_ia',       l:'🤖 Ingresados IA',      c:PALETA_OSCURA.blue },
+  { v:'filtro_ia',           l:'⚡ Filtro IA',           c:PALETA_OSCURA.purple },
+  { v:'intervencion_humana', l:'👤 Intervención Humana', c:PALETA_OSCURA.red },
+  { v:'confirmados',         l:'✅ Confirmados',         c:PALETA_OSCURA.green },
 ]
 
 const PLANTILLAS_BASE: { tipo:string; nombre:string; emoji:string; color:string; contenido:string; estados:string[] }[] = [
-  { tipo:'confirmacion', nombre:'Confirmación de pedido', emoji:'✅', color:T.green,
+  { tipo:'confirmacion', nombre:'Confirmación de pedido', emoji:'✅', color:PALETA_OSCURA.green,
     contenido:'¡Hola {{cliente}}! 👋\n\nTe contactamos de {{tienda}} para confirmar tu pedido.\n\n📦 Producto: {{producto}}\n💰 Valor: {{pvp}}\n📍 Ciudad: {{ciudad}}\n\n¿Confirmamos tu pedido y dirección exacta?',
     estados:['ingresado','en_gestion'] },
-  { tipo:'guia_generada', nombre:'Guía generada', emoji:'📋', color:T.blue,
+  { tipo:'guia_generada', nombre:'Guía generada', emoji:'📋', color:PALETA_OSCURA.blue,
     contenido:'¡Hola {{cliente}}! 📋\n\nTu pedido tiene guía generada.\n\n📦 Guía: {{guia}}\n📍 Destino: {{ciudad}}\n\nPuedes rastrearlo con este número en la transportadora.',
     estados:['confirmado'] },
-  { tipo:'despacho', nombre:'Pedido despachado', emoji:'🚚', color:T.accent,
+  { tipo:'despacho', nombre:'Pedido despachado', emoji:'🚚', color:PALETA_OSCURA.accent,
     contenido:'¡Hola {{cliente}}! 🎉\n\nTu pedido está en camino 🚚\n\n📦 Producto: {{producto}}\n📋 Guía: {{guia}}\n📍 Destino: {{ciudad}}\n⏱ Tiempo estimado: {{tiempo_entrega}}',
     estados:['despachado'] },
-  { tipo:'bodega_destino', nombre:'En bodega destino', emoji:'📦', color:T.purple,
+  { tipo:'bodega_destino', nombre:'En bodega destino', emoji:'📦', color:PALETA_OSCURA.purple,
     contenido:'¡Hola {{cliente}}! 📦\n\nTu pedido llegó a la bodega de {{ciudad}}. El mensajero te llamará pronto para coordinar la entrega.',
     estados:['en_transito'] },
-  { tipo:'transito', nombre:'En reparto/tránsito', emoji:'📍', color:T.purple,
+  { tipo:'transito', nombre:'En reparto/tránsito', emoji:'📍', color:PALETA_OSCURA.purple,
     contenido:'¡Hola {{cliente}}! 📍\n\nTu pedido está muy cerca ⏰\n\n✅ Estar disponible para recibir\n✅ Tener el valor exacto: {{pvp}}\n✅ Confirma tu dirección',
     estados:['en_transito'] },
-  { tipo:'novedad', nombre:'Gestión de novedad', emoji:'⚠️', color:T.yellow,
+  { tipo:'novedad', nombre:'Gestión de novedad', emoji:'⚠️', color:PALETA_OSCURA.yellow,
     contenido:'¡Hola {{cliente}}! ⚠️\n\nTuvimos una novedad con tu pedido.\n\n📦 Producto: {{producto}}\n\nNecesitamos confirmar tu dirección exacta y mejor horario de entrega. ¿Nos ayudas? 🙏',
     estados:['novedad'] },
-  { tipo:'retrasado', nombre:'Pedido retrasado', emoji:'⏳', color:T.yellow,
+  { tipo:'retrasado', nombre:'Pedido retrasado', emoji:'⏳', color:PALETA_OSCURA.yellow,
     contenido:'¡Hola {{cliente}}! ⏳\n\nTu pedido está tomando más tiempo del esperado. Lo estamos gestionando activamente con la transportadora. Gracias por tu paciencia 🙏',
     estados:['en_transito','novedad'] },
-  { tipo:'devolucion', nombre:'Gestión de devolución', emoji:'🔄', color:T.red,
+  { tipo:'devolucion', nombre:'Gestión de devolución', emoji:'🔄', color:PALETA_OSCURA.red,
     contenido:'¡Hola {{cliente}}! 🔄\n\nNos enteramos que tu pedido fue devuelto o cancelado.\n\n¿Qué pasó? Queremos entender para mejorar. Si deseas reagendar, con gusto te ayudamos 🙏',
     estados:['devolucion','cancelado'] },
-  { tipo:'anticipo', nombre:'Solicitud de anticipo', emoji:'💰', color:T.accent,
+  { tipo:'anticipo', nombre:'Solicitud de anticipo', emoji:'💰', color:PALETA_OSCURA.accent,
     contenido:'Hola {{cliente}}, tu pedido está listo. Para asegurar la entrega a {{ciudad}}, solicitamos un pequeño anticipo del flete de {{anticipo_valor}}. ¿Deseas continuar? 😊',
     estados:['confirmado','en_gestion'] },
-  { tipo:'recompra', nombre:'Recompra/Fidelización', emoji:'⭐', color:T.yellow,
+  { tipo:'recompra', nombre:'Recompra/Fidelización', emoji:'⭐', color:PALETA_OSCURA.yellow,
     contenido:'¡Hola {{cliente}}! ⭐\n\n¿Todo llegó perfecto con tu {{producto}}? Tu opinión nos importa.\n\n🎁 Como cliente especial, tienes descuento exclusivo en tu próxima compra.',
     estados:['entregado'] },
-  { tipo:'carrito_abandonado', nombre:'Carrito abandonado', emoji:'🛒', color:T.purple,
+  { tipo:'carrito_abandonado', nombre:'Carrito abandonado', emoji:'🛒', color:PALETA_OSCURA.purple,
     contenido:'¡Hola {{cliente}}! 🛒\n\nVimos que estuviste interesado en {{producto}} ({{pvp}}). ¿Tienes alguna duda? Estamos aquí para ayudarte a completar tu pedido 😊',
     estados:['ingresado'] },
 ]
@@ -99,9 +98,6 @@ type Snapshot = {
   cpa_excedido: boolean
 }
 
-const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
-const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'9px' }
-
 const TABS = [
   { v:'kanban' as const, l:'📋 Tablero Kanban' },
   { v:'plantillas' as const, l:'📝 Plantillas' },
@@ -115,6 +111,9 @@ function llenarVariables(contenido: string, vars: Record<string,string>): string
 }
 
 export default function WhatsAppPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
+  const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'9px' }
   const supabase = createClient()
   const { puede, cargando: permisosCargando } = usePermisos()
   const [tenantId, setTenantId] = useState('')
@@ -332,7 +331,7 @@ export default function WhatsAppPage() {
         {tabsVisibles.map(t => (
           <button key={t.v} onClick={() => setTab(t.v)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
-              background: tab===t.v ? T.wa : 'rgba(255,255,255,0.05)', color: tab===t.v ? '#fff' : T.muted }}>
+              background: tab===t.v ? WA : 'rgba(255,255,255,0.05)', color: tab===t.v ? '#fff' : T.muted }}>
             {t.l}
           </button>
         ))}
@@ -396,9 +395,9 @@ export default function WhatsAppPage() {
               return (
                 <button key={pl.id} onClick={() => setPlantillaSel(pl.tipo)}
                   style={{ padding:'12px', borderRadius:'10px', cursor:'pointer', textAlign:'left',
-                    border:`1px solid ${plantillaSel===pl.tipo ? (base?.color||T.wa)+'44' : T.border}`,
-                    background: plantillaSel===pl.tipo ? `${base?.color||T.wa}10` : T.card }}>
-                  <div style={{ fontSize:'13px', fontWeight:'600', color: plantillaSel===pl.tipo ? (base?.color||T.wa) : T.text }}>
+                    border:`1px solid ${plantillaSel===pl.tipo ? (base?.color||WA)+'44' : T.border}`,
+                    background: plantillaSel===pl.tipo ? `${base?.color||WA}10` : T.card }}>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color: plantillaSel===pl.tipo ? (base?.color||WA) : T.text }}>
                     {base?.emoji||'💬'} {pl.nombre}
                   </div>
                   <div style={{ fontSize:'10px', color:T.muted, marginTop:'3px' }}>{pl.activa ? '✓ Activa' : 'Inactiva'}</div>
@@ -414,7 +413,7 @@ export default function WhatsAppPage() {
               return (
                 <>
                   <div style={{ fontSize:'13px', fontWeight:'700', color:T.text, marginBottom:'12px' }}>{pl.nombre}</div>
-                  <div style={{ background:'#0A0D14', borderRadius:'10px', padding:'14px', fontSize:'13px', lineHeight:'1.8', whiteSpace:'pre-wrap', border:`1px solid ${T.wa}30`, marginBottom:'14px' }}>
+                  <div style={{ background:'#0A0D14', borderRadius:'10px', padding:'14px', fontSize:'13px', lineHeight:'1.8', whiteSpace:'pre-wrap', border:`1px solid ${WA}30`, marginBottom:'14px' }}>
                     {llenarVariables(pl.contenido, { cliente:'Juan', producto:'Reloj LED', pvp:fmt(69900), ciudad:'Medellín', guia:'COL123456', tienda: storeCtx?.nombre_tienda || 'tu tienda', tiempo_entrega: storeCtx?.tiempo_entrega || '3-5 días', anticipo_valor: fmt(15000) })}
                   </div>
                   <div style={{ fontSize:'11px', color:T.muted }}>Variables disponibles: {'{{cliente}} {{producto}} {{pvp}} {{ciudad}} {{guia}} {{tienda}} {{tiempo_entrega}} {{anticipo_valor}}'}</div>
@@ -436,8 +435,8 @@ export default function WhatsAppPage() {
               {pedidos.filter(p => !['entregado','cancelado','devolucion'].includes(p.estado)).map(p => (
                 <div key={p.id} onClick={() => setSeleccionados(prev => prev.includes(p.id) ? prev.filter(x=>x!==p.id) : [...prev, p.id])}
                   style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 16px', borderBottom:`1px solid ${T.border}`, cursor:'pointer',
-                    background: seleccionados.includes(p.id) ? `${T.wa}08` : 'transparent' }}>
-                  <input type="checkbox" checked={seleccionados.includes(p.id)} onChange={()=>{}} style={{ accentColor:T.wa }} />
+                    background: seleccionados.includes(p.id) ? `${WA}08` : 'transparent' }}>
+                  <input type="checkbox" checked={seleccionados.includes(p.id)} onChange={()=>{}} style={{ accentColor:WA }} />
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:'12px', fontWeight:'600' }}>{p.cliente_nombre}</div>
                     <div style={{ fontSize:'10px', color:T.muted }}>{p.cliente_telefono} · {p.cliente_ciudad}</div>
@@ -449,7 +448,7 @@ export default function WhatsAppPage() {
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:T.wa, marginBottom:'12px' }}>📤 CONFIGURAR ENVÍO</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:WA, marginBottom:'12px' }}>📤 CONFIGURAR ENVÍO</div>
             <div style={{ marginBottom:'14px' }}>
               <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'6px' }}>Plantilla</label>
               <select value={plantillaSel} onChange={e=>setPlantillaSel(e.target.value)}
@@ -457,7 +456,7 @@ export default function WhatsAppPage() {
                 {plantillas.map(pl => <option key={pl.tipo} value={pl.tipo}>{pl.nombre}</option>)}
               </select>
             </div>
-            <div style={{ padding:'12px', background:`${T.wa}08`, borderRadius:'8px', marginBottom:'14px', fontSize:'12px', color:T.muted }}>
+            <div style={{ padding:'12px', background:`${WA}08`, borderRadius:'8px', marginBottom:'14px', fontSize:'12px', color:T.muted }}>
               {seleccionados.length} pedidos seleccionados · Se abre WA uno por uno para evitar bloqueos
             </div>
             <button onClick={async () => {
@@ -467,7 +466,7 @@ export default function WhatsAppPage() {
               }
               setSeleccionados([])
             }} disabled={seleccionados.length===0}
-              style={{ width:'100%', padding:'12px', background: seleccionados.length>0 ? T.wa : 'rgba(255,255,255,0.05)', border:'none', borderRadius:'10px', color: seleccionados.length>0?'#fff':T.muted, cursor: seleccionados.length>0?'pointer':'not-allowed', fontSize:'14px', fontWeight:'700' }}>
+              style={{ width:'100%', padding:'12px', background: seleccionados.length>0 ? WA : 'rgba(255,255,255,0.05)', border:'none', borderRadius:'10px', color: seleccionados.length>0?'#fff':T.muted, cursor: seleccionados.length>0?'pointer':'not-allowed', fontSize:'14px', fontWeight:'700' }}>
               💬 Iniciar envío ({seleccionados.length})
             </button>
           </div>
@@ -536,7 +535,7 @@ export default function WhatsAppPage() {
                   const base = PLANTILLAS_BASE.find(b=>b.tipo===pl.tipo)
                   return (
                     <button key={pl.id} onClick={() => enviarWA(pedidoActivo, pl.tipo)}
-                      style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', background:`${base?.color||T.wa}10`, border:`1px solid ${base?.color||T.wa}30`, borderRadius:'8px', color:base?.color||T.wa, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                      style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', background:`${base?.color||WA}10`, border:`1px solid ${base?.color||WA}30`, borderRadius:'8px', color:base?.color||WA, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                       <span>{base?.emoji} {pl.nombre}</span><span>💬</span>
                     </button>
                   )

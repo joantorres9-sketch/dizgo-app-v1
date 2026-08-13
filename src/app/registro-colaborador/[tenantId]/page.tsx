@@ -3,13 +3,14 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PAISES } from '@/lib/paises'
+import { useTema } from '@/lib/tema'
 
-const T = { bg:'#0D1E35', card:'#081426', accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', text:'#E8EDF5', muted:'#5A7A9A', border:'#152238' }
-const inp: React.CSSProperties = { width:'100%', background:'#0A1628', border:`1.5px solid ${T.border}`, borderRadius:'8px', padding:'10px 12px', fontSize:'13px', color:T.text, outline:'none', boxSizing:'border-box' }
-const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
 const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'10px', marginBottom:'12px' }
 
 export default function RegistroColaboradorPage() {
+  const { T } = useTema()
+  const inp: React.CSSProperties = { width:'100%', background:T.card2, border:`1.5px solid ${T.border}`, borderRadius:'8px', padding:'10px 12px', fontSize:'13px', color:T.text, outline:'none', boxSizing:'border-box' }
+  const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
   const params = useParams()
   const tenantId = String(params.tenantId || '')
   const supabase = createClient()

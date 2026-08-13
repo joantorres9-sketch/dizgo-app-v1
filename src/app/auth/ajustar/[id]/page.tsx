@@ -2,13 +2,14 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import { useTema } from '@/lib/tema'
 
-const T = { bg:'#0D1E35',card:'#081426',accent:'#F58720',blue:'#3D8EF0',green:'#2DD4A0',red:'#F05C5C',yellow:'#F5A623',text:'#E8EDF5',muted:'#5A7A9A',border:'#152238' }
 const upfile: React.CSSProperties = { width:'100%', background:'#0A1628', border:`1.5px dashed #1E3050`, borderRadius:'8px', padding:'12px 10px', fontSize:'11px', color:'#5A7A9A', textAlign:'center', cursor:'pointer', boxSizing:'border-box' }
 
 const DOC_LABELS: Record<string, string> = { id_a: 'Identidad — Lado A', id_b: 'Identidad — Lado B', doc_legal: 'Documento legal de la tienda' }
 
 export default function AjustarSolicitudPage() {
+  const { T } = useTema()
   const params = useParams()
   const id = String(params.id || '')
   const [loading, setLoading] = useState(true)
@@ -48,8 +49,9 @@ export default function AjustarSolicitudPage() {
     <div style={{ minHeight:'100vh', background: T.bg, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px', fontFamily:'"DM Sans", system-ui, sans-serif' }}>
       <div style={{ width:'min(480px, calc(100vw - 32px))' }}>
         <div style={{ textAlign:'center', marginBottom:'20px' }}>
-          <div style={{ width:'44px', height:'44px', background: T.accent, borderRadius:'12px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'16px', color: T.card, margin:'0 auto 10px' }}>DZ</div>
-          <div style={{ fontWeight:'800', fontSize:'18px', color: T.text }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/dizgo-icon.png" alt="DIZGO" width={44} height={44} style={{ borderRadius:'12px', margin:'0 auto 10px', display:'block' }} />
+          <div style={{ fontWeight:'800', fontSize:'18px', color: T.text }}>d<span style={{ color: T.accent }}>i</span>zgo</div>
           <div style={{ fontSize:'11px', color: T.muted }}>Ajustar solicitud de registro</div>
         </div>
 

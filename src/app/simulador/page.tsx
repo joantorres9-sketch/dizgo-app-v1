@@ -3,8 +3,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { PAISES, paisPorCodigo, formatMoneda } from '@/lib/paises'
 import { useGeoPais } from '@/lib/geo'
-
-const T = { bg:'#0D1E35', card:'#081426', accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0', red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF', text:'#E8EDF5', muted:'#5A7A9A', border:'#152238' }
+import { useTema } from '@/lib/tema'
 
 const WA_JOAN = '573206348574'
 
@@ -14,8 +13,6 @@ const inp: React.CSSProperties = { width:'100%', background:'#0A1628', border:'1
 const lbl: React.CSSProperties = { fontSize:'11px', color:'#5A7A9A', marginBottom:'4px', display:'block' }
 const fld: React.CSSProperties = { marginBottom:'12px' }
 const row2: React.CSSProperties = { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'10px', marginBottom:'12px' }
-const sectionH: React.CSSProperties = { fontSize:'12px', fontWeight:700, color: T.accent, textTransform:'uppercase', letterSpacing:'.4px', margin:'18px 0 10px' }
-
 function n(v: string) { const x = parseFloat(v.replace(/,/g,'.')); return isNaN(x) ? 0 : x }
 
 // Input de dinero que se siente "propio" del país: símbolo de la moneda al inicio y separadores
@@ -48,6 +45,8 @@ function MoneyInput({ value, onChange, paisCode, placeholder }: { value: string;
 }
 
 export default function SimuladorPage() {
+  const { T } = useTema()
+  const sectionH: React.CSSProperties = { fontSize:'12px', fontWeight:700, color: T.accent, textTransform:'uppercase', letterSpacing:'.4px', margin:'18px 0 10px' }
   const { pais, setPais, detectadoAuto } = useGeoPais('COL')
   const moneda = paisPorCodigo(pais)?.moneda || 'USD'
 
@@ -161,8 +160,9 @@ export default function SimuladorPage() {
 
         <div style={{ textAlign:'center', marginBottom:'22px' }}>
           <Link href="https://app.dizgo.app" style={{ display:'inline-flex', alignItems:'center', gap:'8px', textDecoration:'none' }}>
-            <div style={{ width:'36px', height:'36px', background: T.accent, borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, fontSize:'14px', color: T.card }}>DZ</div>
-            <div style={{ fontWeight:800, fontSize:'16px', color: T.text }}>DI<span style={{ color: T.accent }}>Z</span>GO</div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/brand/dizgo-icon.png" alt="DIZGO" width={36} height={36} style={{ borderRadius:'10px' }} />
+            <div style={{ fontWeight:800, fontSize:'16px', color: T.text }}>d<span style={{ color: T.accent }}>i</span>zgo</div>
           </Link>
           <h1 style={{ fontSize:'22px', fontWeight:800, color: T.text, margin:'16px 0 8px' }}>Calculadora de Precios para E-commerce</h1>
           <p style={{ fontSize:'13px', color: T.muted, lineHeight:1.6, maxWidth:'480px', margin:'0 auto' }}>

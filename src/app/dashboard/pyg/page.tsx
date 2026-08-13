@@ -8,10 +8,11 @@ import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
+import { useTema } from '@/lib/tema'
 
-// Paleta local de este archivo (pyg/page.tsx no usa un objeto T central, colorea inline) --
-// se arma aquí solo para pasarle theme a los componentes compartidos de carga masiva.
-const T_LIBRO = { bg:'#0A0D14', card:'#111520', card2:'#0A0D14', accent:'#F5A623', text:'#E8EDF5', muted:'#5A6478', border:'rgba(255,255,255,0.1)', green:'#2DD4A0', red:'#F05C5C' }
+// El resto de este archivo colorea inline con hex fijos (no usa un objeto T central) -- fuera
+// de alcance de esta pasada de theming. Lo que sí se conecta: el theme que reciben los
+// componentes compartidos de carga masiva (BotonesPlantilla/CargaMasivaModal), vía T real.
 
 type Producto = {
   id:string; nombre:string; pvp_final:number; costo_proveedor:number; costo_flete:number
@@ -42,6 +43,7 @@ function fmtFull(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
 const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
 
 export default function PYGPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
@@ -668,7 +670,7 @@ export default function PYGPage() {
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px' }}>
               <span style={{ fontWeight:'700' }}>📒 Libro de Caja — últimos 30 días</span>
               <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                <BotonesPlantilla config={configLibroCaja} onArchivoValidado={setPreviewLibroCaja} theme={T_LIBRO} />
+                <BotonesPlantilla config={configLibroCaja} onArchivoValidado={setPreviewLibroCaja} theme={T} />
               </div>
             </div>
             {movimientosCaja.length === 0 ? (
@@ -728,7 +730,7 @@ export default function PYGPage() {
           </div>
         </div>
       )}
-      {previewLibroCaja && <CargaMasivaModal filas={previewLibroCaja} columnas={configLibroCaja.columnas} onConfirm={confirmarImportLibroCaja} onClose={()=>setPreviewLibroCaja(null)} theme={T_LIBRO} />}
+      {previewLibroCaja && <CargaMasivaModal filas={previewLibroCaja} columnas={configLibroCaja.columnas} onConfirm={confirmarImportLibroCaja} onClose={()=>setPreviewLibroCaja(null)} theme={T} />}
     </div>
     </RequierePermiso>
   )

@@ -8,13 +8,7 @@ import { configCostosFijos, configCostosVariables, type FilaCostoFijo, type Fila
 import { generarPlantilla, parsearArchivo, type ConfigPlantilla, type FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
-
-const T = {
-  bg:'#0D1E35', card:'#081426', card2:'#0A1628',
-  accent:'#F58720', blue:'#3D8EF0', green:'#2DD4A0',
-  red:'#F05C5C', yellow:'#F5A623', purple:'#9B6BFF',
-  text:'#E8EDF5', muted:'#5A7A9A', border:'#152238'
-}
+import { useTema, PALETA_OSCURA, type PaletaColores } from '@/lib/tema'
 
 // ── HELPERS ───────────────────────────────────────────────
 function getPais() {
@@ -59,15 +53,15 @@ const CATS_CV = [
 ]
 const MODELOS = ['dropshipping','importador','produccion_propia','hibrido','todos']
 const PEF = [
-  {v:'prevencion',    l:'P — Prevención',    c:T.green,  icon:'🛡️',
+  {v:'prevencion',    l:'P — Prevención',    c:PALETA_OSCURA.green,  icon:'🛡️',
    desc:'Inversión para evitar errores: capacitación, mantenimiento, diseño de procesos, homologación proveedores'},
-  {v:'evaluacion',   l:'E — Evaluación',    c:T.blue,   icon:'🔍',
+  {v:'evaluacion',   l:'E — Evaluación',    c:PALETA_OSCURA.blue,   icon:'🔍',
    desc:'Medir y auditar: control de calidad, inspecciones, auditorías, seguimiento de indicadores'},
-  {v:'falla_interna',l:'FI — Falla Interna',c:T.yellow, icon:'⚙️',
+  {v:'falla_interna',l:'FI — Falla Interna',c:PALETA_OSCURA.yellow, icon:'⚙️',
    desc:'Errores antes del cliente: reprocesos, pedidos mal tomados, tiempos muertos, errores de despacho'},
-  {v:'falla_externa', l:'FE — Falla Externa',c:T.red,   icon:'😤',
+  {v:'falla_externa', l:'FE — Falla Externa',c:PALETA_OSCURA.red,   icon:'😤',
    desc:'Detectados por el cliente: devoluciones, reclamos, reenvíos por error, pérdida de reputación'},
-  {v:'no_clasificado',l:'Sin clasificar',    c:T.muted,  icon:'❓', desc:''},
+  {v:'no_clasificado',l:'Sin clasificar',    c:PALETA_OSCURA.muted,  icon:'❓', desc:''},
 ]
 
 // Sugerencia IA de PEF basada en palabras clave
@@ -83,13 +77,14 @@ function sugerirPEF(concepto: string): string {
 }
 
 const inp: React.CSSProperties = {
-  width:'100%',background:'#0A1628',border:`1.5px solid ${T.border}`,
-  borderRadius:'7px',padding:'7px 10px',fontSize:'12px',color:T.text,outline:'none',boxSizing:'border-box'
+  width:'100%',background:'#0A1628',border:`1.5px solid ${PALETA_OSCURA.border}`,
+  borderRadius:'7px',padding:'7px 10px',fontSize:'12px',color:PALETA_OSCURA.text,outline:'none',boxSizing:'border-box'
 }
-const lbl: React.CSSProperties = {fontSize:'11px',color:T.muted,marginBottom:'3px',display:'block'}
+const lbl: React.CSSProperties = {fontSize:'11px',color:PALETA_OSCURA.muted,marginBottom:'3px',display:'block'}
 
 // ── TOOLTIP ───────────────────────────────────────────────
 function Tip({text,children}:{text:string;children:React.ReactNode}) {
+  const { T } = useTema()
   const [s,setS]=useState(false)
   return (
     <span style={{position:'relative',display:'inline-flex',alignItems:'center',cursor:'help'}}
@@ -109,7 +104,7 @@ function BotonesPlantillaGated<T>({
 }: {
   config: ConfigPlantilla<T>
   onArchivoValidado: (filas: FilaImportada<T>[]) => void
-  theme: typeof T
+  theme: PaletaColores
   puedeAgregar: boolean
   puedeDescargar: boolean
 }) {
@@ -157,6 +152,7 @@ function BotonesPlantillaGated<T>({
 
 // ── GRÁFICO TORTA SVG ─────────────────────────────────────
 function TortaChart({datos}:{datos:{label:string;valor:number;color:string}[]}) {
+  const { T } = useTema()
   const total = datos.reduce((a,d)=>a+d.valor,0)
   if (!total) return <div style={{textAlign:'center',padding:'40px',fontSize:'12px',color:T.muted}}>Sin datos</div>
   let acum = 0
@@ -195,6 +191,7 @@ function TortaChart({datos}:{datos:{label:string;valor:number;color:string}[]}) 
 
 // ── MODAL TESTEO PRODUCTOS ────────────────────────────────
 function ModalTesteo({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void;onSave:(items:{concepto:string;valor:number}[],productoId:string,pef_cat:string)=>void}) {
+  const { T } = useTema()
   const supabase=createClient()
   const [productos,setProductos]=useState<Producto[]>([])
   const [prodSel,setProdSel]=useState<Producto|null>(null)
@@ -278,6 +275,7 @@ function ModalTesteo({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void
 
 // ── PÁGINA PRINCIPAL ──────────────────────────────────────
 export default function CostosPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { puede, cargando: cargandoPermisos } = usePermisos()
   const [tab, setTab] = useState<'dashboard'|'cf'|'cv'|'pef'|'historico'>('dashboard')
