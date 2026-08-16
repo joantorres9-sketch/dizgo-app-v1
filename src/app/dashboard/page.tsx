@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from 'recharts'
@@ -450,7 +451,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
               <span style={{ fontSize:'9px', padding:'2px 6px', borderRadius:'4px', background:a.tipo==='critico'?`${C.rojo}20`:`${C.amarillo}20`, color:a.tipo==='critico'?C.rojo:C.amarillo, flexShrink:0, fontWeight:'700' }}>{a.tipo}</span>
             </div>
           ))}
-          {alertas.length > 5 && <div style={{ fontSize:'11px', color:C.muted, textAlign:'center', marginTop:'8px' }}>+{alertas.length-5} alertas más en <a href="/dashboard/alertas" style={{ color:C.azul }}>Alertas</a></div>}
+          {alertas.length > 5 && <div style={{ fontSize:'11px', color:C.muted, textAlign:'center', marginTop:'8px' }}>+{alertas.length-5} alertas más en <Link href="/dashboard/alertas" style={{ color:C.azul }}>Alertas</Link></div>}
         </div>
       </div>
 

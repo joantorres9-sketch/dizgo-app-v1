@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
@@ -546,7 +547,7 @@ export default function CostosPage() {
           <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
             <span>👥</span>
             <span>Nómina conectada: <strong>{fmt(nominalNomina)}</strong> incluidos en CF Personal{desgloseProcesoNomina.length > 0 ? ' — liquidación del periodo actual' : ''}</span>
-            <a href="/dashboard/nomina" style={{marginLeft:'auto',color:T.green,fontSize:'11px',textDecoration:'underline'}}>Ver nómina →</a>
+            <Link href="/dashboard/nomina" style={{marginLeft:'auto',color:T.green,fontSize:'11px',textDecoration:'underline'}}>Ver nómina →</Link>
           </div>
           {desgloseProcesoNomina.length > 0 && (
             <div style={{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}}>

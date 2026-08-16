@@ -52,10 +52,19 @@ export function PermisosProvider({ children }: { children: ReactNode }) {
     setCargando(true)
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setPerfil(null); setCargando(false); return }
-    const { data } = await supabase.from('profiles')
-      .select('rol, permisos, tenant_id, horario_acceso, es_cortesia, activo')
-      .eq('id', user.id).single()
-    if (!data) { setPerfil(null); setCargando(false); return }
+    // Un error transitorio de Supabase (ej. 503 momentáneo) no debe dejar al usuario sin ver
+    // ningún módulo hasta que cierre sesión -- se reintenta una vez antes de rendirse. Solo una
+    // ausencia real de perfil (fila que de verdad no existe, sin error) limpia perfil a null.
+    let data: { rol: string; permisos: unknown; tenant_id: string | null; horario_acceso: string; es_cortesia: boolean; activo: boolean } | null = null
+    for (let intento = 0; intento < 2; intento++) {
+      const resp = await supabase.from('profiles')
+        .select('rol, permisos, tenant_id, horario_acceso, es_cortesia, activo')
+        .eq('id', user.id).single()
+      if (resp.data) { data = resp.data; break }
+      if (!resp.error) break // fila realmente no existe -- no tiene sentido reintentar
+      if (intento === 0) await new Promise(r => setTimeout(r, 800))
+    }
+    if (!data) { setCargando(false); return } // conserva el perfil anterior si había uno, en vez de vaciarlo
 
     let permisosDizgo: MatrizPermisos | null = null
     let paisesHabilitados: string[] | null = null

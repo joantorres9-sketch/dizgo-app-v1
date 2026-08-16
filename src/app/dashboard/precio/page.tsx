@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
@@ -344,7 +345,7 @@ export default function PrecioPage() {
           {productos.length===0 ? (
             <div style={{ padding:'20px', textAlign:'center' }}>
               <div style={{ fontSize:'12px', color:T.muted, marginBottom:'8px' }}>No hay productos</div>
-              <a href="/dashboard/productos" style={{ fontSize:'11px', color:T.accent }}>Ir al catálogo →</a>
+              <Link href="/dashboard/productos" style={{ fontSize:'11px', color:T.accent }}>Ir al catálogo →</Link>
             </div>
           ) : productos.map(p => {
             const m = calcMargenReal(p, p.pvp_final)

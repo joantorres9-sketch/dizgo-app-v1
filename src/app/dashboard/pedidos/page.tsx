@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
@@ -103,7 +104,7 @@ const CLIENTE_TIPO_INFO: Record<string,{l:string;c:string;icon:string}> = {
 }
 
 type Pedido = {
-  id: string; tenant_id: string; numero_pedido: string; cliente_nombre: string
+  id: string; tenant_id: string; numero_pedido: string; dropi_orden_id?: number; cliente_nombre: string
   cliente_telefono: string; cliente_ciudad: string; cliente_departamento: string
   producto_nombre: string; producto_id?: string; pvp: number; estado: string
   origen: string; risk_score: string; cliente_tipo: string
@@ -582,10 +583,10 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
               style={{padding:'6px 12px',background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:'6px',color:T.blue,fontSize:'11px',fontWeight:'600',textDecoration:'none'}}>
               📞 Llamar
             </a>
-            <a href="/dashboard/pqrsf"
+            <Link href="/dashboard/pqrsf"
               style={{padding:'6px 12px',background:`${T.purple}15`,border:`1px solid ${T.purple}30`,borderRadius:'6px',color:T.purple,fontSize:'11px',fontWeight:'600',textDecoration:'none'}}>
               📬 PQRSF
-            </a>
+            </Link>
           </div>
         </div>
 
@@ -696,7 +697,7 @@ export default function PedidosPage() {
       supabase.from('pedidos').select('*')
         .eq('tenant_id',tid)
         .order('created_at',{ascending:false})
-        .limit(200),
+        .limit(3000),
       supabase.from('tenants').select('pais').eq('id',tid).single(),
     ])
     inicializarPaisTenant(tenant?.pais)
@@ -826,6 +827,30 @@ export default function PedidosPage() {
       }
     }
 
+    // Riesgo/tipo de cliente real por teléfono -- antes se guardaba 'low'/'nuevo' fijo para
+    // TODA carga masiva, así que un cliente con varias devoluciones en el mismo archivo
+    // igual aparecía "Riesgo: Bajo". Se agrega aquí con lo que ya trae el archivo (sin
+    // pedir zona/hora por fila, que sería una consulta extra por cada una de miles de filas).
+    const statsPorTelefono = new Map<string, { total: number; devoluciones: number }>()
+    for (const { d } of parseadas) {
+      const tel = String(d['TELÉFONO'] || '').trim()
+      if (!tel) continue
+      const est = ESTATUS_DROPI_A_ESTADO[String(d.ESTATUS || '').toUpperCase().trim()] || 'ingresado'
+      const s = statsPorTelefono.get(tel) || { total: 0, devoluciones: 0 }
+      s.total++
+      if (est === 'devolucion') s.devoluciones++
+      statsPorTelefono.set(tel, s)
+    }
+    function riesgoPorTelefono(tel: string): string {
+      const s = statsPorTelefono.get(tel)
+      if (!s || s.total < 2) return 'low'
+      const tasa = s.devoluciones / s.total
+      if (tasa >= 0.4) return 'critical'
+      if (tasa >= 0.2) return 'high'
+      if (tasa > 0) return 'medium'
+      return 'low'
+    }
+
     // Crea en el Catálogo los productos nuevos que trae el archivo -- con lo poco que Dropi
     // reporta (nombre + SKU + su propio id). Quedan con costos/PVP en $0, a completar luego en
     // Catálogo (así lo pidió Joan: cargar pedidos primero, ir a completar costeo después).
@@ -885,7 +910,9 @@ export default function PedidosPage() {
         tags: d.TAGS || null, fecha_guia_generada: d['FECHA GUIA GENERADA'] || null,
         indemnizaciones_contador: d['CONTADOR DE INDEMNIZACIONES'] || 0,
         indemnizacion_concepto: d['CONCEPTO ÚLTIMA INDENMIZACIÓN'] || null,
-        risk_score: 'low', cliente_tipo: 'nuevo', sla_nivel: 'verde', horas_sin_gest: 0,
+        risk_score: riesgoPorTelefono(String(d['TELÉFONO'] || '').trim()),
+        cliente_tipo: clasificarCliente(statsPorTelefono.get(String(d['TELÉFONO'] || '').trim())?.total || 1),
+        sla_nivel: 'verde', horas_sin_gest: 0,
       })
     }
     const filas = Array.from(filasPorClave.values())
@@ -1046,7 +1073,7 @@ export default function PedidosPage() {
             <div style={{fontSize:'12px',color:T.text,marginTop:'10px',background:T.card2,borderRadius:'8px',padding:'10px 12px'}}>
               🆕 Se crearon <b>{resultadoImportDropi.productosCreados.length}</b> productos nuevos en tu Catálogo ({resultadoImportDropi.productosCreados.slice(0,4).join(', ')}{resultadoImportDropi.productosCreados.length > 4 ? '...' : ''}), sin costos ni PVP todavía.
               <div style={{marginTop:'8px'}}>
-                <a href="/dashboard/productos" style={{textDecoration:'none',fontSize:'11.5px',fontWeight:700,color:T.accent}}>→ Ir a Catálogo a completarlos</a>
+                <Link href="/dashboard/productos" style={{textDecoration:'none',fontSize:'11.5px',fontWeight:700,color:T.accent}}>→ Ir a Catálogo a completarlos</Link>
               </div>
             </div>
           )}
@@ -1060,7 +1087,7 @@ export default function PedidosPage() {
       {previewGenerico && <CargaMasivaModal filas={previewGenerico} columnas={configPedidos.columnas} onConfirm={confirmarImportPedidosGenerico} onClose={()=>setPreviewGenerico(null)} theme={T} />}
 
       {/* KPIs — Embudo de etapas */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:'8px',marginBottom:'14px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,220px))',justifyContent:'start',gap:'10px',marginBottom:'14px'}}>
         {[
           {l:'Shopify/Woo',n:kpis.total,      c:T.blue,  icon:'🛍️', sub:'Total generados'},
           {l:'Confirmados', n:kpis.confirmados,c:T.green, icon:'✅', sub:`TC: ${tc}%`},
@@ -1079,7 +1106,7 @@ export default function PedidosPage() {
       </div>
 
       {/* Alertas rápidas */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:'8px',marginBottom:'16px'}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,280px))',justifyContent:'start',gap:'10px',marginBottom:'16px'}}>
         {[
           {n:kpis.novedades,    l:'Con novedad',     c:T.yellow, icon:'⚠️', f:'novedad'},
           {n:kpis.sla_vencido,  l:'SLA vencido >4h', c:T.red,    icon:'🔴', f:'sla_rojo'},
@@ -1119,9 +1146,9 @@ export default function PedidosPage() {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
-              <tr style={{background:T.card2}}>
-                {['#','Cliente','Ciudad','Producto','Valor','Estado','Origen','Riesgo','SLA','Modo','Acciones'].map(h=>(
-                  <th key={h} style={{padding:'10px 12px',textAlign:'left',fontSize:'11px',color:T.muted,fontWeight:'600',whiteSpace:'nowrap',borderBottom:`1px solid ${T.border}`}}>{h}</th>
+              <tr style={{background:T.card2, position:'sticky', top:0, zIndex:5}}>
+                {['ID Dropi','Cliente','Ciudad','Producto','Valor','Estado','Origen','Riesgo','SLA','Modo','Acciones'].map(h=>(
+                  <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:'11px',color:T.muted,fontWeight:'600',whiteSpace:'nowrap',borderBottom:`1px solid ${T.border}`}}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -1143,36 +1170,38 @@ export default function PedidosPage() {
                 <tr key={p.id} style={{borderBottom:`1px solid ${T.border}`,background:idx%2===0?'transparent':T.card2,cursor:'pointer'}}
                   onMouseEnter={e=>(e.currentTarget.style.background=T.card2)}
                   onMouseLeave={e=>(e.currentTarget.style.background=idx%2===0?'transparent':T.card2)}>
-                  <td style={{padding:'8px 12px',fontSize:'11px',color:T.muted,fontWeight:'600'}}>#{String(idx+1).padStart(4,'0')}</td>
-                  <td style={{padding:'8px 12px'}}>
+                  <td style={{padding:'10px 14px',fontSize:'11px',color:T.muted,fontWeight:'600',whiteSpace:'nowrap'}}>{p.dropi_orden_id ?? `#${String(idx+1).padStart(4,'0')}`}</td>
+                  <td style={{padding:'10px 14px',minWidth:'160px'}}>
                     <div style={{fontSize:'12px',fontWeight:'600',color:T.text}}>{p.cliente_nombre}</div>
                     <div style={{fontSize:'10px',color:T.muted}}>{p.cliente_telefono}</div>
                   </td>
-                  <td style={{padding:'8px 12px',fontSize:'11px',color:T.muted}}>{p.cliente_ciudad||'—'}</td>
-                  <td style={{padding:'8px 12px',fontSize:'12px',color:T.text,maxWidth:'160px'}}>
+                  <td style={{padding:'10px 14px',fontSize:'11px',color:T.muted,whiteSpace:'nowrap'}}>{p.cliente_ciudad||'—'}</td>
+                  <td style={{padding:'10px 14px',fontSize:'12px',color:T.text,minWidth:'200px',maxWidth:'280px'}}>
                     <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.producto_nombre}</div>
                   </td>
-                  <td style={{padding:'8px 12px',fontSize:'12px',fontWeight:'600',color:T.green}}>{fmt(p.pvp||0)}</td>
-                  <td style={{padding:'8px 12px'}}>
+                  <td style={{padding:'10px 14px',fontSize:'12px',fontWeight:'600',color:T.green,whiteSpace:'nowrap'}}>{fmt(p.pvp||0)}</td>
+                  <td style={{padding:'10px 14px',whiteSpace:'nowrap'}}>
                     <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 8px',borderRadius:'4px',background:`${estadoColor(p.estado)}20`,color:estadoColor(p.estado)}}>
                       {ESTADOS.find(e=>e.v===p.estado)?.icon} {ESTADOS.find(e=>e.v===p.estado)?.l||p.estado}
                     </span>
                   </td>
-                  <td style={{padding:'8px 12px',fontSize:'11px',color:T.muted}}>{p.origen||'—'}</td>
-                  <td style={{padding:'8px 12px'}}>
-                    <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 6px',borderRadius:'4px',background:`${riesgoColor(p.risk_score)}20`,color:riesgoColor(p.risk_score)}}>
+                  <td style={{padding:'10px 14px',fontSize:'11px',color:T.muted,whiteSpace:'nowrap'}}>{p.origen||'—'}</td>
+                  <td style={{padding:'10px 14px',whiteSpace:'nowrap'}} title="Calculado al crear el pedido según historial del cliente, zona y hora -- los pedidos de carga masiva Dropi usan el % de devoluciones real del cliente en el archivo.">
+                    <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 8px',borderRadius:'4px',background:`${riesgoColor(p.risk_score)}20`,color:riesgoColor(p.risk_score)}}>
                       {RIESGOS.find(r=>r.v===p.risk_score)?.l||'—'}
                     </span>
                   </td>
-                  <td style={{padding:'8px 12px'}}>
-                    <div style={{width:'8px',height:'8px',borderRadius:'50%',background:slaColor(p.sla_nivel||'verde')}} title={`SLA: ${p.sla_nivel}`} />
+                  <td style={{padding:'10px 14px',whiteSpace:'nowrap'}} title="SLA = tiempo sin gestión desde que entró el pedido. Verde: al día. Amarillo: necesita atención pronto. Rojo: vencido, gestiónalo ya.">
+                    <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 8px',borderRadius:'4px',background:`${slaColor(p.sla_nivel||'verde')}20`,color:slaColor(p.sla_nivel||'verde')}}>
+                      {p.sla_nivel==='rojo'?'🔴 Vencido':p.sla_nivel==='amarillo'?'🟡 Alerta':'🟢 Al día'}
+                    </span>
                   </td>
-                  <td style={{padding:'8px 12px'}}>
+                  <td style={{padding:'10px 14px',whiteSpace:'nowrap'}}>
                     <span style={{fontSize:'10px',padding:'2px 6px',borderRadius:'4px',background:p.ia_modo?`${T.purple}20`:`${T.accent}20`,color:p.ia_modo?T.purple:T.accent}}>
                       {p.ia_modo?'🤖 IA':'👤 H'}
                     </span>
                   </td>
-                  <td style={{padding:'8px 12px'}}>
+                  <td style={{padding:'10px 14px',whiteSpace:'nowrap'}}>
                     <button onClick={()=>setPedidoActivo(p)}
                       style={{padding:'4px 10px',background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:'6px',color:T.blue,cursor:'pointer',fontSize:'11px',fontWeight:'600'}}>
                       Ver
