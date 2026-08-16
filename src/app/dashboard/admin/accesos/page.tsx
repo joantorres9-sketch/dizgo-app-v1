@@ -148,6 +148,12 @@ export default function AccesosPage() {
 
   async function guardarTechoTenant(cambios: { permisos: TMatriz; paises?: string[] }) {
     if (!tenantEditando) return
+    // Guardar el techo del tenant con TODO en false bloquea a absolutamente todos ahí (dueño y
+    // colaboradores), sin distinción -- pasó por accidente con la plantilla "Sin acceso" y dejó
+    // 17 tenants (incluido uno real) totalmente bloqueados hasta que se detectó por revisión
+    // manual de la base de datos. Confirmación extra antes de guardar ese estado específico.
+    const todoBloqueado = Object.values(cambios.permisos).every(m => Object.values(m).every(v => v === false))
+    if (todoBloqueado && !confirm(`⚠️ Esto va a bloquear TODOS los módulos para ${tenantEditando.nombre} -- nadie en ese tenant (ni el dueño) podrá usar la app hasta que lo corrijas aquí de nuevo. ¿Confirmas?`)) return
     setGuardandoTecho(true)
     try {
       await authFetch('/api/admin/actualizar-permisos-tenant', { tenantId: tenantEditando.id, permisos: cambios.permisos, paises: cambios.paises })
