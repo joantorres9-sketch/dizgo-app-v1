@@ -686,7 +686,7 @@ export default function PedidosPage() {
   const [previewDropi, setPreviewDropi] = useState<FilaImportada<FilaPedidoDropi>[] | null>(null)
   const [previewGenerico, setPreviewGenerico] = useState<FilaImportada<FilaPedido>[] | null>(null)
   const [progresoImport, setProgresoImport] = useState<{ total: number; hechos: number } | null>(null)
-  const [resultadoImportDropi, setResultadoImportDropi] = useState<{ nuevos: number; actualizados: number; conservados: number; productosCreados: string[]; sinProducto: number } | null>(null)
+  const [resultadoImportDropi, setResultadoImportDropi] = useState<{ nuevos: number; actualizados: number; conservados: number; productosCreados: string[]; sinProducto: number; guardados: number; intentados: number } | null>(null)
 
   async function loadData(tid: string = tenantId) {
     if (!tid) { setLoading(false); return }
@@ -904,6 +904,7 @@ export default function PedidosPage() {
       nuevos, actualizados, conservados,
       productosCreados: nuevosProductos.map(p => p.nombre),
       sinProducto: sinProducto.length,
+      guardados: ok, intentados: filas.length,
     })
     loadData()
   }
@@ -1015,15 +1016,32 @@ export default function PedidosPage() {
           </div>
         </div>
       )}
-      {resultadoImportDropi && (
-        <div style={{background:T.card,border:`1px solid ${T.green}40`,borderLeft:`3px solid ${T.green}`,borderRadius:'10px',padding:'14px 16px',marginBottom:'14px'}}>
+      {resultadoImportDropi && (() => {
+        const { guardados, intentados } = resultadoImportDropi
+        const falloTotal = intentados > 0 && guardados === 0
+        const falloParcial = guardados > 0 && guardados < intentados
+        const color = falloTotal ? T.red : falloParcial ? T.yellow : T.green
+        return (
+        <div style={{background:T.card,border:`1px solid ${color}40`,borderLeft:`3px solid ${color}`,borderRadius:'10px',padding:'14px 16px',marginBottom:'14px'}}>
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'10px'}}>
-            <div style={{fontSize:'13px',fontWeight:700,color:T.text}}>✅ Carga completada</div>
+            <div style={{fontSize:'13px',fontWeight:700,color:T.text}}>
+              {falloTotal ? '❌ La carga falló' : falloParcial ? '⚠️ Carga parcial' : '✅ Carga completada'}
+            </div>
             <button onClick={()=>setResultadoImportDropi(null)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:'13px'}}>✕</button>
           </div>
-          <div style={{fontSize:'12px',color:T.muted,marginTop:'6px'}}>
-            <b style={{color:T.text}}>{resultadoImportDropi.nuevos}</b> pedidos nuevos · <b style={{color:T.text}}>{resultadoImportDropi.actualizados}</b> actualizados · <b style={{color:T.text}}>{resultadoImportDropi.conservados}</b> conservados sin cambios.
-          </div>
+          {falloTotal ? (
+            <div style={{fontSize:'12px',color:T.red,marginTop:'6px'}}>
+              Ninguna de las {intentados} filas se pudo guardar — revisa que el archivo no tenga datos con un formato inesperado (fechas, números) y vuelve a intentar.
+            </div>
+          ) : falloParcial ? (
+            <div style={{fontSize:'12px',color:T.muted,marginTop:'6px'}}>
+              Se guardaron <b style={{color:T.text}}>{guardados}</b> de {intentados} filas intentadas — {intentados-guardados} fallaron, probablemente por un formato inesperado en esas filas.
+            </div>
+          ) : (
+            <div style={{fontSize:'12px',color:T.muted,marginTop:'6px'}}>
+              <b style={{color:T.text}}>{resultadoImportDropi.nuevos}</b> pedidos nuevos · <b style={{color:T.text}}>{resultadoImportDropi.actualizados}</b> actualizados · <b style={{color:T.text}}>{resultadoImportDropi.conservados}</b> conservados sin cambios.
+            </div>
+          )}
           {resultadoImportDropi.productosCreados.length > 0 && (
             <div style={{fontSize:'12px',color:T.text,marginTop:'10px',background:T.card2,borderRadius:'8px',padding:'10px 12px'}}>
               🆕 Se crearon <b>{resultadoImportDropi.productosCreados.length}</b> productos nuevos en tu Catálogo ({resultadoImportDropi.productosCreados.slice(0,4).join(', ')}{resultadoImportDropi.productosCreados.length > 4 ? '...' : ''}), sin costos ni PVP todavía.
@@ -1036,7 +1054,8 @@ export default function PedidosPage() {
             <div style={{fontSize:'11.5px',color:T.yellow,marginTop:'8px'}}>⚠️ {resultadoImportDropi.sinProducto} filas no se importaron (revisa el archivo).</div>
           )}
         </div>
-      )}
+        )
+      })()}
       {previewDropi && <CargaMasivaModal filas={previewDropi} columnas={configPedidosDropi.columnas} onConfirm={confirmarImportPedidosDropi} onClose={()=>setPreviewDropi(null)} theme={T} />}
       {previewGenerico && <CargaMasivaModal filas={previewGenerico} columnas={configPedidos.columnas} onConfirm={confirmarImportPedidosGenerico} onClose={()=>setPreviewGenerico(null)} theme={T} />}
 

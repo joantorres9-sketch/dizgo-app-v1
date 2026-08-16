@@ -234,7 +234,7 @@ export const configPedidosDropi: ConfigPlantilla<FilaPedidoDropi> = {
     { key: 'FECHA DE REPORTE', header: 'FECHA DE REPORTE', tipo: 'texto', requerido: false, ejemplo: '04-08-2026', ayuda: 'Opcional -- fecha en que Dropi generó el reporte.' },
     { key: 'ID', header: 'ID', tipo: 'texto', requerido: true, ejemplo: 6397955, ayuda: 'ID de la orden en Dropi -- clave para no duplicar al recargar el mismo archivo.' },
     { key: 'HORA', header: 'HORA', tipo: 'texto', requerido: false, ejemplo: '19:33', ayuda: 'Opcional.' },
-    { key: 'FECHA', header: 'FECHA', tipo: 'texto', requerido: true, ejemplo: '04-08-2026', ayuda: 'Formato DD-MM-AAAA, igual al export de Dropi.' },
+    { key: 'FECHA', header: 'FECHA', tipo: 'fecha', requerido: true, ejemplo: '04-08-2026', ayuda: 'Formato DD-MM-AAAA, igual al export de Dropi.' },
     { key: 'NOMBRE CLIENTE', header: 'NOMBRE CLIENTE', tipo: 'texto', requerido: true, ejemplo: 'Wellington Basurto', ayuda: '' },
     { key: 'TELÉFONO', header: 'TELÉFONO', tipo: 'texto', requerido: false, ejemplo: '980508656', ayuda: 'Opcional.' },
     { key: 'EMAIL', header: 'EMAIL', tipo: 'texto', requerido: false, ejemplo: 'cliente@correo.com', ayuda: 'Opcional.' },
