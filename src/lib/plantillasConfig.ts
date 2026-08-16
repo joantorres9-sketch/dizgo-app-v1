@@ -167,25 +167,59 @@ export const configInventarioCompra: ConfigPlantilla<FilaInventario> = {
 }
 
 export interface FilaPedidoDropi {
+  'FECHA DE REPORTE'?: string
   ID: string
+  HORA?: string
   FECHA: string
   'NOMBRE CLIENTE': string
   TELÉFONO: string
+  EMAIL?: string
+  'TIPO DE IDENTIFICACION'?: string
+  'NRO DE IDENTIFICACION'?: string
+  'NÚMERO GUIA': string
   ESTATUS: string
+  'TIPO DE ENVIO'?: string
   'DEPARTAMENTO DESTINO': string
   'CIUDAD DESTINO': string
   DIRECCION: string
+  NOTAS?: string
   TRANSPORTADORA: string
-  'NÚMERO GUIA': string
   'TOTAL DE LA ORDEN': number
   GANANCIA: number
   'PRECIO FLETE': number
+  'COSTO DEVOLUCION FLETE'?: number
+  COMISION?: number
+  '% COMISION DE LA PLATAFORMMA'?: number
+  'PRECIO PROVEEDOR'?: number
   'PRECIO PROVEEDOR X CANTIDAD': number
   'PRODUCTO ID': string
   SKU: string
   'VARIACION ID': string
   PRODUCTO: string
+  VARIACION?: string
   CANTIDAD: number
+  NOVEDAD?: string
+  'FUE SOLUCIONADA LA NOVEDAD'?: string
+  'HORA DE NOVEDAD'?: string
+  'FECHA DE NOVEDAD'?: string
+  'SOLUCIÓN'?: string
+  'HORA DE SOLUCIÓN'?: string
+  'FECHA DE SOLUCIÓN'?: string
+  'OBSERVACIÓN'?: string
+  'HORA DE ÚLTIMO MOVIMIENTO'?: string
+  'FECHA DE ÚLTIMO MOVIMIENTO'?: string
+  'ÚLTIMO MOVIMIENTO'?: string
+  'CONCEPTO ÚLTIMO MOVIMIENTO'?: string
+  'UBICACIÓN DE ÚLTIMO MOVIMIENTO'?: string
+  VENDEDOR?: string
+  'TIPO DE TIENDA'?: string
+  TIENDA?: string
+  'ID DE ORDEN DE TIENDA'?: string
+  'NUMERO DE PEDIDO DE TIENDA'?: string
+  TAGS?: string
+  'FECHA GUIA GENERADA'?: string
+  'CONTADOR DE INDEMNIZACIONES'?: number
+  'CONCEPTO ÚLTIMA INDENMIZACIÓN'?: string
 }
 
 // Mismas cabeceras EXACTAS del export real de Dropi ("Exportar" en Órdenes) -- se puede
@@ -197,25 +231,59 @@ export const configPedidosDropi: ConfigPlantilla<FilaPedidoDropi> = {
   nombreHoja: 'Sheet1',
   nombreArchivo: 'plantilla_pedidos_dropi.xlsx',
   columnas: [
+    { key: 'FECHA DE REPORTE', header: 'FECHA DE REPORTE', tipo: 'texto', requerido: false, ejemplo: '04-08-2026', ayuda: 'Opcional -- fecha en que Dropi generó el reporte.' },
     { key: 'ID', header: 'ID', tipo: 'texto', requerido: true, ejemplo: 6397955, ayuda: 'ID de la orden en Dropi -- clave para no duplicar al recargar el mismo archivo.' },
+    { key: 'HORA', header: 'HORA', tipo: 'texto', requerido: false, ejemplo: '19:33', ayuda: 'Opcional.' },
     { key: 'FECHA', header: 'FECHA', tipo: 'texto', requerido: true, ejemplo: '04-08-2026', ayuda: 'Formato DD-MM-AAAA, igual al export de Dropi.' },
     { key: 'NOMBRE CLIENTE', header: 'NOMBRE CLIENTE', tipo: 'texto', requerido: true, ejemplo: 'Wellington Basurto', ayuda: '' },
     { key: 'TELÉFONO', header: 'TELÉFONO', tipo: 'texto', requerido: false, ejemplo: '980508656', ayuda: 'Opcional.' },
+    { key: 'EMAIL', header: 'EMAIL', tipo: 'texto', requerido: false, ejemplo: 'cliente@correo.com', ayuda: 'Opcional.' },
+    { key: 'TIPO DE IDENTIFICACION', header: 'TIPO DE IDENTIFICACION', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'NRO DE IDENTIFICACION', header: 'NRO DE IDENTIFICACION', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'NÚMERO GUIA', header: 'NÚMERO GUIA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
     { key: 'ESTATUS', header: 'ESTATUS', tipo: 'texto', requerido: false, default: 'PENDIENTE', ejemplo: 'PENDIENTE CONFIRMACION', ayuda: 'Estatus de Dropi -- se traduce automáticamente al estado de DIZGO.' },
+    { key: 'TIPO DE ENVIO', header: 'TIPO DE ENVIO', tipo: 'texto', requerido: false, ejemplo: 'CON RECAUDO', ayuda: 'Opcional -- CON RECAUDO o SIN RECAUDO.' },
     { key: 'DEPARTAMENTO DESTINO', header: 'DEPARTAMENTO DESTINO', tipo: 'texto', requerido: false, ejemplo: 'GUAYAS', ayuda: 'Opcional.' },
     { key: 'CIUDAD DESTINO', header: 'CIUDAD DESTINO', tipo: 'texto', requerido: true, ejemplo: 'DAULE', ayuda: '' },
     { key: 'DIRECCION', header: 'DIRECCION', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'NOTAS', header: 'NOTAS', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
     { key: 'TRANSPORTADORA', header: 'TRANSPORTADORA', tipo: 'texto', requerido: false, ejemplo: 'SERVIENTREGA', ayuda: 'Opcional.' },
-    { key: 'NÚMERO GUIA', header: 'NÚMERO GUIA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
     { key: 'TOTAL DE LA ORDEN', header: 'TOTAL DE LA ORDEN', tipo: 'moneda', requerido: true, ejemplo: 89900, ayuda: 'Valor total de la orden.' },
     { key: 'GANANCIA', header: 'GANANCIA', tipo: 'moneda', requerido: false, ejemplo: '', ayuda: 'Dropi la reporta solo cuando la orden ya se liquidó -- alimenta el histórico de utilidad en P&G.' },
     { key: 'PRECIO FLETE', header: 'PRECIO FLETE', tipo: 'moneda', requerido: false, ejemplo: 6.48, ayuda: 'Costo de envío de esta línea.' },
+    { key: 'COSTO DEVOLUCION FLETE', header: 'COSTO DEVOLUCION FLETE', tipo: 'moneda', requerido: false, default: 0, ejemplo: 0, ayuda: 'Opcional.' },
+    { key: 'COMISION', header: 'COMISION', tipo: 'moneda', requerido: false, default: 0, ejemplo: 0, ayuda: 'Opcional.' },
+    { key: '% COMISION DE LA PLATAFORMMA', header: '% COMISION DE LA PLATAFORMMA', tipo: 'porcentaje', requerido: false, default: 0, ejemplo: 0, ayuda: 'Opcional (encabezado tal cual lo exporta Dropi, con la doble M).' },
+    { key: 'PRECIO PROVEEDOR', header: 'PRECIO PROVEEDOR', tipo: 'moneda', requerido: false, ejemplo: 1, ayuda: 'Costo del proveedor por unidad -- distinto de "PRECIO PROVEEDOR X CANTIDAD".' },
     { key: 'PRECIO PROVEEDOR X CANTIDAD', header: 'PRECIO PROVEEDOR X CANTIDAD', tipo: 'moneda', requerido: false, ejemplo: 1, ayuda: 'Costo del proveedor para la cantidad de esta línea.' },
     { key: 'PRODUCTO ID', header: 'PRODUCTO ID', tipo: 'texto', requerido: true, ejemplo: 113346, ayuda: 'ID del producto en Dropi -- junto con ID de orden evita duplicar la línea.' },
     { key: 'SKU', header: 'SKU', tipo: 'texto', requerido: false, ejemplo: 'PULS-GU-517', ayuda: 'Preferido para identificar el producto -- si no hay match por SKU se intenta por nombre.' },
     { key: 'VARIACION ID', header: 'VARIACION ID', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional -- solo si el producto tiene variaciones (talla, color, etc).' },
     { key: 'PRODUCTO', header: 'PRODUCTO', tipo: 'texto', requerido: true, ejemplo: 'Pulsera Grano de Café Mujer', ayuda: 'Debe existir ya en tu Catálogo (por SKU o por nombre).' },
+    { key: 'VARIACION', header: 'VARIACION', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional -- nombre de la variación (talla, color, etc).' },
     { key: 'CANTIDAD', header: 'CANTIDAD', tipo: 'numero', requerido: false, default: 1, ejemplo: 1, ayuda: '' },
+    { key: 'NOVEDAD', header: 'NOVEDAD', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'FUE SOLUCIONADA LA NOVEDAD', header: 'FUE SOLUCIONADA LA NOVEDAD', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'HORA DE NOVEDAD', header: 'HORA DE NOVEDAD', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'FECHA DE NOVEDAD', header: 'FECHA DE NOVEDAD', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'SOLUCIÓN', header: 'SOLUCIÓN', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'HORA DE SOLUCIÓN', header: 'HORA DE SOLUCIÓN', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'FECHA DE SOLUCIÓN', header: 'FECHA DE SOLUCIÓN', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'OBSERVACIÓN', header: 'OBSERVACIÓN', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'HORA DE ÚLTIMO MOVIMIENTO', header: 'HORA DE ÚLTIMO MOVIMIENTO', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'FECHA DE ÚLTIMO MOVIMIENTO', header: 'FECHA DE ÚLTIMO MOVIMIENTO', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'ÚLTIMO MOVIMIENTO', header: 'ÚLTIMO MOVIMIENTO', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'CONCEPTO ÚLTIMO MOVIMIENTO', header: 'CONCEPTO ÚLTIMO MOVIMIENTO', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'UBICACIÓN DE ÚLTIMO MOVIMIENTO', header: 'UBICACIÓN DE ÚLTIMO MOVIMIENTO', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'VENDEDOR', header: 'VENDEDOR', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'TIPO DE TIENDA', header: 'TIPO DE TIENDA', tipo: 'texto', requerido: false, ejemplo: 'SHOPIFY', ayuda: 'Opcional.' },
+    { key: 'TIENDA', header: 'TIENDA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional -- nombre de la tienda en Dropi.' },
+    { key: 'ID DE ORDEN DE TIENDA', header: 'ID DE ORDEN DE TIENDA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional -- ID de la orden en Shopify/WooCommerce.' },
+    { key: 'NUMERO DE PEDIDO DE TIENDA', header: 'NUMERO DE PEDIDO DE TIENDA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'TAGS', header: 'TAGS', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'FECHA GUIA GENERADA', header: 'FECHA GUIA GENERADA', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'CONTADOR DE INDEMNIZACIONES', header: 'CONTADOR DE INDEMNIZACIONES', tipo: 'numero', requerido: false, default: 0, ejemplo: 0, ayuda: 'Opcional.' },
+    { key: 'CONCEPTO ÚLTIMA INDENMIZACIÓN', header: 'CONCEPTO ÚLTIMA INDENMIZACIÓN', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional (encabezado tal cual lo exporta Dropi).' },
   ],
 }
 

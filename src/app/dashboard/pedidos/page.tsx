@@ -113,6 +113,20 @@ type Pedido = {
   upsell_valor: number; descuento_pct: number; descuento_aprobado: boolean
   novedad_tipo: string; fecha_pedido: string; created_at: string
   agente_nombre?: string
+  // ── Campos completos del export de Dropi (opcionales -- solo vienen en pedidos cargados
+  // por carga masiva Dropi, no en los creados manualmente) ──────────────────────────────
+  cliente_email?: string; cliente_tipo_doc?: string; cliente_num_doc?: string
+  cliente_direccion?: string; variacion?: string; tipo_envio?: string
+  costo_devolucion_flete?: number; comision?: number; pct_comision_plataforma?: number
+  costo_proveedor_unitario?: number; fecha_reporte?: string; hora_pedido?: string
+  notas?: string; observacion?: string
+  novedad_solucionada?: boolean; novedad_hora?: string; novedad_fecha?: string
+  novedad_solucion?: string; novedad_solucion_hora?: string; novedad_solucion_fecha?: string
+  ultimo_movimiento?: string; ultimo_movimiento_concepto?: string; ultimo_movimiento_ubicacion?: string
+  ultimo_movimiento_hora?: string; ultimo_movimiento_fecha?: string
+  vendedor?: string; tienda_tipo?: string; tienda_nombre?: string
+  shopify_id?: string; tags?: string; fecha_guia_generada?: string
+  indemnizaciones_contador?: number; indemnizacion_concepto?: string
 }
 
 type Zona = {
@@ -485,6 +499,47 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
           </div>
         </div>
 
+        {/* Datos completos de Dropi -- solo si el pedido vino de carga masiva Dropi */}
+        {(pedido.tienda_nombre || pedido.vendedor || pedido.cliente_email || pedido.comision || pedido.tags) && (
+          <div style={{padding:'14px 20px',borderBottom:`1px solid ${T.border}`}}>
+            <div style={{fontSize:'11px',fontWeight:'700',color:T.muted,marginBottom:'8px'}}>📋 DATOS COMPLETOS DROPI</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:'8px',fontSize:'12px'}}>
+              {([
+                ['Email', pedido.cliente_email],
+                ['Documento', pedido.cliente_tipo_doc && pedido.cliente_num_doc ? `${pedido.cliente_tipo_doc} ${pedido.cliente_num_doc}` : null],
+                ['Dirección', pedido.cliente_direccion],
+                ['Variación', pedido.variacion],
+                ['Tipo de envío', pedido.tipo_envio],
+                ['Tienda', pedido.tienda_nombre],
+                ['Tipo de tienda', pedido.tienda_tipo],
+                ['Vendedor', pedido.vendedor],
+                ['ID orden tienda', pedido.shopify_id],
+                ['Comisión', pedido.comision ? fmt(pedido.comision) : null],
+                ['% comisión plataforma', pedido.pct_comision_plataforma ? `${pedido.pct_comision_plataforma}%` : null],
+                ['Costo devolución flete', pedido.costo_devolucion_flete ? fmt(pedido.costo_devolucion_flete) : null],
+                ['Costo proveedor unitario', pedido.costo_proveedor_unitario ? fmt(pedido.costo_proveedor_unitario) : null],
+                ['Novedad', pedido.novedad_tipo],
+                ['Novedad solucionada', pedido.novedad_tipo ? (pedido.novedad_solucionada ? 'Sí' : 'No') : null],
+                ['Solución', pedido.novedad_solucion],
+                ['Último movimiento', pedido.ultimo_movimiento],
+                ['Concepto último mov.', pedido.ultimo_movimiento_concepto],
+                ['Ubicación último mov.', pedido.ultimo_movimiento_ubicacion],
+                ['Fecha guía generada', pedido.fecha_guia_generada],
+                ['Indemnizaciones', pedido.indemnizaciones_contador ? String(pedido.indemnizaciones_contador) : null],
+                ['Concepto indemnización', pedido.indemnizacion_concepto],
+                ['Tags', pedido.tags],
+                ['Notas', pedido.notas],
+                ['Observación', pedido.observacion],
+              ] as [string, string | null | undefined][]).filter(([, v]) => v).map(([k, v]) => (
+                <div key={k}>
+                  <div style={{fontSize:'10px',color:T.muted}}>{k}</div>
+                  <div style={{color:T.text,fontWeight:'500',wordBreak:'break-word'}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Switch IA / Humano */}
         <div style={{padding:'12px 20px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
           <div>
@@ -803,15 +858,34 @@ export default function PedidosPage() {
       if (clavesExistentes.has(clave)) clavesActualizadas.add(clave)
       filasPorClave.set(clave, {
         tenant_id: tenantId, dropi_orden_id: dropiOrdenId, dropi_producto_id: dropiProductoId, dropi_variacion_id: dropiVariacionId,
-        cliente_nombre: d['NOMBRE CLIENTE'], cliente_telefono: d['TELÉFONO'] || null,
+        cliente_nombre: d['NOMBRE CLIENTE'], cliente_telefono: d['TELÉFONO'] || null, cliente_email: d.EMAIL || null,
+        cliente_tipo_doc: d['TIPO DE IDENTIFICACION'] || null, cliente_num_doc: d['NRO DE IDENTIFICACION'] || null,
         cliente_ciudad: d['CIUDAD DESTINO'], cliente_departamento: d['DEPARTAMENTO DESTINO'] || null,
-        producto_id: productoId, producto_nombre: d.PRODUCTO, cantidad: d.CANTIDAD || 1,
+        cliente_direccion: d.DIRECCION || null,
+        producto_id: productoId, producto_nombre: d.PRODUCTO, variacion: d.VARIACION || null, cantidad: d.CANTIDAD || 1,
         pvp: d['TOTAL DE LA ORDEN'], estado, origen: 'Dropi',
-        transportadora: d.TRANSPORTADORA || null, numero_guia: d['NÚMERO GUIA'] || null,
+        transportadora: d.TRANSPORTADORA || null, numero_guia: d['NÚMERO GUIA'] || null, tipo_envio: d['TIPO DE ENVIO'] || null,
         // GANANCIA solo llega cuando Dropi ya liquidó la orden -- pyg/page.tsx lee pedidos.ganancia
         // directo para el histórico de utilidad real, así que esto la alimenta sin tocar P&G.
         ganancia: d.GANANCIA || 0, costo_flete: d['PRECIO FLETE'] || 0, costo_producto: d['PRECIO PROVEEDOR X CANTIDAD'] || 0,
-        fecha_pedido: d.FECHA, risk_score: 'low', cliente_tipo: 'nuevo', sla_nivel: 'verde', horas_sin_gest: 0,
+        costo_devolucion_flete: d['COSTO DEVOLUCION FLETE'] || 0, comision: d.COMISION || 0,
+        pct_comision_plataforma: d['% COMISION DE LA PLATAFORMMA'] || 0, costo_proveedor_unitario: d['PRECIO PROVEEDOR'] || 0,
+        fecha_pedido: d.FECHA, fecha_reporte: d['FECHA DE REPORTE'] || null, hora_pedido: d.HORA || null,
+        notas: d.NOTAS || null, observacion: d['OBSERVACIÓN'] || null,
+        novedad_tipo: d.NOVEDAD || null,
+        novedad_solucionada: ['SI', 'SÍ', 'S', 'TRUE', '1', 'YES'].includes(String(d['FUE SOLUCIONADA LA NOVEDAD'] || '').toUpperCase().trim()),
+        novedad_hora: d['HORA DE NOVEDAD'] || null, novedad_fecha: d['FECHA DE NOVEDAD'] || null,
+        novedad_solucion: d['SOLUCIÓN'] || null, novedad_solucion_hora: d['HORA DE SOLUCIÓN'] || null,
+        novedad_solucion_fecha: d['FECHA DE SOLUCIÓN'] || null,
+        ultimo_movimiento: d['ÚLTIMO MOVIMIENTO'] || null, ultimo_movimiento_concepto: d['CONCEPTO ÚLTIMO MOVIMIENTO'] || null,
+        ultimo_movimiento_ubicacion: d['UBICACIÓN DE ÚLTIMO MOVIMIENTO'] || null,
+        ultimo_movimiento_hora: d['HORA DE ÚLTIMO MOVIMIENTO'] || null, ultimo_movimiento_fecha: d['FECHA DE ÚLTIMO MOVIMIENTO'] || null,
+        vendedor: d.VENDEDOR || null, tienda_tipo: d['TIPO DE TIENDA'] || null, tienda_nombre: d.TIENDA || null,
+        shopify_id: d['ID DE ORDEN DE TIENDA'] || null, numero_pedido: d['NUMERO DE PEDIDO DE TIENDA'] || null,
+        tags: d.TAGS || null, fecha_guia_generada: d['FECHA GUIA GENERADA'] || null,
+        indemnizaciones_contador: d['CONTADOR DE INDEMNIZACIONES'] || 0,
+        indemnizacion_concepto: d['CONCEPTO ÚLTIMA INDENMIZACIÓN'] || null,
+        risk_score: 'low', cliente_tipo: 'nuevo', sla_nivel: 'verde', horas_sin_gest: 0,
       })
     }
     const filas = Array.from(filasPorClave.values())
