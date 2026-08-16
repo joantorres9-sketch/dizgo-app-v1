@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
+import { useTema } from '@/lib/tema'
 
 type PedidoPendiente = {
   id: string; numero_pedido: string; cliente_nombre: string
@@ -23,13 +24,14 @@ const AGENTES = [
   { key:'logistico',   label:'🚚 Logístico',   color:'#2DD4A0', desc:'Evalúa transportadoras, zonas de riesgo y novedades por ciudad' },
 ]
 
-const s: React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
 function fmt(n: number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
 function horasDesde(fecha: string){ return Math.round((Date.now()-new Date(fecha).getTime())/3600000) }
 
 export default function AgentesPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'confirmador'|'novedades'|'contable'|'campanas'|'inventario'|'logistico'>('confirmador')
@@ -49,13 +51,8 @@ export default function AgentesPage() {
   const [stockBajoItems, setStockBajoItems] = useState<{producto_id:string;bodega_id:string;cantidad_disponible:number;stock_minimo:number}[]>([])
   const [transportadorasMetrica, setTransportadorasMetrica] = useState<{transportadora:string;total:number;entregados:number;tasa:number}[]>([])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const limite2h = new Date(Date.now()-2*3600000).toISOString()
@@ -123,7 +120,11 @@ export default function AgentesPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   useEffect(() => {
     if (cargandoPermisos) return
@@ -242,7 +243,7 @@ Sé directo, usa números reales, sin rodeos.`
       })
 
       setResultado({ agente, texto, pedido_id: pedido?.id })
-      loadData()
+      loadData(tenantId)
     } catch(err) {
       await supabase.from('agentes_ia_logs').insert({
         tenant_id: tenantId, agente, trigger_tipo: 'manual',
@@ -258,28 +259,28 @@ Sé directo, usa números reales, sin rodeos.`
   async function ejecutarContable() { await ejecutarAgente('contable') }
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted, fontSize:'14px' }}>
       Inicializando agentes de IA...
     </div>
   )
 
   return (
     <RequierePermiso modulo="agentes">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
       <div style={{ marginBottom:'20px' }}>
         <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🤖 Agentes de IA DIZGO</h1>
-        <p style={{ fontSize:'13px', color:'#8B96A8' }}>Fase 1 · Confirmador · Novedades · Contable · Powered by Claude</p>
+        <p style={{ fontSize:'13px', color:T.muted }}>Fase 1 · Confirmador · Novedades · Contable · Powered by Claude</p>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
-          { label:'Pedidos sin confirmar (+2h)', v:pedidosSinConfirmar.length, c: pedidosSinConfirmar.length>0?'#F05C5C':'#2DD4A0', icon:'📞' },
-          { label:'Novedades sin resolver (+24h)', v:pedidosNovedad.length, c: pedidosNovedad.length>0?'#F5A623':'#2DD4A0', icon:'⚠️' },
-          { label:'CXP vencidas', v:cxpVencidas.length, c: cxpVencidas.length>0?'#F05C5C':'#2DD4A0', icon:'📋' },
+          { label:'Pedidos sin confirmar (+2h)', v:pedidosSinConfirmar.length, c: pedidosSinConfirmar.length>0?T.red:T.green, icon:'📞' },
+          { label:'Novedades sin resolver (+24h)', v:pedidosNovedad.length, c: pedidosNovedad.length>0?T.yellow:T.green, icon:'⚠️' },
+          { label:'CXP vencidas', v:cxpVencidas.length, c: cxpVencidas.length>0?T.red:T.green, icon:'📋' },
         ].map((k,i) => (
           <div key={i} style={{ ...s, padding:'14px', borderTop:`2px solid ${k.c}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-              <span style={{ fontSize:'11px', color:'#8B96A8' }}>{k.label}</span><span>{k.icon}</span>
+              <span style={{ fontSize:'11px', color:T.muted }}>{k.label}</span><span>{k.icon}</span>
             </div>
             <div style={{ fontSize:'24px', fontWeight:'900', color:k.c }}>{k.v}</div>
           </div>
@@ -290,7 +291,7 @@ Sé directo, usa números reales, sin rodeos.`
         {AGENTES.filter(a => puede(clavePermiso('agentes', a.key), 'ver')).map(a => (
           <button key={a.key} onClick={()=>setTab(a.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
-              background: tab===a.key?a.color:'rgba(255,255,255,0.05)', color: tab===a.key?'#0A0D14':'#8B96A8' }}>
+              background: tab===a.key?a.color:'rgba(255,255,255,0.05)', color: tab===a.key?T.card:T.muted }}>
             {a.label}
           </button>
         ))}
@@ -300,24 +301,24 @@ Sé directo, usa números reales, sin rodeos.`
       {tab === 'confirmador' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>📞 Pedidos sin confirmar — más de 2 horas</div>
-              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente genera el mensaje WhatsApp ideal para cada caso</div>
+              <div style={{ fontSize:'11px', color:T.muted }}>El agente genera el mensaje WhatsApp ideal para cada caso</div>
             </div>
             {pedidosSinConfirmar.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>
                 ✅ Sin pedidos pendientes de confirmación
               </div>
             ) : pedidosSinConfirmar.map(p => (
-              <div key={p.id} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px' }}>
+              <div key={p.id} style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:'10px' }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:'13px', fontWeight:'600' }}>{p.cliente_nombre}</div>
-                  <div style={{ fontSize:'11px', color:'#8B96A8' }}>{p.producto_nombre} · {fmt(p.pvp)}</div>
-                  <div style={{ fontSize:'10px', color:'#F05C5C', marginTop:'2px' }}>⏰ {p.horas_espera}h esperando</div>
+                  <div style={{ fontSize:'11px', color:T.muted }}>{p.producto_nombre} · {fmt(p.pvp)}</div>
+                  <div style={{ fontSize:'10px', color:T.red, marginTop:'2px' }}>⏰ {p.horas_espera}h esperando</div>
                 </div>
                 <button onClick={() => ejecutarAgente('confirmador', p)}
                   disabled={corriendo === 'confirmador' || !puede(clavePermiso('agentes','confirmador'),'agregar')}
-                  style={{ padding:'7px 14px', background:'rgba(61,142,240,0.15)', border:'1px solid rgba(61,142,240,0.3)', borderRadius:'8px', color:'#3D8EF0', cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                  style={{ padding:'7px 14px', background:'rgba(61,142,240,0.15)', border:'1px solid rgba(61,142,240,0.3)', borderRadius:'8px', color:T.blue, cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='confirmador' ? '⏳ Generando...' : '🤖 Generar mensaje'}
                 </button>
               </div>
@@ -325,25 +326,25 @@ Sé directo, usa números reales, sin rodeos.`
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'12px' }}>💬 Resultado del agente</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>💬 Resultado del agente</div>
             {resultado && resultado.agente === 'confirmador' ? (
               <>
-                <div style={{ background:'rgba(61,142,240,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(61,142,240,0.2)', fontSize:'13px', lineHeight:'1.7', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>
+                <div style={{ background:'rgba(61,142,240,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(61,142,240,0.2)', fontSize:'13px', lineHeight:'1.7', color:T.text, marginBottom:'12px', whiteSpace:'pre-wrap' }}>
                   {resultado.texto}
                 </div>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button onClick={() => navigator.clipboard.writeText(resultado.texto)}
-                    style={{ flex:1, padding:'8px', background:'rgba(61,142,240,0.1)', border:'none', borderRadius:'8px', color:'#3D8EF0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                    style={{ flex:1, padding:'8px', background:'rgba(61,142,240,0.1)', border:'none', borderRadius:'8px', color:T.blue, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                     📋 Copiar mensaje
                   </button>
                   <a href={`https://wa.me/?text=${encodeURIComponent(resultado.texto)}`} target="_blank" rel="noopener noreferrer"
-                    style={{ flex:1, padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center', textDecoration:'none', display:'block' }}>
+                    style={{ flex:1, padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center', textDecoration:'none', display:'block' }}>
                     📱 Abrir en WhatsApp
                   </a>
                 </div>
               </>
             ) : (
-              <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>
+              <div style={{ fontSize:'12px', color:T.muted, padding:'20px', textAlign:'center' }}>
                 Selecciona un pedido y presiona &quot;Generar mensaje&quot; para ver el resultado aquí
               </div>
             )}
@@ -355,24 +356,24 @@ Sé directo, usa números reales, sin rodeos.`
       {tab === 'novedades' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>⚠️ Novedades sin resolver — más de 24 horas</div>
-              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente genera el script específico para cada tipo de novedad</div>
+              <div style={{ fontSize:'11px', color:T.muted }}>El agente genera el script específico para cada tipo de novedad</div>
             </div>
             {pedidosNovedad.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>
                 ✅ Sin novedades pendientes
               </div>
             ) : pedidosNovedad.map(p => (
-              <div key={p.id} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px' }}>
+              <div key={p.id} style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:'10px' }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:'13px', fontWeight:'600' }}>{p.cliente_nombre}</div>
-                  <div style={{ fontSize:'11px', color:'#8B96A8' }}>{p.novedad_tipo || 'Novedad general'}</div>
-                  <div style={{ fontSize:'10px', color:'#F5A623', marginTop:'2px' }}>⏰ {p.horas_espera}h en novedad</div>
+                  <div style={{ fontSize:'11px', color:T.muted }}>{p.novedad_tipo || 'Novedad general'}</div>
+                  <div style={{ fontSize:'10px', color:T.yellow, marginTop:'2px' }}>⏰ {p.horas_espera}h en novedad</div>
                 </div>
                 <button onClick={() => ejecutarAgente('novedades', p)}
                   disabled={corriendo === 'novedades' || !puede(clavePermiso('agentes','novedades'),'agregar')}
-                  style={{ padding:'7px 14px', background:'rgba(245,166,35,0.15)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:'8px', color:'#F5A623', cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                  style={{ padding:'7px 14px', background:'rgba(245,166,35,0.15)', border:'1px solid rgba(245,166,35,0.3)', borderRadius:'8px', color:T.yellow, cursor: corriendo?'wait':'pointer', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='novedades' ? '⏳ Generando...' : '🤖 Resolver novedad'}
                 </button>
               </div>
@@ -380,25 +381,25 @@ Sé directo, usa números reales, sin rodeos.`
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'12px' }}>💬 Script del agente</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'12px' }}>💬 Script del agente</div>
             {resultado && resultado.agente === 'novedades' ? (
               <>
-                <div style={{ background:'rgba(245,166,35,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(245,166,35,0.2)', fontSize:'13px', lineHeight:'1.7', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>
+                <div style={{ background:'rgba(245,166,35,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(245,166,35,0.2)', fontSize:'13px', lineHeight:'1.7', color:T.text, marginBottom:'12px', whiteSpace:'pre-wrap' }}>
                   {resultado.texto}
                 </div>
                 <div style={{ display:'flex', gap:'8px' }}>
                   <button onClick={() => navigator.clipboard.writeText(resultado.texto)}
-                    style={{ flex:1, padding:'8px', background:'rgba(245,166,35,0.1)', border:'none', borderRadius:'8px', color:'#F5A623', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                    style={{ flex:1, padding:'8px', background:'rgba(245,166,35,0.1)', border:'none', borderRadius:'8px', color:T.yellow, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                     📋 Copiar script
                   </button>
                   <a href={`https://wa.me/?text=${encodeURIComponent(resultado.texto)}`} target="_blank" rel="noopener noreferrer"
-                    style={{ flex:1, padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center', textDecoration:'none', display:'block' }}>
+                    style={{ flex:1, padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600', textAlign:'center', textDecoration:'none', display:'block' }}>
                     📱 Abrir en WhatsApp
                   </a>
                 </div>
               </>
             ) : (
-              <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>
+              <div style={{ fontSize:'12px', color:T.muted, padding:'20px', textAlign:'center' }}>
                 Selecciona una novedad para que el agente genere el script de resolución
               </div>
             )}
@@ -411,44 +412,44 @@ Sé directo, usa números reales, sin rodeos.`
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'14px' }}>📊 Contexto financiero que recibirá el agente</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'14px' }}>📊 Contexto financiero que recibirá el agente</div>
               {[
-                { label:'Saldo Wallet (caja disponible)', v:fmt(saldoWallet), c: saldoWallet>500000?'#2DD4A0':'#F5A623' },
-                { label:'CXP pendientes total', v:fmt(totalCxpPendiente), c:'#F5A623' },
-                { label:'CXP vencidas', v:`${cxpVencidas.length} obligaciones`, c: cxpVencidas.length>0?'#F05C5C':'#2DD4A0' },
+                { label:'Saldo Wallet (caja disponible)', v:fmt(saldoWallet), c: saldoWallet>500000?T.green:T.yellow },
+                { label:'CXP pendientes total', v:fmt(totalCxpPendiente), c:T.yellow },
+                { label:'CXP vencidas', v:`${cxpVencidas.length} obligaciones`, c: cxpVencidas.length>0?T.red:T.green },
               ].map((k,i) => (
-                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8' }}>{k.label}</span>
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom:`1px solid ${T.border}` }}>
+                  <span style={{ fontSize:'12px', color:T.muted }}>{k.label}</span>
                   <span style={{ fontSize:'14px', fontWeight:'700', color:k.c }}>{k.v}</span>
                 </div>
               ))}
               {cxpVencidas.slice(0,3).map((c,i) => (
                 <div key={i} style={{ padding:'8px 10px', background:'rgba(240,92,92,0.05)', borderRadius:'8px', marginTop:'6px', display:'flex', justifyContent:'space-between' }}>
-                  <span style={{ fontSize:'11px', color:'#F05C5C' }}>⏰ {c.tercero} — {c.concepto.slice(0,30)}</span>
-                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#F05C5C' }}>{fmt(c.valor)}</span>
+                  <span style={{ fontSize:'11px', color:T.red }}>⏰ {c.tercero} — {c.concepto.slice(0,30)}</span>
+                  <span style={{ fontSize:'11px', fontWeight:'700', color:T.red }}>{fmt(c.valor)}</span>
                 </div>
               ))}
               <button onClick={ejecutarContable} disabled={corriendo==='contable' || !puede(clavePermiso('agentes','contable'),'agregar')}
-                style={{ width:'100%', marginTop:'14px', padding:'11px', background: corriendo==='contable'?'rgba(45,212,160,0.1)':'#2DD4A0', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor: corriendo==='contable'?'wait':'pointer', fontSize:'13px' }}>
+                style={{ width:'100%', marginTop:'14px', padding:'11px', background: corriendo==='contable'?'rgba(45,212,160,0.1)':T.green, border:'none', borderRadius:'9px', color:T.card, fontWeight:'700', cursor: corriendo==='contable'?'wait':'pointer', fontSize:'13px' }}>
                 {corriendo==='contable' ? '⏳ Analizando situación...' : '🤖 Ejecutar diagnóstico financiero'}
               </button>
             </div>
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'12px' }}>📋 Diagnóstico del agente contable</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'12px' }}>📋 Diagnóstico del agente contable</div>
             {resultado && resultado.agente === 'contable' ? (
               <>
-                <div style={{ background:'rgba(45,212,160,0.06)', borderRadius:'10px', padding:'16px', border:'1px solid rgba(45,212,160,0.2)', fontSize:'13px', lineHeight:'1.9', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>
+                <div style={{ background:'rgba(45,212,160,0.06)', borderRadius:'10px', padding:'16px', border:'1px solid rgba(45,212,160,0.2)', fontSize:'13px', lineHeight:'1.9', color:T.text, marginBottom:'12px', whiteSpace:'pre-wrap' }}>
                   {resultado.texto}
                 </div>
                 <button onClick={() => navigator.clipboard.writeText(resultado.texto)}
-                  style={{ width:'100%', padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                  style={{ width:'100%', padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                   📋 Copiar diagnóstico
                 </button>
               </>
             ) : (
-              <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center', lineHeight:'1.7' }}>
+              <div style={{ fontSize:'12px', color:T.muted, padding:'20px', textAlign:'center', lineHeight:'1.7' }}>
                 Presiona &quot;Ejecutar diagnóstico financiero&quot; para que el agente analice tu situación real y genere un informe ejecutivo
               </div>
             )}
@@ -460,23 +461,23 @@ Sé directo, usa números reales, sin rodeos.`
       {tab === 'campanas' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>📡 Campañas activas — últimos 30 días</div>
-              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente detecta campañas con ROAS bajo o CPA fuera de rango</div>
+              <div style={{ fontSize:'11px', color:T.muted }}>El agente detecta campañas con ROAS bajo o CPA fuera de rango</div>
             </div>
             {pautaRows.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin datos de pauta en los últimos 30 días</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin datos de pauta en los últimos 30 días</div>
             ) : pautaRows.map(p => {
               const alerta = p.roas < 1.5 || p.cpa > 22000
               return (
-                <div key={p.id} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${alerta?'#F05C5C':'#2DD4A0'}` }}>
+                <div key={p.id} style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${alerta?T.red:T.green}` }}>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:'12px', fontWeight:'600' }}>{p.campana}</div>
-                    <div style={{ fontSize:'10px', color:'#8B96A8' }}>{p.plataforma} · {p.fecha} · Inv: ${Math.round(p.inversion/1000)}K</div>
+                    <div style={{ fontSize:'10px', color:T.muted }}>{p.plataforma} · {p.fecha} · Inv: ${Math.round(p.inversion/1000)}K</div>
                     <div style={{ display:'flex', gap:'10px', marginTop:'3px' }}>
-                      <span style={{ fontSize:'10px', color: p.roas>=1.5?'#2DD4A0':'#F05C5C', fontWeight:'700' }}>ROAS {p.roas}x</span>
-                      <span style={{ fontSize:'10px', color: p.cpa<=22000?'#2DD4A0':'#F05C5C', fontWeight:'700' }}>CPA ${Math.round(p.cpa/1000)}K</span>
-                      <span style={{ fontSize:'10px', color:'#8B96A8' }}>CTR {p.ctr}%</span>
+                      <span style={{ fontSize:'10px', color: p.roas>=1.5?T.green:T.red, fontWeight:'700' }}>ROAS {p.roas}x</span>
+                      <span style={{ fontSize:'10px', color: p.cpa<=22000?T.green:T.red, fontWeight:'700' }}>CPA ${Math.round(p.cpa/1000)}K</span>
+                      <span style={{ fontSize:'10px', color:T.muted }}>CTR {p.ctr}%</span>
                     </div>
                   </div>
                   <button onClick={async () => {
@@ -491,7 +492,7 @@ Sé directo, usa números reales, sin rodeos.`
                     } catch { setResultado({ agente:'campanas', texto:'❌ Error al conectar' }) }
                     setCorriendo(null)
                   }} disabled={corriendo==='campanas' || !puede(clavePermiso('agentes','campanas'),'agregar')}
-                    style={{ padding:'6px 12px', background:`rgba(155,107,255,0.15)`, border:'none', borderRadius:'7px', color:'#9B6BFF', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                    style={{ padding:'6px 12px', background:`rgba(155,107,255,0.15)`, border:'none', borderRadius:'7px', color:T.purple, cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                     {corriendo==='campanas'?'⏳':'🤖 Analizar'}
                   </button>
                 </div>
@@ -499,13 +500,13 @@ Sé directo, usa números reales, sin rodeos.`
             })}
           </div>
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'12px' }}>💬 Diagnóstico del agente</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'12px' }}>💬 Diagnóstico del agente</div>
             {resultado?.agente==='campanas' ? (
               <>
-                <div style={{ background:'rgba(155,107,255,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(155,107,255,0.2)', fontSize:'13px', lineHeight:'1.8', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
-                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(155,107,255,0.1)', border:'none', borderRadius:'8px', color:'#9B6BFF', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
+                <div style={{ background:'rgba(155,107,255,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(155,107,255,0.2)', fontSize:'13px', lineHeight:'1.8', color:T.text, marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
+                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(155,107,255,0.1)', border:'none', borderRadius:'8px', color:T.purple, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
               </>
-            ) : <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>Selecciona una campaña para analizarla</div>}
+            ) : <div style={{ fontSize:'12px', color:T.muted, padding:'20px', textAlign:'center' }}>Selecciona una campaña para analizarla</div>}
           </div>
         </div>
       )}
@@ -514,17 +515,17 @@ Sé directo, usa números reales, sin rodeos.`
       {tab === 'inventario' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>🏭 Productos con stock bajo o en quiebre</div>
-              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente sugiere traslado entre bodegas o compra urgente</div>
+              <div style={{ fontSize:'11px', color:T.muted }}>El agente sugiere traslado entre bodegas o compra urgente</div>
             </div>
             {stockBajoItems.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>✅ Todos los productos tienen stock suficiente</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>✅ Todos los productos tienen stock suficiente</div>
             ) : stockBajoItems.map((item,i) => (
-              <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px', borderLeft:'3px solid #F05C5C' }}>
+              <div key={i} style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${T.red}` }}>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:'12px', fontWeight:'600' }}>Producto ID: {item.producto_id.slice(0,8)}...</div>
-                  <div style={{ fontSize:'10px', color:'#8B96A8' }}>Disponible: {item.cantidad_disponible} u · Mínimo: {item.stock_minimo} u</div>
+                  <div style={{ fontSize:'10px', color:T.muted }}>Disponible: {item.cantidad_disponible} u · Mínimo: {item.stock_minimo} u</div>
                 </div>
                 <button onClick={async () => {
                   setCorriendo('inventario'); setResultado(null)
@@ -538,20 +539,20 @@ Sé directo, usa números reales, sin rodeos.`
                   } catch { setResultado({ agente:'inventario', texto:'❌ Error al conectar' }) }
                   setCorriendo(null)
                 }} disabled={corriendo==='inventario' || !puede(clavePermiso('agentes','inventario'),'agregar')}
-                  style={{ padding:'6px 12px', background:'rgba(240,92,92,0.15)', border:'none', borderRadius:'7px', color:'#F05C5C', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                  style={{ padding:'6px 12px', background:'rgba(240,92,92,0.15)', border:'none', borderRadius:'7px', color:T.red, cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                   {corriendo==='inventario'?'⏳':'🤖 Analizar'}
                 </button>
               </div>
             ))}
           </div>
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'12px' }}>💬 Recomendación del agente</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.red, marginBottom:'12px' }}>💬 Recomendación del agente</div>
             {resultado?.agente==='inventario' ? (
               <>
-                <div style={{ background:'rgba(240,92,92,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(240,92,92,0.2)', fontSize:'13px', lineHeight:'1.8', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
-                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:'#F05C5C', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
+                <div style={{ background:'rgba(240,92,92,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(240,92,92,0.2)', fontSize:'13px', lineHeight:'1.8', color:T.text, marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
+                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:T.red, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
               </>
-            ) : <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>Selecciona un producto con stock bajo para analizarlo</div>}
+            ) : <div style={{ fontSize:'12px', color:T.muted, padding:'20px', textAlign:'center' }}>Selecciona un producto con stock bajo para analizarlo</div>}
           </div>
         </div>
       )}
@@ -560,23 +561,23 @@ Sé directo, usa números reales, sin rodeos.`
       {tab === 'logistico' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, overflow:'hidden' }}>
-            <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+            <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}` }}>
               <div style={{ fontWeight:'700', marginBottom:'2px' }}>🚚 Rendimiento por transportadora — 30 días</div>
-              <div style={{ fontSize:'11px', color:'#8B96A8' }}>El agente detecta transportadoras con bajo rendimiento y sugiere acciones</div>
+              <div style={{ fontSize:'11px', color:T.muted }}>El agente detecta transportadoras con bajo rendimiento y sugiere acciones</div>
             </div>
             {transportadorasMetrica.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin datos de transportadora en los pedidos del período</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin datos de transportadora en los pedidos del período</div>
             ) : transportadorasMetrica.map((t,i) => {
               const alerta = t.tasa < 70
               return (
-                <div key={i} style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${alerta?'#F05C5C':'#2DD4A0'}` }}>
+                <div key={i} style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:'10px', borderLeft:`3px solid ${alerta?T.red:T.green}` }}>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:'13px', fontWeight:'600' }}>{t.transportadora}</div>
-                    <div style={{ fontSize:'10px', color:'#8B96A8' }}>{t.total} pedidos · {t.entregados} entregados</div>
+                    <div style={{ fontSize:'10px', color:T.muted }}>{t.total} pedidos · {t.entregados} entregados</div>
                   </div>
                   <div style={{ textAlign:'right', marginRight:'8px' }}>
-                    <div style={{ fontSize:'16px', fontWeight:'800', color:alerta?'#F05C5C':'#2DD4A0' }}>{t.tasa}%</div>
-                    <div style={{ fontSize:'9px', color:'#5A6478' }}>tasa entrega</div>
+                    <div style={{ fontSize:'16px', fontWeight:'800', color:alerta?T.red:T.green }}>{t.tasa}%</div>
+                    <div style={{ fontSize:'9px', color:T.muted }}>tasa entrega</div>
                   </div>
                   <button onClick={async () => {
                     setCorriendo('logistico'); setResultado(null)
@@ -590,7 +591,7 @@ Sé directo, usa números reales, sin rodeos.`
                     } catch { setResultado({ agente:'logistico', texto:'❌ Error al conectar' }) }
                     setCorriendo(null)
                   }} disabled={corriendo==='logistico' || !puede(clavePermiso('agentes','logistico'),'agregar')}
-                    style={{ padding:'6px 12px', background:'rgba(45,212,160,0.15)', border:'none', borderRadius:'7px', color:'#2DD4A0', cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
+                    style={{ padding:'6px 12px', background:'rgba(45,212,160,0.15)', border:'none', borderRadius:'7px', color:T.green, cursor:corriendo?'wait':'pointer', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>
                     {corriendo==='logistico'?'⏳':'🤖 Analizar'}
                   </button>
                 </div>
@@ -598,13 +599,13 @@ Sé directo, usa números reales, sin rodeos.`
             })}
           </div>
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'12px' }}>💬 Diagnóstico logístico</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'12px' }}>💬 Diagnóstico logístico</div>
             {resultado?.agente==='logistico' ? (
               <>
-                <div style={{ background:'rgba(45,212,160,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(45,212,160,0.2)', fontSize:'13px', lineHeight:'1.8', color:'#E8EDF5', marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
-                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
+                <div style={{ background:'rgba(45,212,160,0.06)', borderRadius:'10px', padding:'14px', border:'1px solid rgba(45,212,160,0.2)', fontSize:'13px', lineHeight:'1.8', color:T.text, marginBottom:'12px', whiteSpace:'pre-wrap' }}>{resultado.texto}</div>
+                <button onClick={()=>navigator.clipboard.writeText(resultado.texto)} style={{ width:'100%', padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📋 Copiar</button>
               </>
-            ) : <div style={{ fontSize:'12px', color:'#5A6478', padding:'20px', textAlign:'center' }}>Selecciona una transportadora para analizarla</div>}
+            ) : <div style={{ fontSize:'12px', color:T.muted, padding:'20px', textAlign:'center' }}>Selecciona una transportadora para analizarla</div>}
           </div>
         </div>
       )}
@@ -612,17 +613,17 @@ Sé directo, usa números reales, sin rodeos.`
       {/* ── HISTORIAL ── */}
       {logs.length > 0 && (
         <div style={{ ...s, overflow:'hidden', marginTop:'16px' }}>
-          <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700', fontSize:'13px' }}>
+          <div style={{ padding:'12px 16px', borderBottom:`1px solid ${T.border}`, fontWeight:'700', fontSize:'13px' }}>
             🕐 Historial de ejecuciones recientes
           </div>
           {logs.slice(0,8).map((log,i) => {
             const ag = AGENTES.find(a=>a.key===log.agente)
             return (
-              <div key={i} style={{ padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'12px' }}>
-                <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:`${ag?.color||'#5A6478'}15`, color:ag?.color||'#5A6478', fontWeight:'700', flexShrink:0 }}>{ag?.label||log.agente}</span>
-                <div style={{ flex:1, fontSize:'11px', color:'#8B96A8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{log.output_texto?.slice(0,80)}...</div>
-                <span style={{ fontSize:'10px', color:'#5A6478', flexShrink:0 }}>{new Date(log.created_at).toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})}</span>
-                <span style={{ fontSize:'10px', color: log.estado==='ok'?'#2DD4A0':'#F05C5C' }}>{log.estado==='ok'?'✅':'❌'}</span>
+              <div key={i} style={{ padding:'10px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:'12px' }}>
+                <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:`${ag?.color||T.muted}15`, color:ag?.color||T.muted, fontWeight:'700', flexShrink:0 }}>{ag?.label||log.agente}</span>
+                <div style={{ flex:1, fontSize:'11px', color:T.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{log.output_texto?.slice(0,80)}...</div>
+                <span style={{ fontSize:'10px', color:T.muted, flexShrink:0 }}>{new Date(log.created_at).toLocaleString('es-CO',{hour:'2-digit',minute:'2-digit',day:'2-digit',month:'2-digit'})}</span>
+                <span style={{ fontSize:'10px', color: log.estado==='ok'?T.green:T.red }}>{log.estado==='ok'?'✅':'❌'}</span>
               </div>
             )
           })}

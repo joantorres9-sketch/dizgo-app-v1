@@ -65,7 +65,8 @@ export default function PrecioPage() {
   const lbl: React.CSSProperties = { fontSize:'11px', color:T.muted, marginBottom:'4px', display:'block' }
   const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px' }
   const supabase = createClient()
-  const { puede, puedePais } = usePermisos()
+  const { puede, puedePais, perfil, cargando: cargandoPermisos } = usePermisos()
+  const [tenantId, setTenantId] = useState('')
   const [productos, setProductos] = useState<Producto[]>([])
   const [prodSel, setProdSel] = useState<Producto|null>(null)
   const [loading, setLoading] = useState(true)
@@ -87,14 +88,10 @@ export default function PrecioPage() {
   const [comboProdId, setComboProdId] = useState('')
   const [comboDesc, setComboDesc] = useState(12)
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
     setPais(getPais())
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
+    setTenantId(tid)
 
     const hoy = new Date()
     const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
@@ -133,7 +130,11 @@ export default function PrecioPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   function selProducto(p: Producto) {
     setProdSel({ ...p, costos_extra: p.costos_extra || {}, pct_extra: p.pct_extra || {} })
@@ -270,7 +271,7 @@ export default function PrecioPage() {
     }).eq('id', prodSel.id)
     setProdSel({ ...prodSel, pvp_final:pvpHumano, pvp_historial:historial })
     setSaving(false)
-    loadData()
+    loadData(tenantId)
   }
 
   async function revertirPrecio(pvpAnterior: number) {

@@ -36,16 +36,16 @@ const TIPO_TERCERO_INFO: Record<string,{l:string;c:string;icon:string}> = {
   prestaciones_sociales:{l:'Prestaciones',c:'#F5A623',icon:'🛡️'}, contratista:{l:'Contratista',c:'#2DD4A0',icon:'🔧'},
   prestador_servicios:{l:'Prestador servicio',c:'#F05C5C',icon:'💼'}, otro:{l:'Otro',c:'#8B96A8',icon:'📄'},
 }
-function semG(mg:number){ return mg>=15?'#2DD4A0':mg>=8?'#F5A623':'#F05C5C' }
-function semLiq(r:number){ return r>=1.5?'#2DD4A0':r>=1?'#F5A623':'#F05C5C' }
 function fmt(n:number){ return n>=1000000?`$${(n/1000000).toFixed(1)}M`:n>=1000?`$${Math.round(n/1000)}K`:`$${Math.round(n)}` }
 function fmtFull(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
-const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
 
 export default function PYGPage() {
   const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
+  const semG = (mg:number) => mg>=15?T.green:mg>=8?T.yellow:T.red
+  const semLiq = (r:number) => r>=1.5?T.green:r>=1?T.yellow:T.red
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'resultados'|'producto'|'mezcla'|'flujo_caja'|'balance'|'cxp'|'libro_caja'>('resultados')
@@ -71,13 +71,8 @@ export default function PYGPage() {
   const [nuevoMov, setNuevoMov] = useState({ concepto:'', tipo:'salida', valor:0, categoria_flujo:'operativo' })
   const [previewLibroCaja, setPreviewLibroCaja] = useState<FilaImportada<FilaLibroCaja>[] | null>(null)
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const hoy = new Date()
@@ -159,7 +154,11 @@ export default function PYGPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   const activoCorriente = walletSaldo + cuentasPorCobrar
   const activoTotal = activoCorriente + activosFijos
@@ -220,7 +219,7 @@ export default function PYGPage() {
       tipo: 'salida', valor: item.valor, origen: 'cuentas_por_pagar',
       referencia_tabla: 'cuentas_por_pagar', referencia_id: item.id, categoria_flujo: item.categoria_flujo,
     })
-    loadData()
+    loadData(tenantId)
   }
 
   async function guardarMovimientoManual() {
@@ -251,7 +250,7 @@ export default function PYGPage() {
       estado: ok === previewLibroCaja.length ? 'completado' : 'error',
     })
     setPreviewLibroCaja(null)
-    loadData()
+    loadData(tenantId)
   }
 
   function exportarExcel() {
@@ -290,39 +289,39 @@ export default function PYGPage() {
   }, [cargandoPermisos, tab, tabsVisibles])
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted, fontSize:'14px' }}>
       Consolidando información financiera...
     </div>
   )
 
   return (
     <RequierePermiso modulo="pyg">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🏛️ Suite Financiera P&G</h1>
-          <p style={{ fontSize:'13px', color:'#8B96A8' }}>Resultados · Flujo de Caja · Balance · Cuentas por Pagar · Libro de Caja</p>
+          <p style={{ fontSize:'13px', color:T.muted }}>Resultados · Flujo de Caja · Balance · Cuentas por Pagar · Libro de Caja</p>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
           {puede('pyg','descargar') && (
-            <button onClick={exportarExcel} style={{ padding:'8px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📊 Excel</button>
+            <button onClick={exportarExcel} style={{ padding:'8px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📊 Excel</button>
           )}
-          <button onClick={() => window.print()} style={{ padding:'8px 14px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:'#F05C5C', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📄 PDF</button>
+          <button onClick={() => window.print()} style={{ padding:'8px 14px', background:'rgba(240,92,92,0.1)', border:'none', borderRadius:'8px', color:T.red, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>📄 PDF</button>
         </div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
           { l:'Utilidad neta (mes)', v:fmt(mesActual.utilidad), c:semG(mesActual.margen), icon:'💎' },
-          { l:'Caja disponible', v:fmt(walletSaldo), c:'#2DD4A0', icon:'💰' },
-          { l:'Por cobrar (en tránsito)', v:fmt(cuentasPorCobrar), c:'#3D8EF0', icon:'🚚' },
-          { l:'Por pagar pendiente', v:fmt(pasivoCorriente), c:'#F5A623', icon:'📋' },
+          { l:'Caja disponible', v:fmt(walletSaldo), c:T.green, icon:'💰' },
+          { l:'Por cobrar (en tránsito)', v:fmt(cuentasPorCobrar), c:T.blue, icon:'🚚' },
+          { l:'Por pagar pendiente', v:fmt(pasivoCorriente), c:T.yellow, icon:'📋' },
           { l:'Liquidez (razón corriente)', v:razonCorriente.toFixed(2), c:semLiq(razonCorriente), icon:'⚖️' },
         ].map((k,i) => (
           <div key={i} style={{ ...s, padding:'12px', borderTop:`2px solid ${k.c}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-              <span style={{ fontSize:'10px', color:'#8B96A8' }}>{k.l}</span><span>{k.icon}</span>
+              <span style={{ fontSize:'10px', color:T.muted }}>{k.l}</span><span>{k.icon}</span>
             </div>
             <div style={{ fontSize:'17px', fontWeight:'800', color:k.c }}>{k.v}</div>
           </div>
@@ -333,7 +332,7 @@ export default function PYGPage() {
         {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
-              background: tab===t.key?'#F5A623':'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':'#8B96A8' }}>
+              background: tab===t.key?T.yellow:'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':T.muted }}>
             {t.label}
           </button>
         ))}
@@ -345,18 +344,18 @@ export default function PYGPage() {
             <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📈 Histórico 6 meses — Estado de Resultados</div>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
               <thead>
-                <tr style={{ background:'#0A0D14', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                <tr style={{ background:T.bg, borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
                   {['Mes','Ventas','Costos','Utilidad','Margen'].map(h => (
-                    <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700' }}>{h}</th>
+                    <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:'700' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {historicoMensual.map((h,i) => (
                   <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)', background: i===historicoMensual.length-1?'rgba(245,166,35,0.04)':'transparent' }}>
-                    <td style={{ padding:'8px 10px', fontWeight: i===historicoMensual.length-1?'700':'400', color: i===historicoMensual.length-1?'#F5A623':'#E8EDF5' }}>{h.mes}</td>
-                    <td style={{ padding:'8px 10px', color:'#8B96A8' }}>{fmt(h.ventas)}</td>
-                    <td style={{ padding:'8px 10px', color:'#F05C5C' }}>{fmt(h.costos)}</td>
+                    <td style={{ padding:'8px 10px', fontWeight: i===historicoMensual.length-1?'700':'400', color: i===historicoMensual.length-1?T.yellow:T.text }}>{h.mes}</td>
+                    <td style={{ padding:'8px 10px', color:T.muted }}>{fmt(h.ventas)}</td>
+                    <td style={{ padding:'8px 10px', color:T.red }}>{fmt(h.costos)}</td>
                     <td style={{ padding:'8px 10px', fontWeight:'700', color:semG(h.margen) }}>{fmt(h.utilidad)}</td>
                     <td style={{ padding:'8px 10px', fontWeight:'700', color:semG(h.margen) }}>{h.margen}%</td>
                   </tr>
@@ -366,24 +365,24 @@ export default function PYGPage() {
           </div>
 
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>💰 CASCADA DEL MES ACTUAL ({mesActual.mes})</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'14px' }}>💰 CASCADA DEL MES ACTUAL ({mesActual.mes})</div>
             {[
-              { c:'VENTAS BRUTAS', v:mesActual.ventas, color:'#E8EDF5', bold:true },
-              { c:'(-) Costos totales del mes', v:-mesActual.costos, color:'#F05C5C' },
+              { c:'VENTAS BRUTAS', v:mesActual.ventas, color:T.text, bold:true },
+              { c:'(-) Costos totales del mes', v:-mesActual.costos, color:T.red },
               { c:'= UTILIDAD NETA', v:mesActual.utilidad, color:semG(mesActual.margen), bold:true },
             ].map((row,i) => (
-              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom: row.bold?'2px solid rgba(255,255,255,0.08)':'1px solid rgba(255,255,255,0.03)' }}>
-                <span style={{ fontSize: row.bold?'13px':'12px', fontWeight: row.bold?'700':'400', color: row.bold?'#E8EDF5':'#8B96A8' }}>{row.c}</span>
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'10px 0', borderBottom: row.bold?`2px solid ${T.border}`:'1px solid rgba(255,255,255,0.03)' }}>
+                <span style={{ fontSize: row.bold?'13px':'12px', fontWeight: row.bold?'700':'400', color: row.bold?T.text:T.muted }}>{row.c}</span>
                 <span style={{ fontSize: row.bold?'16px':'13px', fontWeight: row.bold?'800':'600', color:row.color }}>{fmtFull(Math.abs(row.v))}</span>
               </div>
             ))}
             <div style={{ marginTop:'14px', padding:'12px', background:`${semG(mesActual.margen)}08`, borderRadius:'10px', border:`1px solid ${semG(mesActual.margen)}22` }}>
               <div style={{ display:'flex', justifyContent:'space-between' }}>
-                <span style={{ fontSize:'12px', color:'#8B96A8' }}>Margen neto del mes</span>
+                <span style={{ fontSize:'12px', color:T.muted }}>Margen neto del mes</span>
                 <span style={{ fontSize:'20px', fontWeight:'800', color:semG(mesActual.margen) }}>{mesActual.margen}%</span>
               </div>
             </div>
-            <div style={{ marginTop:'10px', fontSize:'11px', color:'#5A6478' }}>{productos.length} productos activos en catálogo</div>
+            <div style={{ marginTop:'10px', fontSize:'11px', color:T.muted }}>{productos.length} productos activos en catálogo</div>
           </div>
         </div>
       )}
@@ -392,13 +391,13 @@ export default function PYGPage() {
         <div style={{ ...s, overflow:'hidden' }}>
           <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📦 P&G por producto — pedidos entregados este mes</div>
           {calcTodos.length === 0 ? (
-            <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin pedidos entregados este mes por producto</div>
+            <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin pedidos entregados este mes por producto</div>
           ) : (
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
               <thead>
-                <tr style={{ background:'#0A0D14', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                <tr style={{ background:T.bg, borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
                   {['Producto','Unid.','Ventas','Util.Bruta','Util.Neta','MB%','MN%'].map(h => (
-                    <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700' }}>{h}</th>
+                    <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:'700' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -406,8 +405,8 @@ export default function PYGPage() {
                 {calcTodos.map((p,i) => (
                   <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                     <td style={{ padding:'9px 10px', fontWeight:'600' }}>{p.nombre}</td>
-                    <td style={{ padding:'9px 10px', color:'#8B96A8' }}>{p.unidades}</td>
-                    <td style={{ padding:'9px 10px', color:'#E8EDF5' }}>{fmt(p.ventas)}</td>
+                    <td style={{ padding:'9px 10px', color:T.muted }}>{p.unidades}</td>
+                    <td style={{ padding:'9px 10px', color:T.text }}>{fmt(p.ventas)}</td>
                     <td style={{ padding:'9px 10px', color:semG(p.margen_bruto) }}>{fmt(p.utilidad_bruta)}</td>
                     <td style={{ padding:'9px 10px', fontWeight:'700', color:semG(p.margen_neto) }}>{fmt(p.utilidad_neta)}</td>
                     <td style={{ padding:'9px 10px', fontWeight:'700', color:semG(p.margen_bruto) }}>{p.margen_bruto}%</td>
@@ -417,9 +416,9 @@ export default function PYGPage() {
               </tbody>
               <tfoot>
                 <tr style={{ background:'rgba(245,166,35,0.04)', borderTop:'2px solid rgba(245,166,35,0.2)' }}>
-                  <td style={{ padding:'9px 10px', fontWeight:'800', color:'#F5A623' }}>TOTAL</td>
-                  <td style={{ padding:'9px 10px', color:'#F5A623' }}>{totalUnidadesProd}</td>
-                  <td style={{ padding:'9px 10px', color:'#F5A623', fontWeight:'700' }}>{fmt(totalVentasProd)}</td>
+                  <td style={{ padding:'9px 10px', fontWeight:'800', color:T.yellow }}>TOTAL</td>
+                  <td style={{ padding:'9px 10px', color:T.yellow }}>{totalUnidadesProd}</td>
+                  <td style={{ padding:'9px 10px', color:T.yellow, fontWeight:'700' }}>{fmt(totalVentasProd)}</td>
                   <td colSpan={2} style={{ padding:'9px 10px', color:semG(totalVentasProd>0?Math.round(totalUtilNetaProd/totalVentasProd*100):0), fontWeight:'800' }}>{fmt(totalUtilNetaProd)}</td>
                   <td colSpan={2} style={{ padding:'9px 10px', fontWeight:'800', color:semG(totalVentasProd>0?Math.round(totalUtilNetaProd/totalVentasProd*100):0) }}>{totalVentasProd>0?Math.round(totalUtilNetaProd/totalVentasProd*100):0}%</td>
                 </tr>
@@ -432,9 +431,9 @@ export default function PYGPage() {
       {tab === 'mezcla' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🔀 MEZCLA — Contribución a utilidad</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>🔀 MEZCLA — Contribución a utilidad</div>
             {calcTodos.length === 0 ? (
-              <div style={{ fontSize:'12px', color:'#5A6478', textAlign:'center', padding:'20px' }}>Sin datos este mes</div>
+              <div style={{ fontSize:'12px', color:T.muted, textAlign:'center', padding:'20px' }}>Sin datos este mes</div>
             ) : calcTodos.map((p,i) => {
               const pctUtil = totalUtilNetaProd>0 ? Math.round(p.utilidad_neta/totalUtilNetaProd*100) : 0
               const pctVentas = totalVentasProd>0 ? Math.round(p.ventas/totalVentasProd*100) : 0
@@ -443,7 +442,7 @@ export default function PYGPage() {
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'5px' }}>
                     <span style={{ fontSize:'12px', fontWeight:'600' }}>{p.nombre}</span>
                     <div style={{ display:'flex', gap:'12px' }}>
-                      <span style={{ fontSize:'11px', color:'#5A6478' }}>{p.unidades}u</span>
+                      <span style={{ fontSize:'11px', color:T.muted }}>{p.unidades}u</span>
                       <span style={{ fontSize:'12px', fontWeight:'700', color:semG(p.margen_neto) }}>{fmt(p.utilidad_neta)}</span>
                     </div>
                   </div>
@@ -453,7 +452,7 @@ export default function PYGPage() {
                   <div style={{ height:'8px', background:'rgba(255,255,255,0.05)', borderRadius:'3px' }}>
                     <div style={{ height:'8px', width:`${Math.max(pctUtil,2)}%`, background:semG(p.margen_neto), borderRadius:'3px' }} />
                   </div>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'3px', fontSize:'10px', color:'#5A6478' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginTop:'3px', fontSize:'10px', color:T.muted }}>
                     <span>{pctVentas}% de ventas</span><span style={{ fontWeight:'700' }}>{pctUtil}% de utilidad</span>
                   </div>
                 </div>
@@ -461,19 +460,19 @@ export default function PYGPage() {
             })}
           </div>
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'12px' }}>🚨 ALERTAS DE MEZCLA</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.red, marginBottom:'12px' }}>🚨 ALERTAS DE MEZCLA</div>
             {calcTodos.filter(p => p.margen_neto < 8).length === 0 ? (
-              <div style={{ fontSize:'12px', color:'#5A6478', padding:'8px 0' }}>✅ Ningún producto en zona de riesgo</div>
+              <div style={{ fontSize:'12px', color:T.muted, padding:'8px 0' }}>✅ Ningún producto en zona de riesgo</div>
             ) : calcTodos.filter(p => p.margen_neto < 8).map((p,i) => (
-              <div key={i} style={{ padding:'10px 12px', background:'rgba(240,92,92,0.06)', borderRadius:'8px', marginBottom:'6px', borderLeft:'3px solid #F05C5C' }}>
-                <div style={{ fontSize:'12px', fontWeight:'700', color:'#F05C5C', marginBottom:'3px' }}>⚠️ {p.nombre}</div>
-                <div style={{ fontSize:'11px', color:'#8B96A8' }}>Margen neto: {p.margen_neto}% — Revisar precio en módulo Precio</div>
+              <div key={i} style={{ padding:'10px 12px', background:'rgba(240,92,92,0.06)', borderRadius:'8px', marginBottom:'6px', borderLeft:`3px solid ${T.red}` }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:T.red, marginBottom:'3px' }}>⚠️ {p.nombre}</div>
+                <div style={{ fontSize:'11px', color:T.muted }}>Margen neto: {p.margen_neto}% — Revisar precio en módulo Precio</div>
               </div>
             ))}
             {calcTodos.filter(p => p.margen_neto >= 15).length > 0 && (
-              <div style={{ padding:'10px 12px', background:'rgba(45,212,160,0.06)', borderRadius:'8px', borderLeft:'3px solid #2DD4A0', marginTop:'6px' }}>
-                <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'3px' }}>✅ Productos para escalar</div>
-                <div style={{ fontSize:'11px', color:'#8B96A8' }}>{calcTodos.filter(p=>p.margen_neto>=15).map(p=>p.nombre).join(', ')}</div>
+              <div style={{ padding:'10px 12px', background:'rgba(45,212,160,0.06)', borderRadius:'8px', borderLeft:`3px solid ${T.green}`, marginTop:'6px' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'3px' }}>✅ Productos para escalar</div>
+                <div style={{ fontSize:'11px', color:T.muted }}>{calcTodos.filter(p=>p.margen_neto>=15).map(p=>p.nombre).join(', ')}</div>
               </div>
             )}
           </div>
@@ -483,53 +482,53 @@ export default function PYGPage() {
       {tab === 'flujo_caja' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>💧 ESTADO DE FLUJO DE EFECTIVO — Método directo NIIF (30 días)</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>💧 ESTADO DE FLUJO DE EFECTIVO — Método directo NIIF (30 días)</div>
             {[
-              { titulo:'ACTIVIDADES DE OPERACIÓN', entrada:flujoOperativo.entrada, salida:flujoOperativo.salida, neto:flujoNetoOperativo, color:'#2DD4A0' },
-              { titulo:'ACTIVIDADES DE INVERSIÓN', entrada:flujoInversion.entrada, salida:flujoInversion.salida, neto:flujoNetoInversion, color:'#9B6BFF' },
-              { titulo:'ACTIVIDADES DE FINANCIACIÓN', entrada:flujoFinanciacion.entrada, salida:flujoFinanciacion.salida, neto:flujoNetoFinanciacion, color:'#F5A623' },
+              { titulo:'ACTIVIDADES DE OPERACIÓN', entrada:flujoOperativo.entrada, salida:flujoOperativo.salida, neto:flujoNetoOperativo, color:T.green },
+              { titulo:'ACTIVIDADES DE INVERSIÓN', entrada:flujoInversion.entrada, salida:flujoInversion.salida, neto:flujoNetoInversion, color:T.purple },
+              { titulo:'ACTIVIDADES DE FINANCIACIÓN', entrada:flujoFinanciacion.entrada, salida:flujoFinanciacion.salida, neto:flujoNetoFinanciacion, color:T.yellow },
             ].map((f,i) => (
               <div key={i} style={{ marginBottom:'14px', padding:'12px', background:'rgba(255,255,255,0.02)', borderRadius:'10px', borderLeft:`3px solid ${f.color}` }}>
                 <div style={{ fontSize:'11px', fontWeight:'700', color:f.color, marginBottom:'8px' }}>{f.titulo}</div>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'4px' }}>
-                  <span style={{ color:'#8B96A8' }}>Entradas</span><span style={{ color:'#2DD4A0' }}>{fmtFull(f.entrada)}</span>
+                  <span style={{ color:T.muted }}>Entradas</span><span style={{ color:T.green }}>{fmtFull(f.entrada)}</span>
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', marginBottom:'6px' }}>
-                  <span style={{ color:'#8B96A8' }}>Salidas</span><span style={{ color:'#F05C5C' }}>-{fmtFull(f.salida)}</span>
+                  <span style={{ color:T.muted }}>Salidas</span><span style={{ color:T.red }}>-{fmtFull(f.salida)}</span>
                 </div>
                 <div style={{ display:'flex', justifyContent:'space-between', paddingTop:'6px', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
                   <span style={{ fontSize:'12px', fontWeight:'700' }}>Flujo neto</span>
-                  <span style={{ fontSize:'14px', fontWeight:'800', color: f.neto>=0?'#2DD4A0':'#F05C5C' }}>{fmtFull(f.neto)}</span>
+                  <span style={{ fontSize:'14px', fontWeight:'800', color: f.neto>=0?T.green:T.red }}>{fmtFull(f.neto)}</span>
                 </div>
               </div>
             ))}
             <div style={{ marginTop:'10px', padding:'14px', background:'rgba(245,166,35,0.06)', borderRadius:'10px', border:'1px solid rgba(245,166,35,0.2)' }}>
               <div style={{ display:'flex', justifyContent:'space-between' }}>
                 <span style={{ fontSize:'13px', fontWeight:'700' }}>VARIACIÓN NETA DE EFECTIVO</span>
-                <span style={{ fontSize:'18px', fontWeight:'800', color: flujoNetoTotal>=0?'#2DD4A0':'#F05C5C' }}>{fmtFull(flujoNetoTotal)}</span>
+                <span style={{ fontSize:'18px', fontWeight:'800', color: flujoNetoTotal>=0?T.green:T.red }}>{fmtFull(flujoNetoTotal)}</span>
               </div>
             </div>
           </div>
 
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'14px' }}>🔮 FLUJO PROYECTADO — dinero que viene en camino</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'14px' }}>🔮 FLUJO PROYECTADO — dinero que viene en camino</div>
             <div style={{ padding:'14px', background:'rgba(155,107,255,0.06)', borderRadius:'10px', marginBottom:'14px' }}>
-              <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>Cuentas por cobrar — pedidos en tránsito sin entregar</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:'#9B6BFF' }}>{fmtFull(cuentasPorCobrar)}</div>
-              <div style={{ fontSize:'10px', color:'#5A6478', marginTop:'4px' }}>Este dinero entra a caja entre 5-11 días después de cada entrega (recaudo transportadora)</div>
+              <div style={{ fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Cuentas por cobrar — pedidos en tránsito sin entregar</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:T.purple }}>{fmtFull(cuentasPorCobrar)}</div>
+              <div style={{ fontSize:'10px', color:T.muted, marginTop:'4px' }}>Este dinero entra a caja entre 5-11 días después de cada entrega (recaudo transportadora)</div>
             </div>
             <div style={{ padding:'14px', background:'rgba(245,166,35,0.06)', borderRadius:'10px', marginBottom:'14px' }}>
-              <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>Compromisos de salida — cuentas por pagar pendientes</div>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:'#F5A623' }}>{fmtFull(pasivoCorriente)}</div>
-              <div style={{ fontSize:'10px', color:'#5A6478', marginTop:'4px' }}>Incluye proveedores, nómina, contratistas y cuotas de crédito del mes</div>
+              <div style={{ fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Compromisos de salida — cuentas por pagar pendientes</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:T.yellow }}>{fmtFull(pasivoCorriente)}</div>
+              <div style={{ fontSize:'10px', color:T.muted, marginTop:'4px' }}>Incluye proveedores, nómina, contratistas y cuotas de crédito del mes</div>
             </div>
             <div style={{ padding:'14px', borderRadius:'10px', background: (cuentasPorCobrar-pasivoCorriente)>=0?'rgba(45,212,160,0.06)':'rgba(240,92,92,0.06)', border:`1px solid ${(cuentasPorCobrar-pasivoCorriente)>=0?'rgba(45,212,160,0.2)':'rgba(240,92,92,0.2)'}` }}>
-              <div style={{ fontSize:'11px', fontWeight:'700', color: (cuentasPorCobrar-pasivoCorriente)>=0?'#2DD4A0':'#F05C5C', marginBottom:'6px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color: (cuentasPorCobrar-pasivoCorriente)>=0?T.green:T.red, marginBottom:'6px' }}>
                 {(cuentasPorCobrar-pasivoCorriente)>=0 ? '✅ Cobertura suficiente' : '⚠️ Brecha de caja proyectada'}
               </div>
-              <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.6' }}>
+              <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.6' }}>
                 Lo que viene ({fmt(cuentasPorCobrar)}) {(cuentasPorCobrar-pasivoCorriente)>=0?'cubre':'no cubre'} lo que debes pagar pronto ({fmt(pasivoCorriente)}).
-                Diferencia: <strong style={{ color: (cuentasPorCobrar-pasivoCorriente)>=0?'#2DD4A0':'#F05C5C' }}>{fmt(Math.abs(cuentasPorCobrar-pasivoCorriente))}</strong>
+                Diferencia: <strong style={{ color: (cuentasPorCobrar-pasivoCorriente)>=0?T.green:T.red }}>{fmt(Math.abs(cuentasPorCobrar-pasivoCorriente))}</strong>
               </div>
             </div>
           </div>
@@ -541,58 +540,58 @@ export default function PYGPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>⚖️ Estado de Situación Financiera (Balance — parcial)</div>
             <div style={{ padding:'16px' }}>
-              <div style={{ fontSize:'11px', fontWeight:'700', color:'#2DD4A0', marginBottom:'8px' }}>ACTIVO</div>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:T.green, marginBottom:'8px' }}>ACTIVO</div>
               {[
                 { l:'Caja (Wallet)', v:walletSaldo },
                 { l:'Cuentas por cobrar', v:cuentasPorCobrar },
                 { l:'Activos fijos (Inversión)', v:activosFijos },
               ].map((r,i) => (
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px' }}>
-                  <span style={{ color:'#8B96A8' }}>{r.l}</span><span style={{ color:'#E8EDF5' }}>{fmtFull(r.v)}</span>
+                  <span style={{ color:T.muted }}>{r.l}</span><span style={{ color:T.text }}>{fmtFull(r.v)}</span>
                 </div>
               ))}
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:'1px solid rgba(255,255,255,0.08)', marginTop:'6px' }}>
-                <span style={{ fontSize:'13px', fontWeight:'700' }}>TOTAL ACTIVO</span><span style={{ fontSize:'15px', fontWeight:'800', color:'#2DD4A0' }}>{fmtFull(activoTotal)}</span>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:`1px solid ${T.border}`, marginTop:'6px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700' }}>TOTAL ACTIVO</span><span style={{ fontSize:'15px', fontWeight:'800', color:T.green }}>{fmtFull(activoTotal)}</span>
               </div>
 
-              <div style={{ fontSize:'11px', fontWeight:'700', color:'#F05C5C', marginTop:'18px', marginBottom:'8px' }}>PASIVO</div>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:T.red, marginTop:'18px', marginBottom:'8px' }}>PASIVO</div>
               {[
                 { l:'Cuentas por pagar', v: cxp.filter(c=>c.estado==='pendiente').reduce((a,c)=>a+Number(c.valor),0) },
                 { l:'Cuota créditos (mes)', v:cuotaCreditosCP },
                 { l:'Saldo créditos (largo plazo)', v:saldoCreditosLP },
               ].map((r,i) => (
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:'12px' }}>
-                  <span style={{ color:'#8B96A8' }}>{r.l}</span><span style={{ color:'#E8EDF5' }}>{fmtFull(r.v)}</span>
+                  <span style={{ color:T.muted }}>{r.l}</span><span style={{ color:T.text }}>{fmtFull(r.v)}</span>
                 </div>
               ))}
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:'1px solid rgba(255,255,255,0.08)', marginTop:'6px' }}>
-                <span style={{ fontSize:'13px', fontWeight:'700' }}>TOTAL PASIVO</span><span style={{ fontSize:'15px', fontWeight:'800', color:'#F05C5C' }}>{fmtFull(pasivoTotal)}</span>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderTop:`1px solid ${T.border}`, marginTop:'6px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700' }}>TOTAL PASIVO</span><span style={{ fontSize:'15px', fontWeight:'800', color:T.red }}>{fmtFull(pasivoTotal)}</span>
               </div>
 
               <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 0', marginTop:'12px', background:'rgba(245,166,35,0.06)', borderRadius:'8px', paddingLeft:'10px', paddingRight:'10px' }}>
-                <span style={{ fontSize:'14px', fontWeight:'800', color:'#F5A623' }}>PATRIMONIO</span><span style={{ fontSize:'18px', fontWeight:'900', color:'#F5A623' }}>{fmtFull(patrimonio)}</span>
+                <span style={{ fontSize:'14px', fontWeight:'800', color:T.yellow }}>PATRIMONIO</span><span style={{ fontSize:'18px', fontWeight:'900', color:T.yellow }}>{fmtFull(patrimonio)}</span>
               </div>
             </div>
           </div>
 
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🚦 SEMÁFOROS DE SALUD FINANCIERA</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>🚦 SEMÁFOROS DE SALUD FINANCIERA</div>
               {[
                 { l:'Razón corriente', v:razonCorriente.toFixed(2), color:semLiq(razonCorriente), desc: razonCorriente>=1.5?'Liquidez sólida':razonCorriente>=1?'Liquidez ajustada':'Riesgo de iliquidez' },
-                { l:'Capital de trabajo', v:fmtFull(capitalTrabajo), color: capitalTrabajo>=0?'#2DD4A0':'#F05C5C', desc: capitalTrabajo>=0?'Activo corriente cubre el pasivo':'Pasivo corriente supera el activo' },
-                { l:'Patrimonio', v:fmtFull(patrimonio), color: patrimonio>=0?'#2DD4A0':'#F05C5C', desc: patrimonio>=0?'Empresa solvente':'Patrimonio negativo — alerta'},
+                { l:'Capital de trabajo', v:fmtFull(capitalTrabajo), color: capitalTrabajo>=0?T.green:T.red, desc: capitalTrabajo>=0?'Activo corriente cubre el pasivo':'Pasivo corriente supera el activo' },
+                { l:'Patrimonio', v:fmtFull(patrimonio), color: patrimonio>=0?T.green:T.red, desc: patrimonio>=0?'Empresa solvente':'Patrimonio negativo — alerta'},
               ].map((k,i) => (
-                <div key={i} style={{ ...s, padding:'12px', marginBottom:'8px', borderLeft:`3px solid ${k.color}`, background:'#0A0D14' }}>
+                <div key={i} style={{ ...s, padding:'12px', marginBottom:'8px', borderLeft:`3px solid ${k.color}`, background:T.bg }}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                    <span style={{ fontSize:'12px', color:'#8B96A8' }}>{k.l}</span>
+                    <span style={{ fontSize:'12px', color:T.muted }}>{k.l}</span>
                     <span style={{ fontSize:'15px', fontWeight:'800', color:k.color }}>{k.v}</span>
                   </div>
                   <div style={{ fontSize:'10px', color:k.color }}>{k.desc}</div>
                 </div>
               ))}
             </div>
-            <div style={{ ...s, padding:'16px', fontSize:'11px', color:'#5A6478', lineHeight:'1.6' }}>
+            <div style={{ ...s, padding:'16px', fontSize:'11px', color:T.muted, lineHeight:'1.6' }}>
               📌 Balance parcial bajo NIIF para PYMES. No incluye patrimonio detallado por aportes societarios ni conciliación tributaria — DIZGO es herramienta de gestión operativa, no software contable certificado.
             </div>
           </div>
@@ -604,7 +603,7 @@ export default function PYGPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📋 Cuentas por Pagar — Terceros</div>
             {cxp.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin cuentas por pagar registradas</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin cuentas por pagar registradas</div>
             ) : cxp.map(c => {
               const info = TIPO_TERCERO_INFO[c.tipo_tercero] || TIPO_TERCERO_INFO.otro
               const vencida = c.estado==='pendiente' && new Date(c.fecha_vencimiento) < new Date()
@@ -613,15 +612,15 @@ export default function PYGPage() {
                   <span style={{ fontSize:'18px' }}>{info.icon}</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:'12px', fontWeight:'600' }}>{c.tercero} <span style={{ fontSize:'10px', color:info.c }}>· {info.l}</span></div>
-                    <div style={{ fontSize:'11px', color:'#5A6478' }}>{c.concepto} · vence {c.fecha_vencimiento}</div>
+                    <div style={{ fontSize:'11px', color:T.muted }}>{c.concepto} · vence {c.fecha_vencimiento}</div>
                   </div>
                   <div style={{ fontSize:'13px', fontWeight:'700' }}>{fmtFull(c.valor)}</div>
                   {c.estado==='pendiente' ? (
-                    <button onClick={() => pagarCxp(c)} disabled={!puede(clavePermiso('pyg','cxp'),'modificar')} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?'#F05C5C':'#F5A623', cursor: puede(clavePermiso('pyg','cxp'),'modificar')?'pointer':'not-allowed', opacity: puede(clavePermiso('pyg','cxp'),'modificar')?1:0.5, fontSize:'10px', fontWeight:'700' }}>
+                    <button onClick={() => pagarCxp(c)} disabled={!puede(clavePermiso('pyg','cxp'),'modificar')} style={{ padding:'5px 10px', background: vencida?'rgba(240,92,92,0.15)':'rgba(245,166,35,0.15)', border:'none', borderRadius:'6px', color: vencida?T.red:T.yellow, cursor: puede(clavePermiso('pyg','cxp'),'modificar')?'pointer':'not-allowed', opacity: puede(clavePermiso('pyg','cxp'),'modificar')?1:0.5, fontSize:'10px', fontWeight:'700' }}>
                       {vencida?'⚠ Vencida — Pagar':'Pagar'}
                     </button>
                   ) : (
-                    <span style={{ fontSize:'10px', padding:'3px 8px', borderRadius:'5px', background:'rgba(45,212,160,0.15)', color:'#2DD4A0', fontWeight:'700' }}>✓ Pagado</span>
+                    <span style={{ fontSize:'10px', padding:'3px 8px', borderRadius:'5px', background:'rgba(45,212,160,0.15)', color:T.green, fontWeight:'700' }}>✓ Pagado</span>
                   )}
                 </div>
               )
@@ -629,35 +628,35 @@ export default function PYGPage() {
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>+ Nueva cuenta por pagar</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'14px' }}>+ Nueva cuenta por pagar</div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Tercero</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Tercero</label>
               <input value={nuevaCxp.tercero} onChange={e=>setNuevaCxp(p=>({...p,tercero:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Tipo</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Tipo</label>
               <select value={nuevaCxp.tipo_tercero} onChange={e=>setNuevaCxp(p=>({...p,tipo_tercero:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none' }}>
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none' }}>
                 {Object.entries(TIPO_TERCERO_INFO).map(([k,v]) => <option key={k} value={k}>{v.icon} {v.l}</option>)}
               </select>
             </div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Concepto</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Concepto</label>
               <input value={nuevaCxp.concepto} onChange={e=>setNuevaCxp(p=>({...p,concepto:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Valor</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Valor</label>
               <input type="number" value={nuevaCxp.valor||''} onChange={e=>setNuevaCxp(p=>({...p,valor:Number(e.target.value)}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
             <div style={{ marginBottom:'14px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Fecha vencimiento</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Fecha vencimiento</label>
               <input type="date" value={nuevaCxp.fecha_vencimiento} onChange={e=>setNuevaCxp(p=>({...p,fecha_vencimiento:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
-            <button onClick={guardarCxp} style={{ width:'100%', padding:'10px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+            <button onClick={guardarCxp} style={{ width:'100%', padding:'10px', background:T.yellow, border:'none', borderRadius:'9px', color:T.card, cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
               + Registrar
             </button>
           </div>
@@ -674,15 +673,15 @@ export default function PYGPage() {
               </div>
             </div>
             {movimientosCaja.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin movimientos registrados</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin movimientos registrados</div>
             ) : movimientosCaja.map(m => (
               <div key={m.id} style={{ padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px' }}>
-                <span style={{ fontSize:'10px', color:'#5A6478', width:'70px', flexShrink:0 }}>{m.fecha}</span>
+                <span style={{ fontSize:'10px', color:T.muted, width:'70px', flexShrink:0 }}>{m.fecha}</span>
                 <div style={{ flex:1 }}>
                   <div style={{ fontSize:'12px' }}>{m.concepto}</div>
-                  <div style={{ fontSize:'10px', color:'#5A6478' }}>{m.origen} · {m.categoria_flujo}</div>
+                  <div style={{ fontSize:'10px', color:T.muted }}>{m.origen} · {m.categoria_flujo}</div>
                 </div>
-                <span style={{ fontSize:'13px', fontWeight:'700', color: m.tipo==='entrada'?'#2DD4A0':'#F05C5C' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700', color: m.tipo==='entrada'?T.green:T.red }}>
                   {m.tipo==='entrada'?'+':'-'}{fmtFull(m.valor)}
                 </span>
               </div>
@@ -690,41 +689,41 @@ export default function PYGPage() {
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>+ Movimiento manual</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'14px' }}>+ Movimiento manual</div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Concepto</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Concepto</label>
               <input value={nuevoMov.concepto} onChange={e=>setNuevoMov(p=>({...p,concepto:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
             <div style={{ display:'flex', gap:'6px', marginBottom:'10px', flexWrap:'wrap' }}>
               {(['entrada','salida'] as const).map(t => (
                 <button key={t} onClick={()=>setNuevoMov(p=>({...p,tipo:t}))}
                   style={{ flex:1, padding:'7px', borderRadius:'7px', cursor:'pointer', fontSize:'11px', fontWeight:'600',
-                    border:`1px solid ${nuevoMov.tipo===t?(t==='entrada'?'#2DD4A0':'#F05C5C'):'rgba(255,255,255,0.1)'}`,
+                    border:`1px solid ${nuevoMov.tipo===t?(t==='entrada'?T.green:T.red):T.border}`,
                     background: nuevoMov.tipo===t?(t==='entrada'?'rgba(45,212,160,0.1)':'rgba(240,92,92,0.1)'):'transparent',
-                    color: nuevoMov.tipo===t?(t==='entrada'?'#2DD4A0':'#F05C5C'):'#8B96A8' }}>
+                    color: nuevoMov.tipo===t?(t==='entrada'?T.green:T.red):T.muted }}>
                   {t==='entrada'?'+ Entrada':'- Salida'}
                 </button>
               ))}
             </div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Valor</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Valor</label>
               <input type="number" value={nuevoMov.valor||''} onChange={e=>setNuevoMov(p=>({...p,valor:Number(e.target.value)}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
             <div style={{ marginBottom:'14px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Categoría de flujo</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Categoría de flujo</label>
               <select value={nuevoMov.categoria_flujo} onChange={e=>setNuevoMov(p=>({...p,categoria_flujo:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px', outline:'none' }}>
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px', outline:'none' }}>
                 <option value="operativo">Operativo</option>
                 <option value="inversion">Inversión</option>
                 <option value="financiacion">Financiación</option>
               </select>
             </div>
-            <button onClick={guardarMovimientoManual} style={{ width:'100%', padding:'10px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+            <button onClick={guardarMovimientoManual} style={{ width:'100%', padding:'10px', background:T.yellow, border:'none', borderRadius:'9px', color:T.card, cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
               + Registrar movimiento
             </button>
-            <div style={{ marginTop:'12px', fontSize:'10px', color:'#5A6478', lineHeight:'1.5' }}>
+            <div style={{ marginTop:'12px', fontSize:'10px', color:T.muted, lineHeight:'1.5' }}>
               Usa esto para registrar movimientos que el sistema no detecta automáticamente (ej. gastos en efectivo, retiros personales).
             </div>
           </div>

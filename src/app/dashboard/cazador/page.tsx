@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
+import { useTema } from '@/lib/tema'
 
 type ContextoNegocio = {
   cpa_promedio: number; tasa_entrega: number; tasa_devolucion: number
@@ -26,12 +27,13 @@ const ROLES = [
   { num:13, icon:'🏛️', titulo:'Administrador Estratégico', color:'#F5A623' },
 ]
 
-const s: React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
 function fmt(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
 
 export default function CazadorProductosPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [analizando, setAnalizando] = useState(false)
@@ -46,13 +48,8 @@ export default function CazadorProductosPage() {
     categoria: '', temporada: 'todo el año', competencia: 'media',
   })
 
-  const loadContexto = useCallback(async () => {
+  const loadContexto = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const hoy = new Date()
@@ -95,7 +92,11 @@ export default function CazadorProductosPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadContexto() }, [loadContexto])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadContexto(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadContexto])
 
   async function ejecutarAnalisis() {
     if (!producto.nombre || !producto.costo_proveedor || !producto.precio_venta) return
@@ -313,32 +314,32 @@ en el negocio de dropshipping para ${producto.mercado}.`
   }
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted }}>
       Cargando contexto del negocio...
     </div>
   )
 
-  const recomColor = recomendacion === 'INVERTIR' ? '#2DD4A0' : recomendacion === 'AJUSTAR' ? '#F5A623' : '#F05C5C'
+  const recomColor = recomendacion === 'INVERTIR' ? T.green : recomendacion === 'AJUSTAR' ? T.yellow : T.red
 
   return (
     <RequierePermiso modulo="cazador">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
       <div style={{ marginBottom:'20px' }}>
         <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🔍 Agente Cazador de Productos</h1>
-        <p style={{ fontSize:'13px', color:'#8B96A8' }}>13 roles expertos · Metodología PHVA/PEF/ABC · Datos reales de tu negocio</p>
+        <p style={{ fontSize:'13px', color:T.muted }}>13 roles expertos · Metodología PHVA/PEF/ABC · Datos reales de tu negocio</p>
       </div>
 
       {/* Contexto del negocio */}
       {contexto && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'8px', marginBottom:'16px' }}>
           {[
-            { l:'CPA promedio real', v:`${fmt(contexto.cpa_promedio)}`, c:'#F5A623' },
-            { l:'Tasa entrega real', v:`${contexto.tasa_entrega}%`, c:'#2DD4A0' },
-            { l:'Tasa devolución', v:`${contexto.tasa_devolucion}%`, c:'#F05C5C' },
-            { l:'Caja disponible', v:fmt(contexto.saldo_wallet), c:'#3D8EF0' },
+            { l:'CPA promedio real', v:`${fmt(contexto.cpa_promedio)}`, c:T.yellow },
+            { l:'Tasa entrega real', v:`${contexto.tasa_entrega}%`, c:T.green },
+            { l:'Tasa devolución', v:`${contexto.tasa_devolucion}%`, c:T.red },
+            { l:'Caja disponible', v:fmt(contexto.saldo_wallet), c:T.blue },
           ].map((k,i) => (
             <div key={i} style={{ ...s, padding:'10px 14px', borderLeft:`3px solid ${k.c}` }}>
-              <div style={{ fontSize:'10px', color:'#8B96A8', marginBottom:'3px' }}>{k.l} (tu negocio)</div>
+              <div style={{ fontSize:'10px', color:T.muted, marginBottom:'3px' }}>{k.l} (tu negocio)</div>
               <div style={{ fontSize:'16px', fontWeight:'800', color:k.c }}>{k.v}</div>
             </div>
           ))}
@@ -349,7 +350,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
 
         {/* Formulario */}
         <div style={{ ...s, padding:'20px' }}>
-          <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'16px' }}>📦 Datos del producto a evaluar</div>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'16px' }}>📦 Datos del producto a evaluar</div>
 
           {[
             { label:'Nombre del producto *', key:'nombre', type:'text', placeholder:'Ej: Masajeador Cervical Pro' },
@@ -357,35 +358,35 @@ en el negocio de dropshipping para ${producto.mercado}.`
             { label:'Categoría', key:'categoria', type:'text', placeholder:'Ej: Salud y bienestar' },
           ].map((f,i) => (
             <div key={i} style={{ marginBottom:'10px' }}>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>{f.label}</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>{f.label}</label>
               <input value={(producto as Record<string,string|number>)[f.key] as string}
                 onChange={e=>setProducto(p=>({...p,[f.key]:e.target.value}))}
                 placeholder={f.placeholder}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
           ))}
 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }}>
             <div>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Costo proveedor (COP) *</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Costo proveedor (COP) *</label>
               <input type="number" value={producto.costo_proveedor||''}
                 onChange={e=>setProducto(p=>({...p,costo_proveedor:Number(e.target.value)}))}
                 placeholder="28000"
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
             <div>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Precio de venta (COP) *</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Precio de venta (COP) *</label>
               <input type="number" value={producto.precio_venta||''}
                 onChange={e=>setProducto(p=>({...p,precio_venta:Number(e.target.value)}))}
                 placeholder="89900"
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none', boxSizing:'border-box' }} />
             </div>
           </div>
 
           {producto.costo_proveedor>0 && producto.precio_venta>0 && (
             <div style={{ padding:'8px 12px', background:'rgba(45,212,160,0.06)', borderRadius:'8px', marginBottom:'10px', display:'flex', justifyContent:'space-between' }}>
-              <span style={{ fontSize:'11px', color:'#8B96A8' }}>Margen bruto estimado</span>
-              <span style={{ fontSize:'14px', fontWeight:'800', color:'#2DD4A0' }}>
+              <span style={{ fontSize:'11px', color:T.muted }}>Margen bruto estimado</span>
+              <span style={{ fontSize:'14px', fontWeight:'800', color:T.green }}>
                 {Math.round((producto.precio_venta-producto.costo_proveedor)/producto.precio_venta*100)}%
               </span>
             </div>
@@ -393,16 +394,16 @@ en el negocio de dropshipping para ${producto.mercado}.`
 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }}>
             <div>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Mercado objetivo</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Mercado objetivo</label>
               <select value={producto.mercado} onChange={e=>setProducto(p=>({...p,mercado:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none' }}>
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none' }}>
                 {['Colombia','Ecuador','México','Perú','Chile','Argentina','Panamá'].map(p=><option key={p}>{p}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Plataforma</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Plataforma</label>
               <select value={producto.plataforma} onChange={e=>setProducto(p=>({...p,plataforma:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none' }}>
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none' }}>
                 {['Meta Ads','TikTok Ads','Ambas'].map(p=><option key={p}>{p}</option>)}
               </select>
             </div>
@@ -410,29 +411,29 @@ en el negocio de dropshipping para ${producto.mercado}.`
 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'16px' }}>
             <div>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Temporada</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Temporada</label>
               <select value={producto.temporada} onChange={e=>setProducto(p=>({...p,temporada:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none' }}>
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none' }}>
                 {['todo el año','enero-marzo','abril-junio','julio-septiembre','octubre-diciembre','temporada navidad'].map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize:'11px', color:'#5A6478', display:'block', marginBottom:'4px' }}>Competencia percibida</label>
+              <label style={{ fontSize:'11px', color:T.muted, display:'block', marginBottom:'4px' }}>Competencia percibida</label>
               <select value={producto.competencia} onChange={e=>setProducto(p=>({...p,competencia:e.target.value}))}
-                style={{ width:'100%', background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'8px 10px', fontSize:'12px', outline:'none' }}>
+                style={{ width:'100%', background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'8px 10px', fontSize:'12px', outline:'none' }}>
                 {['baja','media','alta','muy alta'].map(c=><option key={c}>{c}</option>)}
               </select>
             </div>
           </div>
 
           <button onClick={ejecutarAnalisis} disabled={analizando || !producto.nombre || !producto.costo_proveedor || !producto.precio_venta}
-            style={{ width:'100%', padding:'12px', background: analizando?'rgba(155,107,255,0.2)':'#9B6BFF', border:'none', borderRadius:'10px', color: analizando?'#9B6BFF':'#fff', fontWeight:'800', cursor:analizando||!producto.nombre?'not-allowed':'pointer', fontSize:'14px' }}>
+            style={{ width:'100%', padding:'12px', background: analizando?'rgba(155,107,255,0.2)':T.purple, border:'none', borderRadius:'10px', color: analizando?T.purple:'#fff', fontWeight:'800', cursor:analizando||!producto.nombre?'not-allowed':'pointer', fontSize:'14px' }}>
             {analizando ? '🧠 Los 13 roles analizando...' : '🔍 Ejecutar análisis completo'}
           </button>
 
           {/* Roles incluidos */}
           <div style={{ marginTop:'14px' }}>
-            <div style={{ fontSize:'10px', color:'#5A6478', marginBottom:'8px' }}>ROLES QUE PARTICIPAN EN EL ANÁLISIS:</div>
+            <div style={{ fontSize:'10px', color:T.muted, marginBottom:'8px' }}>ROLES QUE PARTICIPAN EN EL ANÁLISIS:</div>
             <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
               {ROLES.map(r => (
                 <span key={r.num} style={{ fontSize:'9px', padding:'2px 7px', borderRadius:'4px', background:`${r.color}15`, color:r.color, fontWeight:'600' }}>
@@ -447,13 +448,13 @@ en el negocio de dropshipping para ${producto.mercado}.`
         <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
           {recomendacion && (
             <div style={{ ...s, padding:'20px', borderTop:`3px solid ${recomColor}`, textAlign:'center' }}>
-              <div style={{ fontSize:'13px', color:'#8B96A8', marginBottom:'6px' }}>RECOMENDACIÓN FINAL DE LOS 13 ROLES</div>
+              <div style={{ fontSize:'13px', color:T.muted, marginBottom:'6px' }}>RECOMENDACIÓN FINAL DE LOS 13 ROLES</div>
               <div style={{ fontSize:'32px', fontWeight:'900', color:recomColor }}>
                 {recomendacion === 'INVERTIR' ? '✅' : recomendacion === 'AJUSTAR' ? '⚠️' : '❌'} {recomendacion}
               </div>
-              <div style={{ fontSize:'12px', color:'#8B96A8', marginTop:'6px' }}>{producto.nombre}</div>
+              <div style={{ fontSize:'12px', color:T.muted, marginTop:'6px' }}>{producto.nombre}</div>
               {recomendacion === 'INVERTIR' && puede('cazador','agregar') && (
-                <button onClick={agregarAlCatalogo} style={{ marginTop:'12px', padding:'9px 20px', background:'rgba(45,212,160,0.15)', border:'1px solid rgba(45,212,160,0.3)', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>
+                <button onClick={agregarAlCatalogo} style={{ marginTop:'12px', padding:'9px 20px', background:'rgba(45,212,160,0.15)', border:'1px solid rgba(45,212,160,0.3)', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>
                   + Agregar al catálogo
                 </button>
               )}
@@ -462,14 +463,14 @@ en el negocio de dropshipping para ${producto.mercado}.`
 
           {informe ? (
             <div style={{ ...s, padding:'20px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'12px', display:'flex', justifyContent:'space-between' }}>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'12px', display:'flex', justifyContent:'space-between' }}>
                 <span>📋 INFORME ESTRATÉGICO COMPLETO</span>
                 <button onClick={() => navigator.clipboard.writeText(informe)}
-                  style={{ padding:'4px 10px', background:'rgba(155,107,255,0.1)', border:'none', borderRadius:'6px', color:'#9B6BFF', cursor:'pointer', fontSize:'10px', fontWeight:'700' }}>
+                  style={{ padding:'4px 10px', background:'rgba(155,107,255,0.1)', border:'none', borderRadius:'6px', color:T.purple, cursor:'pointer', fontSize:'10px', fontWeight:'700' }}>
                   📋 Copiar
                 </button>
               </div>
-              <div style={{ fontSize:'13px', lineHeight:'1.9', whiteSpace:'pre-wrap', color:'#E8EDF5', maxHeight:'600px', overflowY:'auto' }}>
+              <div style={{ fontSize:'13px', lineHeight:'1.9', whiteSpace:'pre-wrap', color:T.text, maxHeight:'600px', overflowY:'auto' }}>
                 {informe}
               </div>
             </div>
@@ -477,7 +478,7 @@ en el negocio de dropshipping para ${producto.mercado}.`
             <div style={{ ...s, padding:'40px', textAlign:'center' }}>
               <div style={{ fontSize:'40px', marginBottom:'12px' }}>🔍</div>
               <div style={{ fontSize:'14px', fontWeight:'700', marginBottom:'6px' }}>Sistema de Inteligencia DIZGO</div>
-              <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.7', maxWidth:'320px', margin:'0 auto' }}>
+              <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.7', maxWidth:'320px', margin:'0 auto' }}>
                 Ingresa los datos del producto y ejecuta el análisis. Los 13 roles expertos evaluarán su viabilidad usando los datos reales de tu negocio — no benchmarks genéricos.
               </div>
             </div>

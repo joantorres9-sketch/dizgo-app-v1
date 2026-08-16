@@ -8,10 +8,7 @@ import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
-
-// Paleta local (bodega/page.tsx colorea inline, sin objeto T central) -- solo para pasarle
-// theme a los componentes compartidos de carga masiva.
-const T_BODEGA = { bg:'#0A0D14', card:'#111520', card2:'#0A0D14', accent:'#F5A623', text:'#E8EDF5', muted:'#5A6478', border:'rgba(255,255,255,0.1)', green:'#2DD4A0', red:'#F05C5C' }
+import { useTema } from '@/lib/tema'
 
 type Bodega = { id:string; nombre:string; tipo:string; pais_codigo:string; ciudad:string; orden_flujo:number; activa:boolean }
 type Inventario = { id:string; producto_id:string; bodega_id:string; cantidad_disponible:number; cantidad_reservada:number; cantidad_en_transito_nacionaliz:number; cantidad_dañada:number; stock_minimo:number }
@@ -41,13 +38,14 @@ const RIESGO_INFO: Record<string,{l:string;c:string;icon:string}> = {
   baja_rotacion: { l:'Baja rotación', c:'#5A6478', icon:'🐢' },
 }
 
-const s:React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
 function fmt(n:number){ return `$${Math.round(n).toLocaleString('es-CO')}` }
 function horasDesde(fecha:string){ return Math.round((Date.now()-new Date(fecha).getTime())/3600000) }
 
 export default function BodegaPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'stock'|'importacion'|'piscinas'|'riesgo'|'proveedor'>('stock')
@@ -64,13 +62,8 @@ export default function BodegaPage() {
   const [bodegaSel, setBodegaSel] = useState<string|null>(null)
   const [previewInventario, setPreviewInventario] = useState<{ filas: FilaImportada<FilaInventario>[]; tipoCarga:'carga_inicial'|'compra' } | null>(null)
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const hoy = new Date()
@@ -94,7 +87,11 @@ export default function BodegaPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   const prodsBodegaPropia = productos.filter(p => p.modelo_negocio === 'bodega_propia' || p.modelo_negocio === 'hibrido')
   const prodsDropshipping = productos.filter(p => p.modelo_negocio === 'dropshipping' || !p.modelo_negocio)
@@ -165,7 +162,7 @@ export default function BodegaPage() {
     })
     setPreviewInventario(null)
     if (noEncontrados.length) alert(`${ok} filas cargadas. ${noEncontrados.length} filas no se cargaron:\n\n${noEncontrados.slice(0,10).join('\n')}`)
-    loadData()
+    loadData(tenantId)
   }
 
   function exportarInventario() {
@@ -193,7 +190,7 @@ export default function BodegaPage() {
       tenant_id: tenantId, producto_id: item.producto_id, bodega_id_origen: item.bodega_id,
       tipo: 'nacionalizacion', cantidad: item.cantidad_en_transito_nacionaliz, motivo: 'Nacionalización completada',
     })
-    loadData()
+    loadData(tenantId)
   }
 
   async function toggleDropshippers(prodId:string, valor:boolean) {
@@ -223,25 +220,25 @@ export default function BodegaPage() {
   }, [cargandoPermisos, tab, TABS_VISIBLES.map(t => t.key).join(',')])
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted, fontSize:'14px' }}>
       Cargando bodega...
     </div>
   )
 
   return (
     <RequierePermiso modulo="bodega">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🏭 Bodega & Inventario</h1>
-          <p style={{ fontSize:'13px', color:'#8B96A8' }}>Física + Virtual · Importación · Dropshipping · HACER</p>
+          <p style={{ fontSize:'13px', color:T.muted }}>Física + Virtual · Importación · Dropshipping · HACER</p>
         </div>
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
           {puede('bodega','descargar') && (
-            <button onClick={exportarInventario} style={{ padding:'9px 16px', background:'transparent', border:'1px solid rgba(255,255,255,0.15)', borderRadius:'9px', color:'#8B96A8', fontWeight:'600', cursor:'pointer', fontSize:'12px' }}>📥 Exportar inventario</button>
+            <button onClick={exportarInventario} style={{ padding:'9px 16px', background:'transparent', border:`1px solid ${T.border}`, borderRadius:'9px', color:T.muted, fontWeight:'600', cursor:'pointer', fontSize:'12px' }}>📥 Exportar inventario</button>
           )}
           {puede('bodega','agregar') && (
-            <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:'#F5A623', border:'none', borderRadius:'9px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
+            <button onClick={()=>setShowNuevaBodega(true)} style={{ padding:'9px 16px', background:T.yellow, border:'none', borderRadius:'9px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>+ Nueva bodega</button>
           )}
         </div>
       </div>
@@ -249,15 +246,15 @@ export default function BodegaPage() {
       {puede('bodega','agregar') && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'10px', marginBottom:'16px' }}>
           <div style={{ ...s, padding:'12px 14px' }}>
-            <div style={{ fontSize:'11px', fontWeight:'700', color:'#F5A623', marginBottom:'8px' }}>📦 Carga masiva — Inventario inicial</div>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:T.yellow, marginBottom:'8px' }}>📦 Carga masiva — Inventario inicial</div>
             <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-              <BotonesPlantilla config={configInventarioInicial} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'carga_inicial' })} theme={T_BODEGA} />
+              <BotonesPlantilla config={configInventarioInicial} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'carga_inicial' })} theme={T} />
             </div>
           </div>
           <div style={{ ...s, padding:'12px 14px' }}>
-            <div style={{ fontSize:'11px', fontWeight:'700', color:'#9B6BFF', marginBottom:'8px' }}>🛒 Carga masiva — Compras / movimientos posteriores</div>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:T.purple, marginBottom:'8px' }}>🛒 Carga masiva — Compras / movimientos posteriores</div>
             <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-              <BotonesPlantilla config={configInventarioCompra} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'compra' })} theme={T_BODEGA} />
+              <BotonesPlantilla config={configInventarioCompra} onArchivoValidado={(filas)=>setPreviewInventario({ filas, tipoCarga:'compra' })} theme={T} />
             </div>
           </div>
         </div>
@@ -268,21 +265,21 @@ export default function BodegaPage() {
           columnas={(previewInventario.tipoCarga === 'carga_inicial' ? configInventarioInicial : configInventarioCompra).columnas}
           onConfirm={confirmarImportInventario}
           onClose={()=>setPreviewInventario(null)}
-          theme={T_BODEGA}
+          theme={T}
         />
       )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
-          { l:'Bodegas activas', v:bodegas.filter(b=>b.activa).length, c:'#3D8EF0', icon:'🏭' },
-          { l:'Productos bodega propia', v:prodsBodegaPropia.length, c:'#2DD4A0', icon:'📦' },
-          { l:'Productos dropshipping', v:prodsDropshipping.length, c:'#F5A623', icon:'☁️' },
-          { l:'Stock bajo / quiebre', v:stockBajo.length, c: stockBajo.length>0?'#F05C5C':'#2DD4A0', icon:'🚨' },
-          { l:'Alertas de riesgo', v:alertasRiesgo.length, c: alertasRiesgo.length>0?'#F5A623':'#2DD4A0', icon:'⚠️' },
+          { l:'Bodegas activas', v:bodegas.filter(b=>b.activa).length, c:T.blue, icon:'🏭' },
+          { l:'Productos bodega propia', v:prodsBodegaPropia.length, c:T.green, icon:'📦' },
+          { l:'Productos dropshipping', v:prodsDropshipping.length, c:T.yellow, icon:'☁️' },
+          { l:'Stock bajo / quiebre', v:stockBajo.length, c: stockBajo.length>0?T.red:T.green, icon:'🚨' },
+          { l:'Alertas de riesgo', v:alertasRiesgo.length, c: alertasRiesgo.length>0?T.yellow:T.green, icon:'⚠️' },
         ].map((k,i) => (
           <div key={i} style={{ ...s, padding:'12px', borderTop:`2px solid ${k.c}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-              <span style={{ fontSize:'10px', color:'#8B96A8' }}>{k.l}</span><span>{k.icon}</span>
+              <span style={{ fontSize:'10px', color:T.muted }}>{k.l}</span><span>{k.icon}</span>
             </div>
             <div style={{ fontSize:'20px', fontWeight:'800', color:k.c }}>{k.v}</div>
           </div>
@@ -293,7 +290,7 @@ export default function BodegaPage() {
         {TABS_VISIBLES.map(t => (
           <button key={t.key} onClick={()=>setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
-              background: tab===t.key?'#F5A623':'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':'#8B96A8' }}>
+              background: tab===t.key?T.yellow:'rgba(255,255,255,0.05)', color: tab===t.key?'#0A0D14':T.muted }}>
             {t.label}
           </button>
         ))}
@@ -301,24 +298,24 @@ export default function BodegaPage() {
 
       {showNuevaBodega && (
         <div style={{ ...s, padding:'18px', marginBottom:'16px', border:'1px solid rgba(245,166,35,0.3)' }}>
-          <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'12px' }}>+ Nueva bodega</div>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'12px' }}>+ Nueva bodega</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', marginBottom:'10px' }}>
             <input placeholder="Nombre" value={nuevaBodega.nombre} onChange={e=>setNuevaBodega(p=>({...p,nombre:e.target.value}))}
-              style={{ background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px' }} />
+              style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px' }} />
             <select value={nuevaBodega.tipo} onChange={e=>setNuevaBodega(p=>({...p,tipo:e.target.value}))}
-              style={{ background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px' }}>
+              style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px' }}>
               {Object.entries(TIPO_BODEGA_INFO).map(([k,v]) => <option key={k} value={k}>{v.icon} {v.l}</option>)}
             </select>
             <input placeholder="Ciudad" value={nuevaBodega.ciudad} onChange={e=>setNuevaBodega(p=>({...p,ciudad:e.target.value}))}
-              style={{ background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px' }} />
+              style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px' }} />
             <select value={nuevaBodega.pais_codigo} onChange={e=>setNuevaBodega(p=>({...p,pais_codigo:e.target.value}))}
-              style={{ background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'12px' }}>
+              style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'12px' }}>
               <option value="COL">Colombia</option><option value="ECU">Ecuador</option>
             </select>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={crearBodega} style={{ padding:'8px 16px', background:'#F5A623', border:'none', borderRadius:'8px', color:'#0A0D14', fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Crear</button>
-            <button onClick={()=>setShowNuevaBodega(false)} style={{ padding:'8px 16px', background:'rgba(255,255,255,0.05)', border:'none', borderRadius:'8px', color:'#8B96A8', cursor:'pointer', fontSize:'12px' }}>Cancelar</button>
+            <button onClick={crearBodega} style={{ padding:'8px 16px', background:T.yellow, border:'none', borderRadius:'8px', color:T.card, fontWeight:'700', cursor:'pointer', fontSize:'12px' }}>Crear</button>
+            <button onClick={()=>setShowNuevaBodega(false)} style={{ padding:'8px 16px', background:'rgba(255,255,255,0.05)', border:'none', borderRadius:'8px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>Cancelar</button>
           </div>
         </div>
       )}
@@ -328,7 +325,7 @@ export default function BodegaPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>📦 Bodegas y su flujo</div>
             {bodegas.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin bodegas registradas — crea la primera arriba</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin bodegas registradas — crea la primera arriba</div>
             ) : bodegas.map(b => {
               const info = TIPO_BODEGA_INFO[b.tipo] || TIPO_BODEGA_INFO.general
               const invBodega = inventario.filter(i=>i.bodega_id===b.id)
@@ -341,11 +338,11 @@ export default function BodegaPage() {
                   <span style={{ fontSize:'20px' }}>{info.icon}</span>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:'13px', fontWeight:'600' }}>{b.nombre} <span style={{ fontSize:'10px', color:info.c }}>· {info.l}</span></div>
-                    <div style={{ fontSize:'11px', color:'#5A6478' }}>{b.ciudad}, {b.pais_codigo}</div>
+                    <div style={{ fontSize:'11px', color:T.muted }}>{b.ciudad}, {b.pais_codigo}</div>
                   </div>
                   <div style={{ textAlign:'right' }}>
                     <div style={{ fontSize:'16px', fontWeight:'800', color:info.c }}>{totalStock}</div>
-                    <div style={{ fontSize:'10px', color:'#5A6478' }}>unidades</div>
+                    <div style={{ fontSize:'10px', color:T.muted }}>unidades</div>
                   </div>
                 </div>
               )
@@ -358,16 +355,16 @@ export default function BodegaPage() {
               <div style={{ ...s, overflow:'hidden' }}>
                 <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>Stock detallado — {nombreBod(bodegaSel)}</div>
                 {invBodega.length === 0 ? (
-                  <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin inventario registrado en esta bodega</div>
+                  <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin inventario registrado en esta bodega</div>
                 ) : invBodega.map(item => {
                   const bajo = item.cantidad_disponible <= item.stock_minimo
                   return (
                     <div key={item.id} style={{ padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                       <div>
                         <div style={{ fontSize:'12px', fontWeight:'600' }}>{nombreProd(item.producto_id)}</div>
-                        <div style={{ fontSize:'10px', color:'#5A6478' }}>Reservado: {item.cantidad_reservada} · Dañado: {item.cantidad_dañada}</div>
+                        <div style={{ fontSize:'10px', color:T.muted }}>Reservado: {item.cantidad_reservada} · Dañado: {item.cantidad_dañada}</div>
                       </div>
-                      <span style={{ fontSize:'15px', fontWeight:'800', color: bajo?'#F05C5C':'#2DD4A0' }}>{item.cantidad_disponible}</span>
+                      <span style={{ fontSize:'15px', fontWeight:'800', color: bajo?T.red:T.green }}>{item.cantidad_disponible}</span>
                     </div>
                   )
                 })}
@@ -379,26 +376,26 @@ export default function BodegaPage() {
 
       {tab === 'importacion' && (
         <div style={{ ...s, padding:'20px' }}>
-          <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'16px' }}>🚢 FLUJO DE IMPORTACIÓN — Importación → Nacionalización → Disponible</div>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'16px' }}>🚢 FLUJO DE IMPORTACIÓN — Importación → Nacionalización → Disponible</div>
           {(() => {
             const enTransito = inventario.filter(i=>i.cantidad_en_transito_nacionaliz>0)
             return enTransito.length === 0 ? (
-              <div style={{ textAlign:'center', padding:'30px', color:'#5A6478', fontSize:'13px' }}>Sin mercancía en proceso de nacionalización</div>
+              <div style={{ textAlign:'center', padding:'30px', color:T.muted, fontSize:'13px' }}>Sin mercancía en proceso de nacionalización</div>
             ) : enTransito.map(item => (
-              <div key={item.id} style={{ ...s, padding:'14px', marginBottom:'8px', borderLeft:'3px solid #9B6BFF' }}>
+              <div key={item.id} style={{ ...s, padding:'14px', marginBottom:'8px', borderLeft:`3px solid ${T.purple}` }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                   <div>
                     <div style={{ fontSize:'13px', fontWeight:'600' }}>{nombreProd(item.producto_id)}</div>
-                    <div style={{ fontSize:'11px', color:'#5A6478' }}>{nombreBod(item.bodega_id)} · {item.cantidad_en_transito_nacionaliz} unidades en aduana</div>
+                    <div style={{ fontSize:'11px', color:T.muted }}>{nombreBod(item.bodega_id)} · {item.cantidad_en_transito_nacionaliz} unidades en aduana</div>
                   </div>
-                  <button onClick={()=>nacionalizarStock(item.id)} style={{ padding:'7px 14px', background:'rgba(155,107,255,0.15)', border:'none', borderRadius:'8px', color:'#9B6BFF', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                  <button onClick={()=>nacionalizarStock(item.id)} style={{ padding:'7px 14px', background:'rgba(155,107,255,0.15)', border:'none', borderRadius:'8px', color:T.purple, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                     ✅ Marcar nacionalizado
                   </button>
                 </div>
               </div>
             ))
           })()}
-          <div style={{ marginTop:'14px', padding:'12px', background:'rgba(155,107,255,0.06)', borderRadius:'10px', fontSize:'11px', color:'#8B96A8' }}>
+          <div style={{ marginTop:'14px', padding:'12px', background:'rgba(155,107,255,0.06)', borderRadius:'10px', fontSize:'11px', color:T.muted }}>
             Flujo: producto comprado entra como &quot;en tránsito nacionalización&quot; en una bodega tipo Importación. Al nacionalizar, pasa a disponible para venta o dispersión a bodegas de ciudad.
           </div>
         </div>
@@ -417,14 +414,14 @@ export default function BodegaPage() {
                   const horas = horasDesde(p.fecha_entrada_piscina)
                   const demorado = pis.horas>0 && horas > pis.horas
                   return (
-                    <div key={p.id} style={{ padding:'8px', borderRadius:'7px', marginBottom:'6px', background: demorado?'rgba(240,92,92,0.08)':'rgba(255,255,255,0.02)', borderLeft:`3px solid ${demorado?'#F05C5C':pis.c}` }}>
-                      <div style={{ fontSize:'10px', color:'#8B96A8' }}>Pedido #{p.pedido_id.slice(0,6)}</div>
-                      <div style={{ fontSize:'11px', fontWeight:'700', color: demorado?'#F05C5C':'#E8EDF5' }}>{horas}h aquí</div>
-                      {demorado && <div style={{ fontSize:'9px', color:'#F05C5C' }}>⚠️ Esperado: {pis.horas}h</div>}
+                    <div key={p.id} style={{ padding:'8px', borderRadius:'7px', marginBottom:'6px', background: demorado?'rgba(240,92,92,0.08)':'rgba(255,255,255,0.02)', borderLeft:`3px solid ${demorado?T.red:pis.c}` }}>
+                      <div style={{ fontSize:'10px', color:T.muted }}>Pedido #{p.pedido_id.slice(0,6)}</div>
+                      <div style={{ fontSize:'11px', fontWeight:'700', color: demorado?T.red:T.text }}>{horas}h aquí</div>
+                      {demorado && <div style={{ fontSize:'9px', color:T.red }}>⚠️ Esperado: {pis.horas}h</div>}
                     </div>
                   )
                 })}
-                {enEsta.length===0 && <div style={{ fontSize:'10px', color:'#5A6478', textAlign:'center', padding:'16px' }}>Vacío</div>}
+                {enEsta.length===0 && <div style={{ fontSize:'10px', color:T.muted, textAlign:'center', padding:'16px' }}>Vacío</div>}
               </div>
             )
           })}
@@ -436,7 +433,7 @@ export default function BodegaPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>⚠️ Alertas de riesgo por producto</div>
             {alertasRiesgo.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>✅ Sin alertas de riesgo activas</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>✅ Sin alertas de riesgo activas</div>
             ) : alertasRiesgo.map(a => {
               const info = RIESGO_INFO[a.tipo_riesgo] || RIESGO_INFO.baja_rotacion
               return (
@@ -446,26 +443,26 @@ export default function BodegaPage() {
                     <span style={{ fontSize:'14px', fontWeight:'800', color:info.c }}>{a.score_riesgo}</span>
                   </div>
                   <div style={{ fontSize:'11px', color:info.c, marginBottom:'4px' }}>{info.l} · {a.dias_en_bodega} días en bodega</div>
-                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#F5A623' }}>→ Recomendación: {a.recomendacion}</div>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:T.yellow }}>→ Recomendación: {a.recomendacion}</div>
                 </div>
               )
             })}
           </div>
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'12px' }}>🐢 Productos con baja rotación detectados</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>🐢 Productos con baja rotación detectados</div>
             {(() => {
               const ahora = new Date()
               const sinRotar = productos.filter(p => !pedidosRecientes.some(pe => pe.producto_id===p.id))
               return sinRotar.length===0 ? (
-                <div style={{ fontSize:'12px', color:'#5A6478', textAlign:'center', padding:'20px' }}>Todos los productos tienen ventas en los últimos 30 días</div>
+                <div style={{ fontSize:'12px', color:T.muted, textAlign:'center', padding:'20px' }}>Todos los productos tienen ventas en los últimos 30 días</div>
               ) : sinRotar.map((p,i) => {
                 const finTemp = p.temporada_fin ? Math.round((new Date(p.temporada_fin).getTime()-ahora.getTime())/86400000) : null
                 return (
                   <div key={i} style={{ padding:'10px 12px', background:'rgba(91,100,120,0.06)', borderRadius:'8px', marginBottom:'6px' }}>
                     <div style={{ fontSize:'12px', fontWeight:'600' }}>{p.nombre}</div>
-                    <div style={{ fontSize:'11px', color:'#5A6478' }}>
+                    <div style={{ fontSize:'11px', color:T.muted }}>
                       Sin ventas en 30 días · Devolución {p.pct_devolucion}%
-                      {finTemp!==null && finTemp>=0 && <span style={{ color: finTemp<30?'#F5A623':'#5A6478' }}> · Fin temporada en {finTemp}d</span>}
+                      {finTemp!==null && finTemp>=0 && <span style={{ color: finTemp<30?T.yellow:T.muted }}> · Fin temporada en {finTemp}d</span>}
                     </div>
                   </div>
                 )
@@ -479,23 +476,23 @@ export default function BodegaPage() {
         <div style={{ ...s, overflow:'hidden' }}>
           <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
             <div style={{ fontWeight:'700', marginBottom:'4px' }}>🤝 Mi catálogo como proveedor</div>
-            <div style={{ fontSize:'11px', color:'#8B96A8' }}>Marca qué productos ofreces a otros dropshippers dentro de DIZGO</div>
+            <div style={{ fontSize:'11px', color:T.muted }}>Marca qué productos ofreces a otros dropshippers dentro de DIZGO</div>
           </div>
           {productos.length === 0 ? (
-            <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin productos activos</div>
+            <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin productos activos</div>
           ) : productos.map(p => (
             <div key={p.id} style={{ padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', display:'flex', alignItems:'center', gap:'10px' }}>
-              <input type="checkbox" checked={p.disponible_dropshippers} onChange={e=>toggleDropshippers(p.id, e.target.checked)} style={{ accentColor:'#F5A623' }} />
+              <input type="checkbox" checked={p.disponible_dropshippers} onChange={e=>toggleDropshippers(p.id, e.target.checked)} style={{ accentColor:T.yellow }} />
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:'12px', fontWeight:'600' }}>{p.nombre}</div>
-                <div style={{ fontSize:'10px', color:'#5A6478' }}>Costo: {fmt(p.costo_proveedor)} · PVP: {fmt(p.pvp_final)}</div>
+                <div style={{ fontSize:'10px', color:T.muted }}>Costo: {fmt(p.costo_proveedor)} · PVP: {fmt(p.pvp_final)}</div>
               </div>
               {p.disponible_dropshippers && (
-                <span style={{ fontSize:'10px', padding:'3px 8px', borderRadius:'5px', background:'rgba(45,212,160,0.15)', color:'#2DD4A0', fontWeight:'700' }}>✓ Disponible</span>
+                <span style={{ fontSize:'10px', padding:'3px 8px', borderRadius:'5px', background:'rgba(45,212,160,0.15)', color:T.green, fontWeight:'700' }}>✓ Disponible</span>
               )}
             </div>
           ))}
-          <div style={{ padding:'14px 16px', fontSize:'11px', color:'#5A6478', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ padding:'14px 16px', fontSize:'11px', color:T.muted, borderTop:'1px solid rgba(255,255,255,0.06)' }}>
             💡 Los productos marcados aquí podrán ser vendidos por otros dropshippers de DIZGO usando tu inventario — la conexión completa entre tiendas se habilita en una etapa posterior.
           </div>
         </div>

@@ -90,7 +90,7 @@ function Tip({text,children}:{text:string;children:React.ReactNode}) {
     <span style={{position:'relative',display:'inline-flex',alignItems:'center',cursor:'help'}}
       onMouseEnter={()=>setS(true)} onMouseLeave={()=>setS(false)}>
       {children}
-      {s&&<div style={{position:'absolute',bottom:'calc(100%+6px)',left:'50%',transform:'translateX(-50%)',background:'#060E1C',border:`1px solid ${T.border}`,borderRadius:'8px',padding:'8px 10px',fontSize:'11px',color:T.text,width:'240px',zIndex:300,lineHeight:1.6,boxShadow:'0 4px 16px rgba(0,0,0,.5)',whiteSpace:'pre-wrap',pointerEvents:'none'}}>{text}</div>}
+      {s&&<div style={{position:'absolute',bottom:'calc(100%+6px)',left:'50%',transform:'translateX(-50%)',background:T.card2,border:`1px solid ${T.border}`,borderRadius:'8px',padding:'8px 10px',fontSize:'11px',color:T.text,width:'240px',zIndex:300,lineHeight:1.6,boxShadow:'0 4px 16px rgba(0,0,0,.5)',whiteSpace:'pre-wrap',pointerEvents:'none'}}>{text}</div>}
     </span>
   )
 }
@@ -277,7 +277,7 @@ function ModalTesteo({tenantId,onClose,onSave}:{tenantId:string;onClose:()=>void
 export default function CostosPage() {
   const { T } = useTema()
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tab, setTab] = useState<'dashboard'|'cf'|'cv'|'pef'|'historico'>('dashboard')
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
@@ -317,24 +317,21 @@ export default function CostosPage() {
     '🎓 Formación & Mentoría':T.accent,'📦 Otros':T.muted,
   }
 
-  async function loadData() {
+  async function loadData(tid: string = tenantId) {
+    if (!tid) { setLoading(false); return }
     setLoading(true)
-    const {data:{user}} = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const {data:profile} = await supabase.from('profiles').select('tenant_id').eq('id',user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    setTenantId(profile.tenant_id)
+    setTenantId(tid)
 
     // Tenant modelo tienda
-    const {data:tenant} = await supabase.from('tenants').select('dropi_pais, pais').eq('id',profile.tenant_id).single()
+    const {data:tenant} = await supabase.from('tenants').select('dropi_pais, pais').eq('id',tid).single()
     inicializarPaisTenant(tenant?.pais)
 
     // CF
-    const {data:cf} = await supabase.from('costos_fijos').select('*').eq('tenant_id',profile.tenant_id).eq('activo',true).order('categoria')
+    const {data:cf} = await supabase.from('costos_fijos').select('*').eq('tenant_id',tid).eq('activo',true).order('categoria')
     setCostosFijos((cf||[]) as CF[])
 
     // CV
-    const {data:cv} = await supabase.from('costos_variables').select('*').eq('tenant_id',profile.tenant_id).eq('activo',true).order('tipo')
+    const {data:cv} = await supabase.from('costos_variables').select('*').eq('tenant_id',tid).eq('activo',true).order('tipo')
     setCostosVar((cv||[]) as CV[])
 
     // Nómina — si el periodo actual ya tiene liquidaciones calculadas (Fase 4), se usa el
@@ -342,9 +339,9 @@ export default function CostosPage() {
     // (comportamiento previo, para tenants que aún no han usado el flujo de Liquidación).
     const inicioMes = new Date(); inicioMes.setDate(1); inicioMes.setHours(0,0,0,0)
     const periodoStr = inicioMes.toISOString().slice(0,10)
-    const {data:liqs} = await supabase.from('nomina_liquidaciones_snapshot').select('carga_total,proceso_id').eq('tenant_id',profile.tenant_id).eq('periodo',periodoStr)
+    const {data:liqs} = await supabase.from('nomina_liquidaciones_snapshot').select('carga_total,proceso_id').eq('tenant_id',tid).eq('periodo',periodoStr)
     if (liqs && liqs.length > 0) {
-      const {data:nprocs} = await supabase.from('nomina_procesos').select('id,nombre').eq('tenant_id',profile.tenant_id)
+      const {data:nprocs} = await supabase.from('nomina_procesos').select('id,nombre').eq('tenant_id',tid)
       const porProceso = (nprocs||[]).map((p:any)=>({
         nombre: p.nombre,
         valor: liqs.filter((l:any)=>l.proceso_id===p.id).reduce((a:number,l:any)=>a+(l.carga_total||0),0),
@@ -353,23 +350,28 @@ export default function CostosPage() {
       setNominalNomina(liqs.reduce((a:number,l:any)=>a+(l.carga_total||0),0))
     } else {
       setDesgloseProcesoNomina([])
-      const {data:colab} = await supabase.from('colaboradores').select('carga_total_mes').eq('tenant_id',profile.tenant_id).eq('activo',true)
+      const {data:colab} = await supabase.from('colaboradores').select('carga_total_mes').eq('tenant_id',tid).eq('activo',true)
       setNominalNomina(colab?.reduce((a:number,c:any)=>a+(c.carga_total_mes||0),0)||0)
     }
 
     // Pedidos mes
     const ini = new Date(); ini.setDate(1); ini.setHours(0,0,0,0)
-    const {count} = await supabase.from('pedidos').select('*',{count:'exact',head:true}).eq('tenant_id',profile.tenant_id).eq('estado','entregado').gte('fecha_pedido',ini.toISOString())
+    const {count} = await supabase.from('pedidos').select('*',{count:'exact',head:true}).eq('tenant_id',tid).eq('estado','entregado').gte('fecha_pedido',ini.toISOString())
     setPedidosMes(count||0)
 
     // Histórico snapshots
-    const {data:hist} = await supabase.from('costos_fijos_historico').select('*').eq('tenant_id',profile.tenant_id).order('periodo',{ascending:false}).limit(6)
+    const {data:hist} = await supabase.from('costos_fijos_historico').select('*').eq('tenant_id',tid).order('periodo',{ascending:false}).limit(6)
     setHistorico(hist||[])
 
     setLoading(false)
   }
 
-  useEffect(()=>{ loadData() },[])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, perfil])
 
   // Totales
   const totalCF = costosFijos.reduce((a,c)=>a+(c.total||c.cantidad*c.valor_unitario),0) + nominalNomina
@@ -621,7 +623,7 @@ export default function CostosPage() {
                   <div style={{fontSize:'20px',fontWeight:'800',color:T.green}}>{fmt(costoRealPedido)}</div>
                 </div>
               </div>
-              <div style={{marginTop:'10px',fontSize:'11px',color:T.muted,padding:'8px',background:'#060E1C',borderRadius:'7px',lineHeight:1.6}}>
+              <div style={{marginTop:'10px',fontSize:'11px',color:T.muted,padding:'8px',background:T.card2,borderRadius:'7px',lineHeight:1.6}}>
                 🤖 IA: A {simulPedidos.toLocaleString()} pedidos, tu CF por pedido es <strong style={{color:T.blue}}>{fmt(cfSimulado)}</strong>. 
                 {cfSimulado > 5000 ? ' Aún alto — escala para reducirlo.' : ' Eficiente para este volumen.'}
               </div>
@@ -795,7 +797,7 @@ export default function CostosPage() {
             const colCat=coloresCat[cat]||T.muted
             return (
               <div key={cat} style={{marginBottom:'10px',border:`1px solid ${T.border}`,borderRadius:'10px',overflow:'hidden'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',background:'#060E1C',borderBottom:items.length>0||cat==='👥 Personal Operativo'?`1px solid ${T.border}`:'none'}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',background:T.card2,borderBottom:items.length>0||cat==='👥 Personal Operativo'?`1px solid ${T.border}`:'none'}}>
                   <div style={{fontSize:'12px',fontWeight:'600',color:colCat}}>{cat}</div>
                   <div style={{display:'flex',alignItems:'center',gap:'10px'}}>
                     {formCF.tipo_registro==='predeterminado'&&<span style={{fontSize:'10px',color:T.purple,padding:'1px 6px',borderRadius:'4px',background:`${T.purple}15`}}>Presupuesto</span>}
@@ -897,12 +899,12 @@ export default function CostosPage() {
             const sub=items.reduce((a,c)=>a+c.valor,0)
             return (
               <div key={tipo} style={{marginBottom:'10px',border:`1px solid ${T.border}`,borderRadius:'10px',overflow:'hidden'}}>
-                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',background:'#060E1C',borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'9px 14px',background:T.card2,borderBottom:`1px solid ${T.border}`}}>
                   <div style={{fontSize:'12px',fontWeight:'600',color:T.green}}>{tipo}</div>
                   <div style={{fontSize:'12px',fontWeight:'700',color:T.text}}>{fmt(sub)}</div>
                 </div>
                 {items.map((c,i)=>(
-                  <div key={c.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 14px',background:i%2===0?T.card:'#080F1C',borderBottom:`1px solid ${T.border}`}}>
+                  <div key={c.id} style={{display:'flex',alignItems:'center',gap:'8px',padding:'7px 14px',background:i%2===0?T.card:T.card2,borderBottom:`1px solid ${T.border}`}}>
                     <div style={{width:'8px',height:'8px',borderRadius:'50%',background:PEF.find(p=>p.v===c.pef_cat)?.c||T.muted,flexShrink:0}} />
                     <div style={{flex:1,fontSize:'12px',color:T.text}}>{c.concepto}</div>
                     <div style={{fontSize:'10px',color:T.muted,padding:'1px 6px',borderRadius:'4px',background:`${T.blue}15`}}>{c.modelo}</div>
@@ -1028,7 +1030,7 @@ export default function CostosPage() {
               <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',overflow:'hidden',marginBottom:'16px'}}>
                 <table style={{width:'100%',borderCollapse:'collapse'}}>
                   <thead>
-                    <tr style={{background:'#060E1C'}}>
+                    <tr style={{background:T.card2}}>
                       {['Período','Total CF','Total CV','CF/Pedido','PEF Total','vs Mes Anterior'].map(h=>(
                         <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:'11px',color:T.muted,fontWeight:'600',borderBottom:`1px solid ${T.border}`}}>{h}</th>
                       ))}
@@ -1039,7 +1041,7 @@ export default function CostosPage() {
                       const prev=historico[i+1]
                       const diff=prev?((h.total_cf-prev.total_cf)/prev.total_cf*100):0
                       return (
-                        <tr key={h.id||i} style={{borderBottom:`1px solid ${T.border}`,background:i%2===0?'transparent':'#080F1C'}}>
+                        <tr key={h.id||i} style={{borderBottom:`1px solid ${T.border}`,background:i%2===0?'transparent':T.card2}}>
                           <td style={{padding:'10px 14px',fontSize:'12px',fontWeight:'600',color:T.text}}>{h.periodo?.slice(0,7)}</td>
                           <td style={{padding:'10px 14px',fontSize:'12px',color:T.blue,fontWeight:'600'}}>{fmt(h.total_cf||0)}</td>
                           <td style={{padding:'10px 14px',fontSize:'12px',color:T.green,fontWeight:'600'}}>{fmt(h.total_cv||0)}</td>

@@ -68,7 +68,7 @@ export default function PautaPage() {
   function semROAS(roas: number) { return roas >= 3 ? T.green : roas >= 2 ? T.yellow : T.red }
   function semCTR(ctr: number) { return ctr >= 2 ? T.green : ctr >= 1 ? T.yellow : T.red }
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'resumen'|'campanas'|'dia_dia'|'carga'>('resumen')
@@ -79,13 +79,8 @@ export default function PautaPage() {
   const [uploadPlataforma, setUploadPlataforma] = useState<'META'|'TIKTOK'>('META')
   const [previewPauta, setPreviewPauta] = useState<FilaImportada<FilaPauta>[] | null>(null)
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const hoy = new Date()
@@ -101,7 +96,11 @@ export default function PautaPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   const filtrados = registros.filter(r => plataforma === 'TODAS' || r.plataforma === plataforma)
   const porCampana = filtrados.reduce((acc, r) => {
@@ -179,7 +178,7 @@ export default function PautaPage() {
     if (error) { setUploadMsg(`❌ Error: ${error.message}`); return }
     setUploadMsg(`✅ ${parsed.length} registros cargados correctamente`)
     logAccion('pauta','agregar')
-    await loadData()
+    await loadData(tenantId)
   }
 
   async function confirmarImportPauta() {
@@ -215,7 +214,7 @@ export default function PautaPage() {
     })
     logAccion('pauta','agregar')
     setPreviewPauta(null)
-    await loadData()
+    await loadData(tenantId)
   }
 
   async function enviarAlertaCPA(camp: typeof campanas[0]) {

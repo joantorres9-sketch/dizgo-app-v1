@@ -287,7 +287,7 @@ function RegistroForm() {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'6px', marginBottom:'12px' }}>
               {PAISES.map(p => (
                 <button type="button" key={p.code} onClick={() => { setPaisMatriz(p.code); setForm(f=>({...f,codigo_tel:p.tel})); setPaisPreseleccionado(false) }}
-                  style={{ background: paisMatriz===p.code ? `${T.accent}15` : '#0A1628', border:`1.5px solid ${paisMatriz===p.code ? T.accent : '#1E3050'}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
+                  style={{ background: paisMatriz===p.code ? `${T.accent}15` : T.card2, border:`1.5px solid ${paisMatriz===p.code ? T.accent : T.border}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
                   <img src={p.flag} alt={p.nombre} style={{ width:'20px', height:'14px', borderRadius:'2px', objectFit:'cover', flexShrink:0 }} />
                   <div style={{ textAlign:'left', minWidth:0 }}>
                     <div style={{ fontSize:'10px', color: T.text, fontWeight:'500', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre}</div>
@@ -304,7 +304,7 @@ function RegistroForm() {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'6px', marginBottom:'12px' }}>
               {PAISES.filter(p=>p.code!==paisMatriz).map(p => (
                 <button type="button" key={p.code} onClick={() => toggleOper(p.code)}
-                  style={{ background: paisesOper.has(p.code) ? `${T.green}12` : '#0A1628', border:`1.5px solid ${paisesOper.has(p.code) ? T.green : '#1E3050'}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
+                  style={{ background: paisesOper.has(p.code) ? `${T.green}12` : T.card2, border:`1.5px solid ${paisesOper.has(p.code) ? T.green : T.border}`, borderRadius:'8px', padding:'7px 5px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
                   <img src={p.flag} alt={p.nombre} style={{ width:'20px', height:'14px', borderRadius:'2px', objectFit:'cover', flexShrink:0 }} />
                   <div style={{ textAlign:'left', minWidth:0, flex:1 }}>
                     <div style={{ fontSize:'10px', color: T.text, fontWeight:'500', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{p.nombre}</div>
@@ -403,12 +403,12 @@ function RegistroForm() {
                 <div style={{ fontSize:'11px', fontWeight:'600', color: T.accent, marginBottom:'8px' }}>Método de pago — {PLANES[plan].precio}</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'6px' }}>
                   <button type="button" onClick={() => setMetodoPago('wompi')}
-                    style={{ background: metodoPago==='wompi' ? `${T.green}12` : '#0A1628', border:`1.5px solid ${metodoPago==='wompi' ? T.green : '#1E3050'}`, borderRadius:'8px', padding:'10px', cursor:'pointer', textAlign:'left' }}>
+                    style={{ background: metodoPago==='wompi' ? `${T.green}12` : T.card2, border:`1.5px solid ${metodoPago==='wompi' ? T.green : T.border}`, borderRadius:'8px', padding:'10px', cursor:'pointer', textAlign:'left' }}>
                     <div style={{ fontSize:'12px', fontWeight:'600', color: T.text }}>🏦 PSE / Nequi / Tarjeta</div>
                     <div style={{ fontSize:'10px', color: T.muted, marginTop:'2px' }}>Wompi · pago local en COP</div>
                   </button>
                   <button type="button" onClick={() => setMetodoPago('stripe')}
-                    style={{ background: metodoPago==='stripe' ? `${T.green}12` : '#0A1628', border:`1.5px solid ${metodoPago==='stripe' ? T.green : '#1E3050'}`, borderRadius:'8px', padding:'10px', cursor:'pointer', textAlign:'left' }}>
+                    style={{ background: metodoPago==='stripe' ? `${T.green}12` : T.card2, border:`1.5px solid ${metodoPago==='stripe' ? T.green : T.border}`, borderRadius:'8px', padding:'10px', cursor:'pointer', textAlign:'left' }}>
                     <div style={{ fontSize:'12px', fontWeight:'600', color: T.text }}>💳 Tarjeta internacional</div>
                     <div style={{ fontSize:'10px', color: T.muted, marginTop:'2px' }}>Stripe · renovación automática</div>
                   </button>

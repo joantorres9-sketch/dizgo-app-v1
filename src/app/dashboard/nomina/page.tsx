@@ -142,7 +142,7 @@ function Ayuda({ texto }: { texto: string }) {
         style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'13px', height:'13px', borderRadius:'50%', background:`${T.blue}30`, color:T.blue, fontSize:'9px', fontWeight:'700', cursor:'help' }}
       >ⓘ</span>
       {open && (
-        <span style={{ position:'absolute', bottom:'18px', left:'0', zIndex:50, width:'220px', background:'#050B16', border:`1px solid ${T.border}`, borderRadius:'7px', padding:'8px 10px', fontSize:'10.5px', lineHeight:1.5, color:T.text, boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
+        <span style={{ position:'absolute', bottom:'18px', left:'0', zIndex:50, width:'220px', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'7px', padding:'8px 10px', fontSize:'10.5px', lineHeight:1.5, color:T.text, boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
           {texto}
         </span>
       )}
@@ -189,11 +189,11 @@ function SelectorIndicativo({ value, onChange }: { value: string; onChange: (v: 
         <span style={{ fontSize:'12px' }}>{actual.codigoTel}</span>
       </button>
       {open && (
-        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:60, width:'230px', maxHeight:'220px', overflowY:'auto', background:'#050B16', border:`1px solid ${T.border}`, borderRadius:'8px', boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, zIndex:60, width:'230px', maxHeight:'220px', overflowY:'auto', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
           {PAISES.map(p => (
             <div key={p.code} onMouseDown={() => { onChange(p.codigoTel); setOpen(false) }}
               style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'12px', color:T.text }}
-              onMouseEnter={e => e.currentTarget.style.background = '#0F1E32'}
+              onMouseEnter={e => e.currentTarget.style.background = T.card2}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <img src={p.flag} alt="" style={{ width:'16px', height:'12px', objectFit:'cover', borderRadius:'2px', flexShrink:0 }} />
               <span style={{ flex:1 }}>{p.nombre}</span>
@@ -224,11 +224,11 @@ function ComboBuscable({ value, onChange, opciones, placeholder }: {
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
       {open && filtradas.length > 0 && (
-        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:50, maxHeight:'180px', overflowY:'auto', background:'#050B16', border:`1px solid ${T.border}`, borderRadius:'8px', boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, right:0, zIndex:50, maxHeight:'180px', overflowY:'auto', background:T.card2, border:`1px solid ${T.border}`, borderRadius:'8px', boxShadow:'0 6px 18px rgba(0,0,0,.5)' }}>
           {filtradas.map(o => (
             <div key={o} onMouseDown={() => { onChange(o); setQ(o); setOpen(false) }}
               style={{ padding:'7px 10px', fontSize:'12px', color:T.text, cursor:'pointer' }}
-              onMouseEnter={e => e.currentTarget.style.background = '#0F1E32'}
+              onMouseEnter={e => e.currentTarget.style.background = T.card2}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               {o}
             </div>
@@ -588,7 +588,7 @@ function ModalColaborador({
       <div style={{ display:'flex', gap:'6px' }}>
         <label style={{
           flex:1, display:'block', padding:'10px', textAlign:'center',
-          background:'#0A1628', border:`1.5px dashed ${docUrls[id] ? T.green : T.border}`,
+          background:T.card2, border:`1.5px dashed ${docUrls[id] ? T.green : T.border}`,
           borderRadius:'8px', cursor:'pointer', fontSize:'11px',
           color: docUrls[id] ? T.green : T.muted, boxSizing:'border-box',
         }}>
@@ -1759,7 +1759,7 @@ function ModalAjuste({ concepto, valorSistema, onClose, onGuardar }: {
 export default function NominaPage() {
   const { T } = useTema()
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tab, setTab] = useState<'organigrama'|'colaboradores'|'solicitudes'|'procesos'|'indicadores'|'novedades'|'liquidacion'|'tasas'>('colaboradores')
   const [solicitudes, setSolicitudes] = useState<Array<Record<string, unknown>>>([])
   const [detalleSolicitud, setDetalleSolicitud] = useState<Record<string, unknown> | null>(null)
@@ -1807,24 +1807,21 @@ export default function NominaPage() {
   // hasta que el usuario cambiara manualmente el selector.
   const [tenantPais, setTenantPais] = useState('COL')
 
-  async function loadData() {
+  async function loadData(tid: string = tenantId) {
+    if (!tid) { setLoading(false); return }
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    setTenantId(profile.tenant_id)
+    setTenantId(tid)
 
     const [{ data: cols }, { data: procs }, { data: novs }, { data: tasa }, { data: sols }, { data: cargs }, { data: inds }, { data: meds }, { data: tenant }] = await Promise.all([
-      supabase.from('colaboradores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombres'),
-      supabase.from('nomina_procesos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('orden'),
-      supabase.from('nomina_novedades').select('*').eq('tenant_id', profile.tenant_id).order('created_at', { ascending: false }),
-      supabase.from('nomina_tasas_historico').select('*').eq('tenant_id', profile.tenant_id).eq('anio_fiscal', anioFiscal).eq('estado', 'activo').single(),
-      supabase.from('nomina_solicitudes').select('*').eq('tenant_id', profile.tenant_id).eq('estado', 'pendiente').order('created_at', { ascending: false }),
-      supabase.from('nomina_cargos').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
-      supabase.from('nomina_indicadores').select('*').eq('tenant_id', profile.tenant_id).eq('activo', true).order('nombre'),
-      supabase.from('nomina_indicador_mediciones').select('*').eq('tenant_id', profile.tenant_id).order('fecha', { ascending: false }),
-      supabase.from('tenants').select('esquema_nomina, nombre, nit, moneda, pais').eq('id', profile.tenant_id).single(),
+      supabase.from('colaboradores').select('*').eq('tenant_id', tid).eq('activo', true).order('nombres'),
+      supabase.from('nomina_procesos').select('*').eq('tenant_id', tid).eq('activo', true).order('orden'),
+      supabase.from('nomina_novedades').select('*').eq('tenant_id', tid).order('created_at', { ascending: false }),
+      supabase.from('nomina_tasas_historico').select('*').eq('tenant_id', tid).eq('anio_fiscal', anioFiscal).eq('estado', 'activo').single(),
+      supabase.from('nomina_solicitudes').select('*').eq('tenant_id', tid).eq('estado', 'pendiente').order('created_at', { ascending: false }),
+      supabase.from('nomina_cargos').select('*').eq('tenant_id', tid).eq('activo', true).order('nombre'),
+      supabase.from('nomina_indicadores').select('*').eq('tenant_id', tid).eq('activo', true).order('nombre'),
+      supabase.from('nomina_indicador_mediciones').select('*').eq('tenant_id', tid).order('fecha', { ascending: false }),
+      supabase.from('tenants').select('esquema_nomina, nombre, nit, moneda, pais').eq('id', tid).single(),
     ])
 
     setColaboradores((cols || []) as Colaborador[])
@@ -1957,7 +1954,12 @@ export default function NominaPage() {
     loadData()
   }
 
-  useEffect(() => { loadData() }, [anioFiscal])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, perfil, anioFiscal])
 
   async function crearProceso(nombre?: string, tipo?: string) {
     const n = (nombre ?? nuevoProceso).trim()
@@ -2319,7 +2321,7 @@ export default function NominaPage() {
             <div style={{ overflowX:'auto' }}>
               <table style={{ width:'100%', borderCollapse:'collapse' }}>
                 <thead>
-                  <tr style={{ background:'#060E1C' }}>
+                  <tr style={{ background:T.card2 }}>
                     {['#','Colaborador','Cargo','Área','Tipo','Salario','Carga Total','SS','Acciones'].map(h => (
                       <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', whiteSpace:'nowrap', borderBottom:`1px solid ${T.border}` }}>{h}</th>
                     ))}
@@ -2340,9 +2342,9 @@ export default function NominaPage() {
                     const proc = procesos.find(p => p.id === c.proceso_id)
                     const vence = c.fecha_fin ? Math.ceil((new Date(c.fecha_fin).getTime() - Date.now()) / 86400000) : null
                     return (
-                      <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':'#080F1C' }}
-                        onMouseEnter={e => e.currentTarget.style.background = '#0F1E32'}
-                        onMouseLeave={e => e.currentTarget.style.background = i%2===0?'transparent':'#080F1C'}>
+                      <tr key={c.id} style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':T.card2 }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.card2}
+                        onMouseLeave={e => e.currentTarget.style.background = i%2===0?'transparent':T.card2}>
                         <td style={{ padding:'8px 12px', fontSize:'11px', color:T.muted }}>#{String(i+1).padStart(3,'0')}</td>
                         <td style={{ padding:'8px 12px' }}>
                           <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
@@ -2576,7 +2578,7 @@ export default function NominaPage() {
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                   <thead>
-                    <tr style={{ background:'#060E1C' }}>
+                    <tr style={{ background:T.card2 }}>
                       {['Colaborador','Tipo','Valor','Periodo','Soporte','Estado','Acciones'].map(h => (
                         <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'11px', color:T.muted, fontWeight:'600', borderBottom:`1px solid ${T.border}` }}>{h}</th>
                       ))}
@@ -2705,7 +2707,7 @@ export default function NominaPage() {
               <div style={{ overflowX:'auto' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse' }}>
                   <thead>
-                    <tr style={{ background:'#060E1C' }}>
+                    <tr style={{ background:T.card2 }}>
                       <th style={{ padding:'10px 12px', borderBottom:`1px solid ${T.border}` }}>
                         <input type="checkbox"
                           checked={liquidaciones.some(l => ['aprobada','pagada'].includes(String(l.estado))) && liquidaciones.filter(l => ['aprobada','pagada'].includes(String(l.estado))).every(l => colillasSeleccionadas.has(String(l.id)))}
@@ -2728,7 +2730,7 @@ export default function NominaPage() {
                       const estadoColor = estado === 'pagada' ? T.green : estado === 'aprobada' ? T.blue : estado === 'revisada' ? T.purple : T.yellow
                       return (
                         <Fragment key={String(l.id)}>
-                          <tr style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':'#080F1C', cursor:'pointer' }}
+                          <tr style={{ borderBottom:`1px solid ${T.border}`, background:i%2===0?'transparent':T.card2, cursor:'pointer' }}
                             onClick={() => setExpandidoLiq(expandido ? null : String(l.id))}>
                             <td style={{ padding:'8px 12px' }} onClick={e => e.stopPropagation()}>
                               {['aprobada','pagada'].includes(estado) && (
@@ -2758,7 +2760,7 @@ export default function NominaPage() {
                             </td>
                           </tr>
                           {expandido && (
-                            <tr key={`${String(l.id)}-detalle`} style={{ background:'#050B16' }}>
+                            <tr key={`${String(l.id)}-detalle`} style={{ background:T.card2 }}>
                               <td colSpan={9} style={{ padding:'14px 20px' }}>
                                 {(snap.avisoPaisNoVerificado as boolean) && (
                                   <div style={{ fontSize:'11px', color:T.yellow, marginBottom:'10px' }}>⚠️ País fuera de Colombia — tasas genéricas, verificar con asesor local.</div>

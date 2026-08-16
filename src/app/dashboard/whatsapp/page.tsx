@@ -115,7 +115,7 @@ export default function WhatsAppPage() {
   const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
   const s2: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'9px' }
   const supabase = createClient()
-  const { puede, cargando: permisosCargando } = usePermisos()
+  const { puede, perfil, cargando: permisosCargando } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'kanban'|'plantillas'|'lotes'>('kanban')
@@ -132,13 +132,8 @@ export default function WhatsAppPage() {
   const [plantillaSel, setPlantillaSel] = useState<string>('confirmacion')
   const [seleccionados, setSeleccionados] = useState<string[]>([])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const hoy = new Date()
@@ -187,7 +182,11 @@ export default function WhatsAppPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (permisosCargando) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [permisosCargando, perfil, loadData])
 
   const tabsVisibles = TABS.filter(t => puede(clavePermiso('whatsapp', t.v), 'ver'))
   const tabsVisiblesKey = tabsVisibles.map(t => t.v).join(',')

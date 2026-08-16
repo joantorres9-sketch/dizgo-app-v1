@@ -5,6 +5,7 @@ import { MatrizPermisos } from '@/components/MatrizPermisos'
 import { matrizTodoFalse, matrizTodoTrue, type MatrizPermisos as TMatriz } from '@/lib/modulos'
 import { CONFIG_PAIS } from '@/lib/seedDemoTenant'
 import { useTema } from '@/lib/tema'
+import { usePermisos } from '@/lib/permisos'
 
 type ColabRow = { id: string; nombres: string; apellidos: string; cargo: string | null; email: string | null; correo_personal: string | null }
 type ProfileRow = {
@@ -32,6 +33,7 @@ const FORM_CORTESIA_VACIO = { nombres: '', apellidos: '', tipo_doc: 'CC', numero
 export default function AccesosPage() {
   const { T } = useTema()
   const supabase = createClient()
+  const { perfil, cargando: cargandoPermisos } = usePermisos()
   const [autorizado, setAutorizado] = useState<boolean | null>(null)
   const [tenantId, setTenantId] = useState('')
   const [miRol, setMiRol] = useState('')
@@ -86,20 +88,16 @@ export default function AccesosPage() {
   }, [supabase])
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { setAutorizado(false); setCargando(false); return }
-      const { data: profile } = await supabase.from('profiles').select('tenant_id, rol, es_cortesia').eq('id', user.id).single()
-      if (!profile?.tenant_id || (!['owner', 'superadmin'].includes(profile.rol) && profile.es_cortesia !== true)) {
-        setAutorizado(false); setCargando(false); return
-      }
-      setAutorizado(true)
-      setTenantId(profile.tenant_id)
-      setMiRol(profile.rol)
-      await cargar(profile.tenant_id)
-    })()
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId || (!['owner', 'superadmin'].includes(perfil.rol) && perfil.esCortesia !== true)) {
+      setAutorizado(false); setCargando(false); return
+    }
+    setAutorizado(true)
+    setTenantId(perfil.tenantId)
+    setMiRol(perfil.rol)
+    cargar(perfil.tenantId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [cargandoPermisos, perfil])
 
   async function authFetch(url: string, body: Record<string, unknown>) {
     const { data: { session } } = await supabase.auth.getSession()

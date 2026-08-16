@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
+import { useTema } from '@/lib/tema'
 
 type Pedido = {
   id: string; cliente_nombre: string; cliente_telefono: string
@@ -21,14 +22,15 @@ type Transportadora = {
 type Confirmador = { id: string; nombre: string; apellido: string }
 type ObjecionIA = { categoria: string; nombre_visible: string; script_sugerido: string; tono: string }
 
-const s: React.CSSProperties = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
-function semE(tasa: number) { return tasa >= 75 ? '#2DD4A0' : tasa >= 50 ? '#F5A623' : '#F05C5C' }
 function fmt(n: number) { return `$${Math.round(n).toLocaleString('es-CO')}` }
 function diasEntre(a: string, b: string) { return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000) }
 
 export default function LogisticaPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
+  function semE(tasa: number) { return tasa >= 75 ? T.green : tasa >= 50 ? T.yellow : T.red }
   const supabase = createClient()
-  const { puede, cargando: permisosCargando } = usePermisos()
+  const { puede, perfil, cargando: permisosCargando } = usePermisos()
   const [loading, setLoading] = useState(true)
   const [pais, setPais] = useState('COL')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -39,13 +41,8 @@ export default function LogisticaPage() {
   const [deptoSel, setDeptoSel] = useState<string | null>(null)
   const [novedadSel, setNovedadSel] = useState<Pedido | null>(null)
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
 
     const hoy = new Date()
     const ini30 = new Date(hoy.getTime() - 30*86400000).toISOString()
@@ -67,7 +64,11 @@ export default function LogisticaPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (permisosCargando) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [permisosCargando, perfil, loadData])
 
   const pedidosPais = pedidos.filter(p => p.pais === pais)
   const transPaisInfo = transData.filter(t => (t as Transportadora & {pais_codigo?:string}).pais_codigo === pais)
@@ -90,11 +91,11 @@ export default function LogisticaPage() {
   }
 
   const etapas = [
-    { label:'En confirmación', emoji:'📞', color:'#3D8EF0', lista:enConfirmacion, dias:diasPromedio(enConfirmacion,'fecha_pedido',null) },
-    { label:'En tránsito', emoji:'🚚', color:'#9B6BFF', lista:enTransito, dias:diasPromedio(enTransito,'fecha_pedido','fecha_despacho') },
-    { label:'Con novedad', emoji:'⚠️', color:'#F5A623', lista:conNovedad, dias:diasPromedio(conNovedad,'fecha_pedido',null) },
-    { label:'Entregados', emoji:'✅', color:'#2DD4A0', lista:entregados, dias:diasPromedio(entregados,'fecha_pedido','fecha_entrega') },
-    { label:'En devolución', emoji:'🔄', color:'#F05C5C', lista:enDevolucion, dias:diasPromedio(enDevolucion,'fecha_pedido',null) },
+    { label:'En confirmación', emoji:'📞', color:T.blue, lista:enConfirmacion, dias:diasPromedio(enConfirmacion,'fecha_pedido',null) },
+    { label:'En tránsito', emoji:'🚚', color:T.purple, lista:enTransito, dias:diasPromedio(enTransito,'fecha_pedido','fecha_despacho') },
+    { label:'Con novedad', emoji:'⚠️', color:T.yellow, lista:conNovedad, dias:diasPromedio(conNovedad,'fecha_pedido',null) },
+    { label:'Entregados', emoji:'✅', color:T.green, lista:entregados, dias:diasPromedio(entregados,'fecha_pedido','fecha_entrega') },
+    { label:'En devolución', emoji:'🔄', color:T.red, lista:enDevolucion, dias:diasPromedio(enDevolucion,'fecha_pedido',null) },
   ].map(e => ({ ...e, valor: e.lista.reduce((a,p)=>a+Number(p.pvp||0),0), cantidad: e.lista.length }))
 
   const dineroAtrapado = etapas.filter(e => e.label !== 'Entregados').reduce((a,e) => a + e.valor, 0)
@@ -176,22 +177,22 @@ export default function LogisticaPage() {
   }, [permisosCargando, tab, tabsVisiblesKey])
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted, fontSize:'14px' }}>
       Cargando logística...
     </div>
   )
 
   return (
     <RequierePermiso modulo="logistica">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🚚 Logística & Flujo de Caja</h1>
-          <p style={{ fontSize:'13px', color:'#8B96A8' }}>Últimos 30 días · {pedidosPais.length} pedidos · dinero real por etapa</p>
+          <p style={{ fontSize:'13px', color:T.muted }}>Últimos 30 días · {pedidosPais.length} pedidos · dinero real por etapa</p>
         </div>
         <select value={pais} onChange={e => setPais(e.target.value)}
-          style={{ background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'6px 10px', fontSize:'12px' }}>
+          style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'6px 10px', fontSize:'12px' }}>
           <option value="COL">🇨🇴 Colombia</option>
           <option value="ECU">🇪🇨 Ecuador</option>
         </select>
@@ -199,20 +200,20 @@ export default function LogisticaPage() {
 
       {/* Resumen financiero global */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))', gap:'10px', marginBottom:'16px' }}>
-        <div style={{ ...s, padding:'16px', borderTop:'3px solid #F5A623' }}>
-          <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>💰 Dinero atrapado en proceso</div>
-          <div style={{ fontSize:'24px', fontWeight:'800', color:'#F5A623' }}>{fmt(dineroAtrapado)}</div>
-          <div style={{ fontSize:'10px', color:'#5A6478' }}>aún no libera flujo de caja</div>
+        <div style={{ ...s, padding:'16px', borderTop:`3px solid ${T.yellow}` }}>
+          <div style={{ fontSize:'11px', color:T.muted, marginBottom:'4px' }}>💰 Dinero atrapado en proceso</div>
+          <div style={{ fontSize:'24px', fontWeight:'800', color:T.yellow }}>{fmt(dineroAtrapado)}</div>
+          <div style={{ fontSize:'10px', color:T.muted }}>aún no libera flujo de caja</div>
         </div>
-        <div style={{ ...s, padding:'16px', borderTop:'3px solid #2DD4A0' }}>
-          <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>✅ Dinero liberado (entregado)</div>
-          <div style={{ fontSize:'24px', fontWeight:'800', color:'#2DD4A0' }}>{fmt(dineroLiberado)}</div>
-          <div style={{ fontSize:'10px', color:'#5A6478' }}>ya disponible en Wallet</div>
+        <div style={{ ...s, padding:'16px', borderTop:`3px solid ${T.green}` }}>
+          <div style={{ fontSize:'11px', color:T.muted, marginBottom:'4px' }}>✅ Dinero liberado (entregado)</div>
+          <div style={{ fontSize:'24px', fontWeight:'800', color:T.green }}>{fmt(dineroLiberado)}</div>
+          <div style={{ fontSize:'10px', color:T.muted }}>ya disponible en Wallet</div>
         </div>
-        <div style={{ ...s, padding:'16px', borderTop:'3px solid #F05C5C' }}>
-          <div style={{ fontSize:'11px', color:'#8B96A8', marginBottom:'4px' }}>🔄 Dinero perdido en devolución</div>
-          <div style={{ fontSize:'24px', fontWeight:'800', color:'#F05C5C' }}>{fmt(dineroPerdido)}</div>
-          <div style={{ fontSize:'10px', color:'#5A6478' }}>{enDevolucion.length} pedidos devueltos</div>
+        <div style={{ ...s, padding:'16px', borderTop:`3px solid ${T.red}` }}>
+          <div style={{ fontSize:'11px', color:T.muted, marginBottom:'4px' }}>🔄 Dinero perdido en devolución</div>
+          <div style={{ fontSize:'24px', fontWeight:'800', color:T.red }}>{fmt(dineroPerdido)}</div>
+          <div style={{ fontSize:'10px', color:T.muted }}>{enDevolucion.length} pedidos devueltos</div>
         </div>
       </div>
 
@@ -220,7 +221,7 @@ export default function LogisticaPage() {
         {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 14px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'600',
-              background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : '#8B96A8' }}>
+              background: tab === t.key ? T.yellow : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : T.muted }}>
             {t.label}
           </button>
         ))}
@@ -228,7 +229,7 @@ export default function LogisticaPage() {
 
       {tab === 'flujo_caja' && (
         <div style={{ ...s, padding:'20px' }}>
-          <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'16px' }}>💰 EMBUDO FINANCIERO — cantidad, días y $ por etapa</div>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'16px' }}>💰 EMBUDO FINANCIERO — cantidad, días y $ por etapa</div>
           {etapas.map((e,i) => {
             const pct = Math.max((e.cantidad / (pedidosPais.length||1)) * 100, 2)
             return (
@@ -236,9 +237,9 @@ export default function LogisticaPage() {
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'6px' }}>
                   <span style={{ fontSize:'13px', fontWeight:'600' }}>{e.emoji} {e.label}</span>
                   <div style={{ display:'flex', gap:'16px', fontSize:'12px' }}>
-                    <span style={{ color:'#8B96A8' }}>{e.cantidad} pedidos</span>
+                    <span style={{ color:T.muted }}>{e.cantidad} pedidos</span>
                     <span style={{ color:e.color, fontWeight:'700' }}>{fmt(e.valor)}</span>
-                    <span style={{ color:'#5A6478' }}>{e.dias} días prom.</span>
+                    <span style={{ color:T.muted }}>{e.dias} días prom.</span>
                   </div>
                 </div>
                 <div style={{ height:'14px', background:'rgba(255,255,255,0.04)', borderRadius:'7px', overflow:'hidden' }}>
@@ -248,9 +249,9 @@ export default function LogisticaPage() {
             )
           })}
           <div style={{ marginTop:'16px', padding:'14px', background:'rgba(245,166,35,0.06)', borderRadius:'10px', border:'1px solid rgba(245,166,35,0.2)' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'6px' }}>💡 IMPACTO EN FLUJO DE CAJA</div>
-            <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.6' }}>
-              Tienes <strong style={{ color:'#F5A623' }}>{fmt(dineroAtrapado)}</strong> que todavía no entra a tu Wallet.
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'6px' }}>💡 IMPACTO EN FLUJO DE CAJA</div>
+            <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.6' }}>
+              Tienes <strong style={{ color:T.yellow }}>{fmt(dineroAtrapado)}</strong> que todavía no entra a tu Wallet.
               Si reduces 2 días el tiempo en confirmación, ese dinero llega más rápido y mejora tu capacidad de reinvertir en pauta.
             </div>
           </div>
@@ -260,39 +261,39 @@ export default function LogisticaPage() {
       {tab === 'transportadoras' && (
         <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
           {transportadoras.length === 0 ? (
-            <div style={{ ...s, padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin transportadoras registradas en pedidos aún</div>
+            <div style={{ ...s, padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin transportadoras registradas en pedidos aún</div>
           ) : transportadoras.map(t => {
             const tasaE = t.total>0 ? Math.round(t.entregados/t.total*100) : 0
             return (
               <div key={t.nombre} style={{ ...s, padding:'18px' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'12px' }}>
                   <div>
-                    <div style={{ fontSize:'15px', fontWeight:'800', color: t.catalogo?.color || '#8B96A8' }}>{t.catalogo?.emoji || '📦'} {t.nombre}</div>
+                    <div style={{ fontSize:'15px', fontWeight:'800', color: t.catalogo?.color || T.muted }}>{t.catalogo?.emoji || '📦'} {t.nombre}</div>
                     {t.catalogo && (
-                      <div style={{ fontSize:'11px', color:'#5A6478', marginTop:'4px' }}>
+                      <div style={{ fontSize:'11px', color:T.muted, marginTop:'4px' }}>
                         Tarifa publicada: {fmt(t.catalogo.tarifa_min)} - {fmt(t.catalogo.tarifa_max)} · Recaudo: {t.catalogo.dias_recaudo_min}-{t.catalogo.dias_recaudo_max} días · Cobertura: {t.catalogo.cobertura_pct}%
                       </div>
                     )}
                   </div>
                   <div style={{ textAlign:'right' }}>
                     <div style={{ fontSize:'22px', fontWeight:'800', color:semE(tasaE) }}>{tasaE}%</div>
-                    <div style={{ fontSize:'10px', color:'#5A6478' }}>tasa real de entrega</div>
+                    <div style={{ fontSize:'10px', color:T.muted }}>tasa real de entrega</div>
                   </div>
                 </div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px' }}>
                   {[
-                    { l:'Total pedidos', v:t.total, c:'#E8EDF5' },
-                    { l:'Entregados', v:t.entregados, c:'#2DD4A0' },
-                    { l:'Novedades', v:t.novedad, c:'#F5A623' },
-                    { l:'Devoluciones', v:t.devolucion, c:'#F05C5C' },
+                    { l:'Total pedidos', v:t.total, c:T.text },
+                    { l:'Entregados', v:t.entregados, c:T.green },
+                    { l:'Novedades', v:t.novedad, c:T.yellow },
+                    { l:'Devoluciones', v:t.devolucion, c:T.red },
                   ].map((k,i) => (
                     <div key={i} style={{ textAlign:'center', padding:'8px', background:'rgba(255,255,255,0.02)', borderRadius:'8px' }}>
                       <div style={{ fontSize:'16px', fontWeight:'700', color:k.c }}>{k.v}</div>
-                      <div style={{ fontSize:'9px', color:'#5A6478' }}>{k.l}</div>
+                      <div style={{ fontSize:'9px', color:T.muted }}>{k.l}</div>
                     </div>
                   ))}
                 </div>
-                <div style={{ marginTop:'10px', fontSize:'12px', color:'#2DD4A0', fontWeight:'600' }}>Valor entregado: {fmt(t.valor_entregado)}</div>
+                <div style={{ marginTop:'10px', fontSize:'12px', color:T.green, fontWeight:'600' }}>Valor entregado: {fmt(t.valor_entregado)}</div>
               </div>
             )
           })}
@@ -304,7 +305,7 @@ export default function LogisticaPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>⚠️ Novedades activas — con sugerencia IA</div>
             {conNovedad.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>✅ Sin novedades activas</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>✅ Sin novedades activas</div>
             ) : conNovedad.map(p => {
               const activa = novedadSel?.id === p.id
               return (
@@ -313,9 +314,9 @@ export default function LogisticaPage() {
                   <div style={{ display:'flex', justifyContent:'space-between' }}>
                     <div>
                       <div style={{ fontSize:'13px', fontWeight:'600' }}>{p.cliente_nombre}</div>
-                      <div style={{ fontSize:'11px', color:'#5A6478' }}>{p.cliente_ciudad} · {p.transportadora} · {fmt(p.pvp||0)}</div>
+                      <div style={{ fontSize:'11px', color:T.muted }}>{p.cliente_ciudad} · {p.transportadora} · {fmt(p.pvp||0)}</div>
                     </div>
-                    <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:'700', background:'rgba(245,166,35,0.15)', color:'#F5A623', alignSelf:'flex-start' }}>
+                    <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', fontWeight:'700', background:'rgba(245,166,35,0.15)', color:T.yellow, alignSelf:'flex-start' }}>
                       {p.novedad_tipo}
                     </span>
                   </div>
@@ -328,18 +329,18 @@ export default function LogisticaPage() {
             const obj = objecionPara(novedadSel.novedad_tipo)
             return (
               <div style={{ ...s, padding:'20px' }}>
-                <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>🤖 IA SUGIERE — Resolución de objeción</div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'14px' }}>🤖 IA SUGIERE — Resolución de objeción</div>
                 <div style={{ fontSize:'13px', fontWeight:'600', marginBottom:'4px' }}>{novedadSel.cliente_nombre}</div>
-                <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'14px' }}>{novedadSel.novedad_tipo} · {novedadSel.cliente_ciudad}</div>
+                <div style={{ fontSize:'11px', color:T.muted, marginBottom:'14px' }}>{novedadSel.novedad_tipo} · {novedadSel.cliente_ciudad}</div>
                 {obj ? (
                   <>
-                    <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'6px' }}>Categoría: {obj.nombre_visible}</div>
+                    <div style={{ fontSize:'11px', color:T.muted, marginBottom:'6px' }}>Categoría: {obj.nombre_visible}</div>
                     <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:'10px', padding:'14px', fontSize:'13px', lineHeight:'1.7', marginBottom:'14px' }}>
                       {obj.script_sugerido.replace('{{cliente}}', novedadSel.cliente_nombre?.split(' ')[0]||'')}
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize:'12px', color:'#5A6478', marginBottom:'14px' }}>Sin script específico — usando mensaje genérico de seguimiento.</div>
+                  <div style={{ fontSize:'12px', color:T.muted, marginBottom:'14px' }}>Sin script específico — usando mensaje genérico de seguimiento.</div>
                 )}
                 <button onClick={() => abrirWAObjecion(novedadSel)}
                   style={{ width:'100%', padding:'11px', background:'rgba(37,211,102,0.12)', border:'none', borderRadius:'9px', color:'#25D366', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
@@ -356,7 +357,7 @@ export default function LogisticaPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>🗺️ Mapa de calor — por departamento (click para ver ciudades)</div>
             {deptosOrdenados.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin datos suficientes</div>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin datos suficientes</div>
             ) : deptosOrdenados.map((d,i) => {
               const pct = d.total>0 ? Math.round(d.entregados/d.total*100) : 0
               const activo = deptoSel === d.depto
@@ -365,7 +366,7 @@ export default function LogisticaPage() {
                   style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', cursor:'pointer', background: activo ? 'rgba(245,166,35,0.06)' : 'transparent', display:'flex', alignItems:'center', gap:'12px' }}>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:'13px', fontWeight:'600' }}>{d.depto}</div>
-                    <div style={{ fontSize:'11px', color:'#5A6478' }}>{fmt(d.valor)} entregado</div>
+                    <div style={{ fontSize:'11px', color:T.muted }}>{fmt(d.valor)} entregado</div>
                   </div>
                   <div style={{ width:'120px' }}>
                     <div style={{ height:'18px', background:'rgba(255,255,255,0.04)', borderRadius:'4px', overflow:'hidden' }}>
@@ -382,9 +383,9 @@ export default function LogisticaPage() {
 
           {deptoSel && (
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'14px' }}>🏙️ Ciudades de {deptoSel}</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>🏙️ Ciudades de {deptoSel}</div>
               {ciudadesOrdenadas.length === 0 ? (
-                <div style={{ fontSize:'12px', color:'#5A6478', textAlign:'center', padding:'20px' }}>Sin ciudades registradas</div>
+                <div style={{ fontSize:'12px', color:T.muted, textAlign:'center', padding:'20px' }}>Sin ciudades registradas</div>
               ) : ciudadesOrdenadas.map((c,i) => {
                 const pct = c.total>0 ? Math.round(c.entregados/c.total*100) : 0
                 return (
@@ -399,7 +400,7 @@ export default function LogisticaPage() {
                   </div>
                 )
               })}
-              <div style={{ marginTop:'12px', padding:'10px', background:'rgba(61,142,240,0.06)', borderRadius:'8px', fontSize:'11px', color:'#8B96A8' }}>
+              <div style={{ marginTop:'12px', padding:'10px', background:'rgba(61,142,240,0.06)', borderRadius:'8px', fontSize:'11px', color:T.muted }}>
                 📍 Mapa basado en texto de dirección. La versión con coordenadas oficiales (drill-down táctil exacto) llega en la siguiente fase.
               </div>
             </div>
@@ -411,13 +412,13 @@ export default function LogisticaPage() {
         <div style={{ ...s, overflow:'hidden' }}>
           <div style={{ padding:'12px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)', fontWeight:'700' }}>👥 Gestión por confirmador — quién atendió desde confirmación</div>
           {equipoOrdenado.length === 0 ? (
-            <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin pedidos con confirmador asignado aún</div>
+            <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin pedidos con confirmador asignado aún</div>
           ) : (
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
               <thead>
-                <tr style={{ background:'#0A0D14', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
+                <tr style={{ background:T.bg, borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
                   {['Confirmador','Pedidos gestionados','Entregados','% Éxito','Novedades activas'].map(h => (
-                    <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:'#5A6478', fontWeight:'700' }}>{h}</th>
+                    <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:'700' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -428,17 +429,17 @@ export default function LogisticaPage() {
                   return (
                     <tr key={i} style={{ borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                       <td style={{ padding:'10px 12px', fontWeight:'700' }}>{conf ? `${conf.nombre} ${conf.apellido}` : 'Sin nombre'}</td>
-                      <td style={{ padding:'10px 12px', color:'#8B96A8' }}>{c.total}</td>
-                      <td style={{ padding:'10px 12px', color:'#2DD4A0', fontWeight:'700' }}>{c.entregados}</td>
+                      <td style={{ padding:'10px 12px', color:T.muted }}>{c.total}</td>
+                      <td style={{ padding:'10px 12px', color:T.green, fontWeight:'700' }}>{c.entregados}</td>
                       <td style={{ padding:'10px 12px' }}><span style={{ fontWeight:'800', fontSize:'14px', color:semE(pct) }}>{pct}%</span></td>
-                      <td style={{ padding:'10px 12px', color:'#F5A623' }}>{c.novedad}</td>
+                      <td style={{ padding:'10px 12px', color:T.yellow }}>{c.novedad}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
           )}
-          <div style={{ padding:'14px 16px', fontSize:'11px', color:'#5A6478', borderTop:'1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ padding:'14px 16px', fontSize:'11px', color:T.muted, borderTop:'1px solid rgba(255,255,255,0.06)' }}>
             💡 Asigna el campo &quot;confirmador&quot; al gestionar un pedido en el módulo Pedidos para que aparezca aquí.
           </div>
         </div>

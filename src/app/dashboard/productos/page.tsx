@@ -154,7 +154,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
       {show && (
         <div style={{
           position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%',
-          transform: 'translateX(-50%)', background: '#060E1C',
+          transform: 'translateX(-50%)', background: T.card2,
           border: `1px solid ${T.border}`, borderRadius: '8px',
           padding: '8px 10px', fontSize: '11px', color: T.text,
           width: '220px', zIndex: 100, lineHeight: 1.5,
@@ -217,7 +217,7 @@ function BuscadorCombo({
         )}
       </div>
       {resultados.length > 0 && (
-        <div style={{ background: '#060E1C', border: `1px solid ${T.border}`, borderRadius: '8px', marginTop: '6px', overflow: 'hidden' }}>
+        <div style={{ background: T.card2, border: `1px solid ${T.border}`, borderRadius: '8px', marginTop: '6px', overflow: 'hidden' }}>
           {resultados.map((p) => {
             const ya = ids.includes(p.id)
             return (
@@ -261,7 +261,7 @@ function BuscadorCombo({
         </div>
       )}
       {q && resultados.length === 0 && !buscando && (
-        <div style={{ padding: '10px', textAlign: 'center', fontSize: '12px', color: T.muted, background: '#060E1C', borderRadius: '8px', marginTop: '6px' }}>
+        <div style={{ padding: '10px', textAlign: 'center', fontSize: '12px', color: T.muted, background: T.card2, borderRadius: '8px', marginTop: '6px' }}>
           No se encontraron productos
         </div>
       )}
@@ -296,7 +296,7 @@ function ListaCombo({
       </div>
       {productos.map((p) => (
         <div key={p.id} style={{
-          background: '#060E1C', border: `1px solid ${T.border}`,
+          background: T.card2, border: `1px solid ${T.border}`,
           borderRadius: '8px', padding: '10px 12px', marginBottom: '6px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -926,7 +926,7 @@ function ModalResumen({
 export default function ProductosPage() {
   const { T } = useTema()
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [productos, setProductos] = useState<Producto[]>([])
   const [loading, setLoading] = useState(true)
   const [tenantId, setTenantId] = useState('')
@@ -938,23 +938,25 @@ export default function ProductosPage() {
   const [filtro, setFiltro] = useState('todos')
   const [buscar, setBuscar] = useState('')
 
-  async function loadData() {
+  async function loadData(tid: string = tenantId) {
+    if (!tid) { setLoading(false); return }
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    setTenantId(profile.tenant_id)
+    setTenantId(tid)
     const [{ data }, { data: tenant }] = await Promise.all([
-      supabase.from('productos').select('*').eq('tenant_id', profile.tenant_id).order('created_at', { ascending: false }),
-      supabase.from('tenants').select('pais').eq('id', profile.tenant_id).single(),
+      supabase.from('productos').select('*').eq('tenant_id', tid).order('created_at', { ascending: false }),
+      supabase.from('tenants').select('pais').eq('id', tid).single(),
     ])
     inicializarPaisTenant(tenant?.pais)
     setProductos((data || []) as Producto[])
     setLoading(false)
   }
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, perfil])
 
   async function eliminar(id: string) {
     if (!confirm('¿Eliminar este producto?')) return
@@ -1115,7 +1117,7 @@ export default function ProductosPage() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#060E1C' }}>
+              <tr style={{ background: T.card2 }}>
                 {[
                   ['#', 'ID autogenerado'],
                   ['SKU', 'Código único generado al guardar'],
@@ -1154,9 +1156,9 @@ export default function ProductosPage() {
                   return (
                     <tr
                       key={p.id}
-                      style={{ borderBottom: `1px solid ${T.border}`, background: idx % 2 === 0 ? 'transparent' : '#080F1C', cursor: 'pointer' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = '#0F1E32' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = idx % 2 === 0 ? 'transparent' : '#080F1C' }}
+                      style={{ borderBottom: `1px solid ${T.border}`, background: idx % 2 === 0 ? 'transparent' : T.card2, cursor: 'pointer' }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = T.card2 }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = idx % 2 === 0 ? 'transparent' : T.card2 }}
                     >
                       <td style={{ padding: '10px 12px', fontSize: '11px', color: T.muted, fontWeight: '600' }}>#{String(idx + 1).padStart(4, '0')}</td>
                       <td style={{ padding: '10px 12px', fontSize: '10px', color: T.accent, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{p.sku || '—'}</td>

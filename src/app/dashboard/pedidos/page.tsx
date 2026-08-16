@@ -620,7 +620,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
 export default function PedidosPage() {
   const { T } = useTema()
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [pedidos, setPedidos] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
@@ -633,19 +633,16 @@ export default function PedidosPage() {
   const [progresoImport, setProgresoImport] = useState<{ total: number; hechos: number } | null>(null)
   const [resultadoImportDropi, setResultadoImportDropi] = useState<{ nuevos: number; actualizados: number; conservados: number; productosCreados: string[]; sinProducto: number } | null>(null)
 
-  async function loadData() {
+  async function loadData(tid: string = tenantId) {
+    if (!tid) { setLoading(false); return }
     setLoading(true)
-    const {data:{user}} = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const {data:profile} = await supabase.from('profiles').select('tenant_id').eq('id',user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    setTenantId(profile.tenant_id)
+    setTenantId(tid)
     const [{data}, {data:tenant}] = await Promise.all([
       supabase.from('pedidos').select('*')
-        .eq('tenant_id',profile.tenant_id)
+        .eq('tenant_id',tid)
         .order('created_at',{ascending:false})
         .limit(200),
-      supabase.from('tenants').select('pais').eq('id',profile.tenant_id).single(),
+      supabase.from('tenants').select('pais').eq('id',tid).single(),
     ])
     inicializarPaisTenant(tenant?.pais)
     const lista = (data||[]) as Pedido[]
@@ -673,7 +670,12 @@ export default function PedidosPage() {
     setLoading(false)
   }
 
-  useEffect(()=>{ loadData() },[])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, perfil])
 
   // ── Carga masiva de pedidos: lotes de 500, hasta 3 lotes en paralelo. Pensado para
   // históricos de hasta ~20.000 filas -- se salta a propósito los efectos secundarios caros
@@ -905,7 +907,7 @@ export default function PedidosPage() {
           <p style={{fontSize:'12px',color:T.muted}}>Los pedidos son la mina de oro — cuídalos</p>
         </div>
         <div style={{display:'flex',gap:'8px'}}>
-          <button onClick={loadData} style={{padding:'8px 14px',background:T.card,border:`1px solid ${T.border}`,borderRadius:'8px',color:T.muted,cursor:'pointer',fontSize:'12px'}}>🔄 Actualizar</button>
+          <button onClick={()=>loadData()} style={{padding:'8px 14px',background:T.card,border:`1px solid ${T.border}`,borderRadius:'8px',color:T.muted,cursor:'pointer',fontSize:'12px'}}>🔄 Actualizar</button>
           {puede('pedidos','agregar') && (
             <button onClick={()=>setShowNuevo(true)} style={{padding:'8px 18px',background:T.accent,border:'none',borderRadius:'8px',color:T.card,fontWeight:'700',cursor:'pointer',fontSize:'13px'}}>+ Nuevo pedido</button>
           )}
@@ -1024,7 +1026,7 @@ export default function PedidosPage() {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
-              <tr style={{background:'#060E1C'}}>
+              <tr style={{background:T.card2}}>
                 {['#','Cliente','Ciudad','Producto','Valor','Estado','Origen','Riesgo','SLA','Modo','Acciones'].map(h=>(
                   <th key={h} style={{padding:'10px 12px',textAlign:'left',fontSize:'11px',color:T.muted,fontWeight:'600',whiteSpace:'nowrap',borderBottom:`1px solid ${T.border}`}}>{h}</th>
                 ))}
@@ -1045,9 +1047,9 @@ export default function PedidosPage() {
                   </td>
                 </tr>
               ):filtrados.map((p,idx)=>(
-                <tr key={p.id} style={{borderBottom:`1px solid ${T.border}`,background:idx%2===0?'transparent':'#080F1C',cursor:'pointer'}}
-                  onMouseEnter={e=>(e.currentTarget.style.background='#0F1E32')}
-                  onMouseLeave={e=>(e.currentTarget.style.background=idx%2===0?'transparent':'#080F1C')}>
+                <tr key={p.id} style={{borderBottom:`1px solid ${T.border}`,background:idx%2===0?'transparent':T.card2,cursor:'pointer'}}
+                  onMouseEnter={e=>(e.currentTarget.style.background=T.card2)}
+                  onMouseLeave={e=>(e.currentTarget.style.background=idx%2===0?'transparent':T.card2)}>
                   <td style={{padding:'8px 12px',fontSize:'11px',color:T.muted,fontWeight:'600'}}>#{String(idx+1).padStart(4,'0')}</td>
                   <td style={{padding:'8px 12px'}}>
                     <div style={{fontSize:'12px',fontWeight:'600',color:T.text}}>{p.cliente_nombre}</div>

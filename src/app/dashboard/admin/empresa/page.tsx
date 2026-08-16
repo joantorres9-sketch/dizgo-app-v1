@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { formatMoneda } from '@/lib/paises'
 import { useTasasCambio, copAUsdConTasas } from '@/lib/tasas'
 import { useTema, PALETA_OSCURA } from '@/lib/tema'
+import { usePermisos } from '@/lib/permisos'
 
 const WA = '#25D366' // verde de marca de WhatsApp -- fijo, no depende del tema
 
@@ -76,6 +77,7 @@ export default function CentroDizgoPage() {
   const router = useRouter()
   const supabase = createClient()
   const { tasas } = useTasasCambio()
+  const { perfil, cargando: cargandoPermisos } = usePermisos()
   const [autorizado, setAutorizado] = useState<boolean | null>(null)
   const [tab, setTab] = useState('kanban')
 
@@ -116,15 +118,12 @@ export default function CentroDizgoPage() {
   const [ultimoMensajeWa, setUltimoMensajeWa] = useState<string | null>(null)
 
   useEffect(() => {
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/auth/login'); return }
-      const { data: profile } = await supabase.from('profiles').select('rol').eq('id', user.id).single()
-      if (profile?.rol !== 'superadmin') { setAutorizado(false); return }
-      setAutorizado(true)
-    })()
+    if (cargandoPermisos) return
+    if (!perfil) { router.push('/auth/login'); return }
+    if (perfil.rol !== 'superadmin') { setAutorizado(false); return }
+    setAutorizado(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [cargandoPermisos, perfil])
 
   const cargarLeads = useCallback(async () => {
     const { data } = await supabase.from('crm_leads').select('*').order('ultimo_mensaje_at', { ascending: false, nullsFirst: false })

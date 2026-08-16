@@ -61,7 +61,7 @@ export default function MetasPage() {
   const { T } = useTema()
   function colorISO(iso:number) { return iso >= 80 ? T.green : iso >= 60 ? T.yellow : T.red }
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
 
   const hoy = new Date()
   const diaActual = hoy.getDate()
@@ -107,13 +107,8 @@ export default function MetasPage() {
   const inp: React.CSSProperties = { background:T.card2, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'6px 10px', fontSize:'13px', outline:'none', width:'100%', boxSizing:'border-box' }
 
   // ── CARGA DE DATOS ────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!prof?.tenant_id) { setLoading(false); return }
-    const tid = prof.tenant_id
     setTenantId(tid)
 
     const iniMes = `${periodoKey.slice(0,7)}-01`
@@ -268,7 +263,11 @@ export default function MetasPage() {
     setLoading(false)
   }, [supabase, periodoKey, diasMes])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   async function guardarMetas(nuevas: Partial<MetasMes>) {
     const merged = { ...metas, ...nuevas }
@@ -295,7 +294,7 @@ export default function MetasPage() {
       estado: ok === previewMetas.length ? 'completado' : 'error',
     })
     setPreviewMetas(null)
-    loadData()
+    loadData(tenantId)
   }
 
   // ── ISO ACTUAL ────────────────────────────────────────────
@@ -770,7 +769,7 @@ export default function MetasPage() {
           <div style={{ padding:'14px 16px', borderBottom:`1px solid ${T.border}`, fontWeight:'700', fontSize:'13px' }}>📅 Historial — La memoria del negocio</div>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
             <thead>
-              <tr style={{ background:'#060E1C' }}>
+              <tr style={{ background:T.card2 }}>
                 {['Mes','Pedidos','Meta','%','ISO','TC','Ventas','Utilidad','Tendencia'].map(h => (
                   <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:'700' }}>{h}</th>
                 ))}

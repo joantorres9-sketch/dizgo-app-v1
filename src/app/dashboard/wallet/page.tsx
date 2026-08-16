@@ -32,22 +32,21 @@ export default function WalletPage() {
   const [filter, setFilter]   = useState('TODO')
   const [uploadMsg, setUploadMsg] = useState('')
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
 
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: p } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-      if (!p?.tenant_id) { setLoading(false); return }
-      setTenantId(p.tenant_id)
-      const { data: t } = await supabase.from('tenants').select('moneda').eq('id', p.tenant_id).single()
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    async function load(tid: string) {
+      setTenantId(tid)
+      const { data: t } = await supabase.from('tenants').select('moneda').eq('id', tid).single()
       if (t) setMoneda(t.moneda)
-      await fetchTxs(p.tenant_id)
+      await fetchTxs(tid)
       setLoading(false)
     }
-    load()
-  }, [])
+    load(perfil.tenantId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cargandoPermisos, perfil])
 
   async function fetchTxs(tid: string) {
     const { data } = await supabase.from('wallet_transacciones')

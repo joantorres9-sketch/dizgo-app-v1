@@ -63,7 +63,7 @@ const CONFIG_DEFAULT: Config = {
 export default function EquilibrioPage() {
   const { T } = useTema()
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
 
   // Estado global
   const [tenantId,  setTenantId]  = useState('')
@@ -96,13 +96,8 @@ export default function EquilibrioPage() {
   }
 
   // ── CARGA DE DATOS ─────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!prof?.tenant_id) { setLoading(false); return }
-    const tid = prof.tenant_id
     setTenantId(tid)
 
     const hoy        = new Date()
@@ -219,7 +214,11 @@ export default function EquilibrioPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   // ── GUARDAR CONFIG ─────────────────────────────────────────
   async function guardarConfig(nuevoConfig: Partial<Config>) {

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
+import { useTema } from '@/lib/tema'
 
 type Alerta = {
   id: string; tenant_id: string | null
@@ -43,12 +44,12 @@ const EVENTOS_2026 = [
   { fecha:'2026-12-25', evento:'Navidad',                 oportunidad:'Regalos — escalar 45 días antes',      color:'#9B6BFF' },
 ]
 
-const s = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
-const inp = { background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'13px', outline:'none', width:'100%', boxSizing:'border-box' as const }
-
 export default function AlertasPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
+  const inp: React.CSSProperties = { background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'13px', outline:'none', width:'100%', boxSizing:'border-box' }
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
 
   const [tenantId, setTenantId] = useState('')
   const [esSuperadmin, setEsSuperadmin] = useState(false)
@@ -62,15 +63,10 @@ export default function AlertasPage() {
   const [nueva, setNueva] = useState({ titulo:'', mensaje:'', accion:'', tipo:'externo', categoria:'externa', modulo:'General', destinatarios:'todas' })
   const [oportunidadesProducto, setOportunidadesProducto] = useState<{ nombre:string; señal:string; recomendacion:string; potencial:string; color:string; prioridad:number }[]>([])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string, rol: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id, rol').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
-    setEsSuperadmin(profile.rol === 'superadmin')
+    setEsSuperadmin(rol === 'superadmin')
 
     const hoy = new Date()
     const periodo = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`
@@ -220,7 +216,7 @@ export default function AlertasPage() {
       .map(([nombre, d]) => {
         const cpaCamp = d.resultados>0 ? d.inversion/d.resultados : 0
         const roasEstim = cpaCamp>0 ? Math.round((50000/cpaCamp)*10)/10 : 0
-        return { nombre, señal:`CPA $${Math.round(cpaCamp).toLocaleString('es-CO')} · ${d.resultados} pedidos`, recomendacion: roasEstim>=3 ? 'Escalar presupuesto — buen ROAS' : 'Mantener y monitorear', potencial: roasEstim>=3 ? `ROAS ${roasEstim}x` : '', color: roasEstim>=4?'#2DD4A0':roasEstim>=3?'#F5A623':'#3D8EF0', prioridad:0, roas:roasEstim }
+        return { nombre, señal:`CPA $${Math.round(cpaCamp).toLocaleString('es-CO')} · ${d.resultados} pedidos`, recomendacion: roasEstim>=3 ? 'Escalar presupuesto — buen ROAS' : 'Mantener y monitorear', potencial: roasEstim>=3 ? `ROAS ${roasEstim}x` : '', color: roasEstim>=4?T.green:roasEstim>=3?T.yellow:T.blue, prioridad:0, roas:roasEstim }
       })
       .filter(o => o.roas >= 2.5)
       .sort((a,b) => b.roas - a.roas)
@@ -231,7 +227,11 @@ export default function AlertasPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId, perfil.rol)
+  }, [cargandoPermisos, perfil, loadData])
 
   const noLeidas = alertas.filter(a => !a.leida).length
   const criticas = alertas.filter(a => a.tipo === 'critico' && !a.leida).length
@@ -291,30 +291,30 @@ export default function AlertasPage() {
   const totalPEF = costosOcultos.filter(c => c.detectado).reduce((s,c) => s+c.valor_estimado, 0)
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted, fontSize:'14px' }}>
       Analizando indicadores y generando alertas...
     </div>
   )
 
   return (
     <RequierePermiso modulo="alertas">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>🚨 Centro de Alertas & Decisiones</h1>
-          <p style={{ fontSize:'13px', color:'#8B96A8' }}>Alertas reales desde tus módulos · PEF costos ocultos · Oportunidades · ACTUAR</p>
+          <p style={{ fontSize:'13px', color:T.muted }}>Alertas reales desde tus módulos · PEF costos ocultos · Oportunidades · ACTUAR</p>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
           {noLeidas > 0 && (
             <button onClick={marcarTodasLeidas}
-              style={{ padding:'8px 14px', background:'rgba(255,255,255,0.05)', border:'none', borderRadius:'9px', color:'#8B96A8', cursor:'pointer', fontSize:'12px' }}>
+              style={{ padding:'8px 14px', background:'rgba(255,255,255,0.05)', border:'none', borderRadius:'9px', color:T.muted, cursor:'pointer', fontSize:'12px' }}>
               ✓ Marcar todas leídas
             </button>
           )}
           {puede(clavePermiso('alertas','nueva'),'agregar') && (
             <button onClick={() => setTab('nueva')}
-              style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
+              style={{ padding:'9px 18px', background:T.yellow, color:T.card, border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
               + Nueva alerta
             </button>
           )}
@@ -323,16 +323,16 @@ export default function AlertasPage() {
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
-          { label:'Sin leer', value:noLeidas, color: noLeidas > 0 ? '#F05C5C' : '#2DD4A0', icon:'🔔' },
-          { label:'Críticas', value:criticas, color: criticas > 0 ? '#F05C5C' : '#2DD4A0', icon:'🔴' },
-          { label:'Operativas', value:alertas.filter(a=>a.categoria==='operativa').length, color:'#F5A623', icon:'⚙️' },
-          { label:'Externas', value:alertas.filter(a=>a.categoria==='externa').length, color:'#3D8EF0', icon:'📅' },
-          { label:'Oportunidades', value:alertas.filter(a=>a.categoria==='oportunidad').length, color:'#2DD4A0', icon:'💡' },
-          { label:'Costos PEF', value:`$${Math.round(totalPEF/1000)}K`, color:'#9B6BFF', icon:'🔍' },
+          { label:'Sin leer', value:noLeidas, color: noLeidas > 0 ? T.red : T.green, icon:'🔔' },
+          { label:'Críticas', value:criticas, color: criticas > 0 ? T.red : T.green, icon:'🔴' },
+          { label:'Operativas', value:alertas.filter(a=>a.categoria==='operativa').length, color:T.yellow, icon:'⚙️' },
+          { label:'Externas', value:alertas.filter(a=>a.categoria==='externa').length, color:T.blue, icon:'📅' },
+          { label:'Oportunidades', value:alertas.filter(a=>a.categoria==='oportunidad').length, color:T.green, icon:'💡' },
+          { label:'Costos PEF', value:`$${Math.round(totalPEF/1000)}K`, color:T.purple, icon:'🔍' },
         ].map((k,i) => (
           <div key={i} style={{ ...s, padding:'12px', borderTop:`2px solid ${k.color}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-              <span style={{ fontSize:'10px', color:'#8B96A8' }}>{k.label}</span>
+              <span style={{ fontSize:'10px', color:T.muted }}>{k.label}</span>
               <span>{k.icon}</span>
             </div>
             <div style={{ fontSize:'20px', fontWeight:'800', color:k.color }}>{k.value}</div>
@@ -344,8 +344,8 @@ export default function AlertasPage() {
         {tabsVisibles.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
-              background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)',
-              color: tab === t.key ? '#0A0D14' : '#8B96A8' }}>
+              background: tab === t.key ? T.yellow : 'rgba(255,255,255,0.05)',
+              color: tab === t.key ? '#0A0D14' : T.muted }}>
             {t.label}
           </button>
         ))}
@@ -358,17 +358,17 @@ export default function AlertasPage() {
               {['TODOS','operativa','externa','oportunidad','pef'].map(f => (
                 <button key={f} onClick={() => setFiltroCategoria(f)}
                   style={{ padding:'5px 12px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:'600',
-                    background: filtroCategoria === f ? '#F5A623' : 'rgba(255,255,255,0.05)',
-                    color: filtroCategoria === f ? '#0A0D14' : '#8B96A8' }}>
+                    background: filtroCategoria === f ? T.yellow : 'rgba(255,255,255,0.05)',
+                    color: filtroCategoria === f ? '#0A0D14' : T.muted }}>
                   {f === 'TODOS' ? 'Todos' : CATEGORIA_LABEL[f]}
                 </button>
               ))}
-              <div style={{ width:'1px', background:'rgba(255,255,255,0.08)', margin:'0 2px' }} />
+              <div style={{ width:'1px', background:T.border, margin:'0 2px' }} />
               {['TODOS','critico','atencion','info','oportunidad','externo'].map(n => (
                 <button key={n} onClick={() => setFiltroNivel(n)}
                   style={{ padding:'5px 10px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:'600',
-                    background: filtroNivel === n ? (n === 'TODOS' ? '#F5A623' : `${NIVEL_INFO[n]?.color || '#F5A623'}22`) : 'rgba(255,255,255,0.05)',
-                    color: filtroNivel === n ? (n === 'TODOS' ? '#0A0D14' : NIVEL_INFO[n]?.color) : '#8B96A8' }}>
+                    background: filtroNivel === n ? (n === 'TODOS' ? T.yellow : `${NIVEL_INFO[n]?.color || T.yellow}22`) : 'rgba(255,255,255,0.05)',
+                    color: filtroNivel === n ? (n === 'TODOS' ? '#0A0D14' : NIVEL_INFO[n]?.color) : T.muted }}>
                   {n === 'TODOS' ? 'Todos' : `${NIVEL_INFO[n]?.icono} ${NIVEL_INFO[n]?.label}`}
                 </button>
               ))}
@@ -376,7 +376,7 @@ export default function AlertasPage() {
 
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {filtradas.length === 0 ? (
-                <div style={{ ...s, padding:'40px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>
+                <div style={{ ...s, padding:'40px', textAlign:'center', color:T.muted, fontSize:'13px' }}>
                   No hay alertas con estos filtros. Tu operación está limpia ✅
                 </div>
               ) : filtradas.map(a => {
@@ -385,25 +385,25 @@ export default function AlertasPage() {
                 return (
                   <div key={a.id} onClick={() => { setAlertaSel(activa ? null : a); if(!a.leida) marcarLeida(a.id) }}
                     style={{ ...s, padding:'14px 16px', cursor:'pointer', transition:'all .12s',
-                      border:`1px solid ${activa ? ni.color + '44' : !a.leida ? ni.color + '22' : 'rgba(255,255,255,0.07)'}`,
-                      background: activa ? ni.bg : !a.leida ? `${ni.color}04` : '#111520',
+                      border:`1px solid ${activa ? ni.color + '44' : !a.leida ? ni.color + '22' : T.border}`,
+                      background: activa ? ni.bg : !a.leida ? `${ni.color}04` : T.card,
                       opacity: a.leida && !activa ? 0.7 : 1 }}>
                     <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
                       <span style={{ fontSize:'18px', flexShrink:0, marginTop:'2px' }}>{a.icono || ni.icono}</span>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
                           {!a.leida && <div style={{ width:'7px', height:'7px', borderRadius:'50%', background:ni.color, flexShrink:0 }} />}
-                          <span style={{ fontSize:'13px', fontWeight:'700', color: a.leida ? '#8B96A8' : '#E8EDF5' }}>{a.titulo}</span>
+                          <span style={{ fontSize:'13px', fontWeight:'700', color: a.leida ? T.muted : T.text }}>{a.titulo}</span>
                           <span style={{ fontSize:'10px', padding:'1px 7px', borderRadius:'5px', background:`${ni.color}15`, color:ni.color, fontWeight:'700' }}>{ni.label}</span>
-                          <span style={{ fontSize:'10px', color:'#5A6478' }}>{CATEGORIA_LABEL[a.categoria] || a.categoria}</span>
-                          {!a.publicada_por && <span style={{ fontSize:'10px', color:'#3D8EF0' }}>🤖 Auto</span>}
-                          {a.publicada_por && <span style={{ fontSize:'10px', color:'#9B6BFF' }}>👤 Admin</span>}
+                          <span style={{ fontSize:'10px', color:T.muted }}>{CATEGORIA_LABEL[a.categoria] || a.categoria}</span>
+                          {!a.publicada_por && <span style={{ fontSize:'10px', color:T.blue }}>🤖 Auto</span>}
+                          {a.publicada_por && <span style={{ fontSize:'10px', color:T.purple }}>👤 Admin</span>}
                         </div>
-                        <div style={{ fontSize:'12px', color:'#8B96A8', marginBottom:'4px', lineHeight:'1.4' }}>{a.mensaje}</div>
+                        <div style={{ fontSize:'12px', color:T.muted, marginBottom:'4px', lineHeight:'1.4' }}>{a.mensaje}</div>
                         <div style={{ display:'flex', gap:'12px', fontSize:'11px' }}>
                           {a.valor && <span style={{ color:ni.color, fontWeight:'700' }}>{a.valor}</span>}
-                          <span style={{ color:'#5A6478' }}>{a.modulo}</span>
-                          <span style={{ color:'#5A6478' }}>{new Date(a.created_at).toLocaleDateString('es-CO')}</span>
+                          <span style={{ color:T.muted }}>{a.modulo}</span>
+                          <span style={{ color:T.muted }}>{new Date(a.created_at).toLocaleDateString('es-CO')}</span>
                         </div>
                       </div>
                     </div>
@@ -421,17 +421,17 @@ export default function AlertasPage() {
                   <>
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
                       <span style={{ fontSize:'22px' }}>{alertaSel.icono || ni.icono}</span>
-                      <button onClick={() => setAlertaSel(null)} style={{ background:'none', border:'none', color:'#8B96A8', cursor:'pointer', fontSize:'20px' }}>×</button>
+                      <button onClick={() => setAlertaSel(null)} style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'20px' }}>×</button>
                     </div>
                     <div style={{ fontSize:'14px', fontWeight:'800', color:ni.color, marginBottom:'8px', lineHeight:'1.3' }}>{alertaSel.titulo}</div>
                     <div style={{ display:'flex', gap:'6px', marginBottom:'14px', flexWrap:'wrap' }}>
                       <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:`${ni.color}15`, color:ni.color, fontWeight:'700' }}>{ni.label}</span>
-                      <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:'rgba(255,255,255,0.06)', color:'#8B96A8' }}>{CATEGORIA_LABEL[alertaSel.categoria]}</span>
-                      <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:'rgba(255,255,255,0.06)', color:'#8B96A8' }}>{alertaSel.modulo}</span>
+                      <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:'rgba(255,255,255,0.06)', color:T.muted }}>{CATEGORIA_LABEL[alertaSel.categoria]}</span>
+                      <span style={{ fontSize:'10px', padding:'2px 8px', borderRadius:'5px', background:'rgba(255,255,255,0.06)', color:T.muted }}>{alertaSel.modulo}</span>
                     </div>
                     <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:'10px', padding:'12px 14px', marginBottom:'12px' }}>
-                      <div style={{ fontSize:'11px', color:'#5A6478', fontWeight:'700', marginBottom:'6px' }}>SITUACIÓN</div>
-                      <div style={{ fontSize:'13px', color:'#8B96A8', lineHeight:'1.7' }}>{alertaSel.mensaje}</div>
+                      <div style={{ fontSize:'11px', color:T.muted, fontWeight:'700', marginBottom:'6px' }}>SITUACIÓN</div>
+                      <div style={{ fontSize:'13px', color:T.muted, lineHeight:'1.7' }}>{alertaSel.mensaje}</div>
                       {alertaSel.valor && (
                         <div style={{ marginTop:'8px', fontSize:'16px', fontWeight:'800', color:ni.color }}>{alertaSel.valor}</div>
                       )}
@@ -439,10 +439,10 @@ export default function AlertasPage() {
                     {alertaSel.accion && (
                       <div style={{ padding:'12px 14px', borderRadius:'10px', background:`${ni.color}08`, border:`1px solid ${ni.color}22`, marginBottom:'14px' }}>
                         <div style={{ fontSize:'11px', color:ni.color, fontWeight:'700', marginBottom:'6px' }}>⚡ ACCIÓN RECOMENDADA</div>
-                        <div style={{ fontSize:'12px', color:'#E8EDF5', lineHeight:'1.6' }}>{alertaSel.accion}</div>
+                        <div style={{ fontSize:'12px', color:T.text, lineHeight:'1.6' }}>{alertaSel.accion}</div>
                       </div>
                     )}
-                    <div style={{ fontSize:'11px', color:'#5A6478', display:'flex', justifyContent:'space-between' }}>
+                    <div style={{ fontSize:'11px', color:T.muted, display:'flex', justifyContent:'space-between' }}>
                       <span>Fecha: {new Date(alertaSel.created_at).toLocaleDateString('es-CO')}</span>
                       <span>Fuente: {!alertaSel.publicada_por ? '🤖 Automática' : '👤 Admin'}</span>
                     </div>
@@ -459,7 +459,7 @@ export default function AlertasPage() {
           <div style={{ ...s, overflow:'hidden' }}>
             <div style={{ padding:'14px 16px', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ fontWeight:'700', marginBottom:'4px' }}>🔍 Diagnóstico PEF — Costos Ocultos</div>
-              <div style={{ fontSize:'12px', color:'#8B96A8' }}>Prevención · Evaluación · Fallas — calculado con tus datos reales del mes</div>
+              <div style={{ fontSize:'12px', color:T.muted }}>Prevención · Evaluación · Fallas — calculado con tus datos reales del mes</div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
               {[
@@ -473,7 +473,7 @@ export default function AlertasPage() {
                   <div style={{ fontSize:'16px', fontWeight:'800', color:cat.color }}>
                     ${cat.items.filter(c=>c.detectado).reduce((s,c)=>s+c.valor_estimado,0).toLocaleString('es-CO')}
                   </div>
-                  <div style={{ fontSize:'10px', color:'#5A6478' }}>/mes detectado</div>
+                  <div style={{ fontSize:'10px', color:T.muted }}>/mes detectado</div>
                 </div>
               ))}
             </div>
@@ -481,27 +481,27 @@ export default function AlertasPage() {
               <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 16px', borderBottom:'1px solid rgba(255,255,255,0.03)', opacity: c.detectado?1:0.5 }}>
                 <div style={{ width:'24px', height:'24px', borderRadius:'6px', background:`${c.color}15`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'800', color:c.color, flexShrink:0 }}>{c.categoria[0]}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:'12px', color: c.detectado?'#E8EDF5':'#5A6478', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.concepto}</div>
-                  <div style={{ fontSize:'10px', color:'#5A6478' }}>Impacto: {c.pct_impacto}% del CF · {c.detectado ? '✅ Detectado' : '⚠️ Sin datos suficientes'}</div>
+                  <div style={{ fontSize:'12px', color: c.detectado?T.text:T.muted, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.concepto}</div>
+                  <div style={{ fontSize:'10px', color:T.muted }}>Impacto: {c.pct_impacto}% del CF · {c.detectado ? '✅ Detectado' : '⚠️ Sin datos suficientes'}</div>
                 </div>
                 <div style={{ textAlign:'right', flexShrink:0 }}>
                   <div style={{ fontSize:'13px', fontWeight:'800', color:c.color }}>${c.valor_estimado.toLocaleString('es-CO')}</div>
-                  <div style={{ fontSize:'9px', color:'#5A6478' }}>/mes</div>
+                  <div style={{ fontSize:'9px', color:T.muted }}>/mes</div>
                 </div>
               </div>
             ))}
           </div>
 
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'14px' }}>💰 RESUMEN COSTOS OCULTOS</div>
-            <div style={{ padding:'12px 14px', borderRadius:'10px', marginBottom:'8px', background:'#F5A62306', borderLeft:'3px solid #F5A623' }}>
-              <div style={{ fontSize:'12px', color:'#8B96A8' }}>Costos ocultos detectados este mes</div>
-              <div style={{ fontSize:'20px', fontWeight:'800', color:'#F5A623' }}>${totalPEF.toLocaleString('es-CO')}</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'14px' }}>💰 RESUMEN COSTOS OCULTOS</div>
+            <div style={{ padding:'12px 14px', borderRadius:'10px', marginBottom:'8px', background:`${T.yellow}06`, borderLeft:`3px solid ${T.yellow}` }}>
+              <div style={{ fontSize:'12px', color:T.muted }}>Costos ocultos detectados este mes</div>
+              <div style={{ fontSize:'20px', fontWeight:'800', color:T.yellow }}>${totalPEF.toLocaleString('es-CO')}</div>
             </div>
             <div style={{ marginTop:'8px', padding:'14px', background:'rgba(155,107,255,0.06)', borderRadius:'10px', border:'1px solid rgba(155,107,255,0.2)' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'6px' }}>💡 ¿QUÉ HACER CON ESTO?</div>
-              <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.7' }}>
-                Si reduces el PEF en un 30%, liberas <strong style={{ color:'#2DD4A0' }}>${Math.round(totalPEF*0.3/1000)}K/mes</strong> adicionales en utilidad real sin vender un solo producto más.
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'6px' }}>💡 ¿QUÉ HACER CON ESTO?</div>
+              <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.7' }}>
+                Si reduces el PEF en un 30%, liberas <strong style={{ color:T.green }}>${Math.round(totalPEF*0.3/1000)}K/mes</strong> adicionales en utilidad real sin vender un solo producto más.
               </div>
             </div>
           </div>
@@ -511,25 +511,25 @@ export default function AlertasPage() {
       {tab === 'oportunidades' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'14px' }}>💡 OPORTUNIDADES DETECTADAS (desde Pauta real)</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'14px' }}>💡 OPORTUNIDADES DETECTADAS (desde Pauta real)</div>
             {oportunidadesProducto.length === 0 ? (
-              <div style={{ padding:'30px', textAlign:'center', color:'#5A6478', fontSize:'12px' }}>
+              <div style={{ padding:'30px', textAlign:'center', color:T.muted, fontSize:'12px' }}>
                 Aún no hay suficientes datos de pauta este mes para detectar oportunidades con ROAS alto
               </div>
             ) : oportunidadesProducto.map((op,i) => (
               <div key={i} style={{ padding:'14px', borderRadius:'10px', marginBottom:'8px', background:`${op.color}08`, borderLeft:`3px solid ${op.color}` }}>
                 <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
                   <span style={{ fontSize:'14px', fontWeight:'800', color:op.color }}>{op.nombre}</span>
-                  {op.potencial && <span style={{ fontSize:'13px', fontWeight:'700', color:'#2DD4A0' }}>{op.potencial}</span>}
+                  {op.potencial && <span style={{ fontSize:'13px', fontWeight:'700', color:T.green }}>{op.potencial}</span>}
                 </div>
-                <div style={{ fontSize:'12px', color:'#F5A623', marginBottom:'5px' }}>📊 {op.señal}</div>
-                <div style={{ fontSize:'12px', color:'#8B96A8' }}>→ {op.recomendacion}</div>
+                <div style={{ fontSize:'12px', color:T.yellow, marginBottom:'5px' }}>📊 {op.señal}</div>
+                <div style={{ fontSize:'12px', color:T.muted }}>→ {op.recomendacion}</div>
               </div>
             ))}
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'12px' }}>📅 CALENDARIO — Próximos eventos clave</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'12px' }}>📅 CALENDARIO — Próximos eventos clave</div>
             {EVENTOS_2026.map((ev,i) => {
               const dias = Math.ceil((new Date(ev.fecha).getTime() - Date.now()) / 86400000)
               if (dias < 0) return null
@@ -537,11 +537,11 @@ export default function AlertasPage() {
                 <div key={i} style={{ display:'flex', gap:'12px', padding:'10px 12px', borderRadius:'8px', marginBottom:'6px', background:'rgba(255,255,255,0.02)' }}>
                   <div style={{ textAlign:'center', flexShrink:0 }}>
                     <div style={{ fontSize:'18px', fontWeight:'900', color:ev.color }}>{dias}</div>
-                    <div style={{ fontSize:'9px', color:'#5A6478' }}>días</div>
+                    <div style={{ fontSize:'9px', color:T.muted }}>días</div>
                   </div>
                   <div>
                     <div style={{ fontSize:'12px', fontWeight:'700' }}>{ev.evento}</div>
-                    <div style={{ fontSize:'11px', color:'#8B96A8' }}>{new Date(ev.fecha).toLocaleDateString('es-CO',{day:'2-digit',month:'long'})}</div>
+                    <div style={{ fontSize:'11px', color:T.muted }}>{new Date(ev.fecha).toLocaleDateString('es-CO',{day:'2-digit',month:'long'})}</div>
                     <div style={{ fontSize:'11px', color:ev.color }}>→ {ev.oportunidad}</div>
                   </div>
                 </div>
@@ -554,11 +554,11 @@ export default function AlertasPage() {
       {tab === 'nueva' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'16px' }}>✏️ CREAR NUEVA ALERTA {esSuperadmin && '— Modo Superadmin'}</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'16px' }}>✏️ CREAR NUEVA ALERTA {esSuperadmin && '— Modo Superadmin'}</div>
 
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'10px', marginBottom:'12px' }}>
               <div>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Categoría</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Categoría</label>
                 <select value={nueva.categoria} onChange={e => setNueva(p=>({...p,categoria:e.target.value}))} style={{ ...inp, cursor:'pointer' }}>
                   <option value="operativa">⚙️ Operativa</option>
                   <option value="externa">📅 Externa</option>
@@ -567,7 +567,7 @@ export default function AlertasPage() {
                 </select>
               </div>
               <div>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Nivel</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Nivel</label>
                 <select value={nueva.tipo} onChange={e => setNueva(p=>({...p,tipo:e.target.value}))} style={{ ...inp, cursor:'pointer' }}>
                   <option value="critico">🔴 CRÍTICO</option>
                   <option value="atencion">🟡 ATENCIÓN</option>
@@ -577,14 +577,14 @@ export default function AlertasPage() {
                 </select>
               </div>
               <div>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Módulo</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Módulo</label>
                 <select value={nueva.modulo} onChange={e => setNueva(p=>({...p,modulo:e.target.value}))} style={{ ...inp, cursor:'pointer' }}>
                   {['Pauta','Pedidos','Logística','Wallet','Costos','Productos','General','PQRSF'].map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               {esSuperadmin && (
                 <div>
-                  <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Destinatarios</label>
+                  <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Destinatarios</label>
                   <select value={nueva.destinatarios} onChange={e => setNueva(p=>({...p,destinatarios:e.target.value}))} style={{ ...inp, cursor:'pointer' }}>
                     <option value="todas">Todas las tiendas</option>
                     <option value="mi_tienda">Solo mi tienda</option>
@@ -594,43 +594,43 @@ export default function AlertasPage() {
             </div>
 
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Título *</label>
+              <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Título *</label>
               <input value={nueva.titulo} onChange={e => setNueva(p=>({...p,titulo:e.target.value}))}
                 placeholder="Ej: Festivo 29 de mayo — planificar despachos" style={inp} />
             </div>
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Mensaje *</label>
+              <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Mensaje *</label>
               <textarea value={nueva.mensaje} onChange={e => setNueva(p=>({...p,mensaje:e.target.value}))}
                 rows={3} placeholder="Describe la situación..." style={{ ...inp, resize:'vertical' }} />
             </div>
             <div style={{ marginBottom:'14px' }}>
-              <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Acción recomendada</label>
+              <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Acción recomendada</label>
               <input value={nueva.accion} onChange={e => setNueva(p=>({...p,accion:e.target.value}))}
                 placeholder="Ej: Despachar todo el 28 antes de las 2pm" style={inp} />
             </div>
 
             <button onClick={crearAlerta} disabled={!nueva.titulo || !nueva.mensaje || !puede(clavePermiso('alertas','nueva'),'agregar')}
-              style={{ width:'100%', padding:'11px', background: nueva.titulo && nueva.mensaje ? '#F5A623' : 'rgba(255,255,255,0.05)',
-                border:'none', borderRadius:'10px', color: nueva.titulo && nueva.mensaje ? '#0A0D14' : '#5A6478',
+              style={{ width:'100%', padding:'11px', background: nueva.titulo && nueva.mensaje ? T.yellow : 'rgba(255,255,255,0.05)',
+                border:'none', borderRadius:'10px', color: nueva.titulo && nueva.mensaje ? T.card : T.muted,
                 cursor: nueva.titulo && nueva.mensaje ? 'pointer' : 'not-allowed', fontWeight:'700', fontSize:'13px' }}>
               🚨 Publicar Alerta
             </button>
           </div>
 
           <div style={{ ...s, padding:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'12px' }}>📋 TIPOS DE ALERTAS</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>📋 TIPOS DE ALERTAS</div>
             {[
-              { tipo:'⚙️ Operativa', ejemplos:'CPA fuera de rango, tasa confirmación baja, saldo wallet bajo — se generan automáticamente', color:'#F5A623' },
-              { tipo:'📅 Externa', ejemplos:'Festivos, días especiales, eventos del mercado', color:'#3D8EF0' },
-              { tipo:'💡 Oportunidad', ejemplos:'Producto con alto ROAS, nicho nuevo, tendencia detectada', color:'#2DD4A0' },
-              { tipo:'🔍 PEF', ejemplos:'Costo oculto detectado, ineficiencia en proceso, tiempo no costeado', color:'#9B6BFF' },
+              { tipo:'⚙️ Operativa', ejemplos:'CPA fuera de rango, tasa confirmación baja, saldo wallet bajo — se generan automáticamente', color:T.yellow },
+              { tipo:'📅 Externa', ejemplos:'Festivos, días especiales, eventos del mercado', color:T.blue },
+              { tipo:'💡 Oportunidad', ejemplos:'Producto con alto ROAS, nicho nuevo, tendencia detectada', color:T.green },
+              { tipo:'🔍 PEF', ejemplos:'Costo oculto detectado, ineficiencia en proceso, tiempo no costeado', color:T.purple },
             ].map((t,i) => (
               <div key={i} style={{ padding:'12px', borderRadius:'8px', marginBottom:'7px', background:`${t.color}06`, borderLeft:`3px solid ${t.color}` }}>
                 <div style={{ fontSize:'12px', fontWeight:'700', color:t.color, marginBottom:'4px' }}>{t.tipo}</div>
-                <div style={{ fontSize:'11px', color:'#8B96A8' }}>{t.ejemplos}</div>
+                <div style={{ fontSize:'11px', color:T.muted }}>{t.ejemplos}</div>
               </div>
             ))}
-            <div style={{ marginTop:'10px', padding:'10px 12px', background:'rgba(155,107,255,0.06)', borderRadius:'8px', fontSize:'11px', color:'#8B96A8', lineHeight:'1.6' }}>
+            <div style={{ marginTop:'10px', padding:'10px 12px', background:'rgba(155,107,255,0.06)', borderRadius:'8px', fontSize:'11px', color:T.muted, lineHeight:'1.6' }}>
               Las alertas operativas se generan automáticamente al detectar CPA alto, novedades acumuladas, confirmación baja o saldo de wallet bajo. También llegan aquí las alertas que envían los módulos Precio, Equilibrio e Inversión.
             </div>
           </div>

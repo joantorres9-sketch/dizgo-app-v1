@@ -3,10 +3,12 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { CONFIG_PAIS, PASOS_SEED, sembrarTenantDemo } from '@/lib/seedDemoTenant'
 import { usePermisos } from '@/lib/permisos'
+import { useTema } from '@/lib/tema'
 
 const DOC_LABELS_REGISTRO: Record<string, string> = { id_a: '🪪 Identidad Lado A', id_b: '🪪 Identidad Lado B', doc_legal: '📄 Doc. legal' }
 
 function CamposFormulario({ s, onVerDoc }: { s: any; onVerDoc: (url: string) => void }) {
+  const { T } = useTema()
   const docs: Record<string, string> = s.docs_urls || {}
   const campos = [
     { l: 'Documento', v: s.tipo_doc && s.numero_doc ? `${s.tipo_doc} ${s.numero_doc}` : '—' },
@@ -22,14 +24,14 @@ function CamposFormulario({ s, onVerDoc }: { s: any; onVerDoc: (url: string) => 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: '6px 12px', padding: '8px 10px', background: 'rgba(255,255,255,0.02)', borderRadius: '7px' }}>
         {campos.map(c => (
           <div key={c.l}>
-            <div style={{ fontSize: '9.5px', color: '#5A6478', textTransform: 'uppercase', letterSpacing: '.3px' }}>{c.l}</div>
-            <div style={{ fontSize: '11.5px', color: '#E8EDF5' }}>{c.v}</div>
+            <div style={{ fontSize: '9.5px', color: T.muted, textTransform: 'uppercase', letterSpacing: '.3px' }}>{c.l}</div>
+            <div style={{ fontSize: '11.5px', color: T.text }}>{c.v}</div>
           </div>
         ))}
       </div>
       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
         {Object.keys(docs).length === 0 ? (
-          <span style={{ fontSize: '10.5px', color: '#5A6478' }}>Sin documentos adjuntos</span>
+          <span style={{ fontSize: '10.5px', color: T.muted }}>Sin documentos adjuntos</span>
         ) : Object.entries(docs).map(([key, url]) => (
           <button key={key} onClick={() => onVerDoc(url)}
             style={{ padding: '5px 10px', background: 'rgba(74,158,245,0.08)', border: '1px solid rgba(74,158,245,0.25)', borderRadius: '6px', color: '#4A9EF5', fontSize: '10.5px', fontWeight: '600', cursor: 'pointer' }}>
@@ -45,6 +47,7 @@ function rnd(arr: unknown[]) { return arr[Math.floor(Math.random() * arr.length)
 function rndInt(min: number, max: number) { return Math.floor(Math.random() * (max - min + 1)) + min }
 
 export default function AdminPage() {
+  const { T } = useTema()
   const supabase = createClient()
   const { perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
@@ -238,34 +241,34 @@ export default function AdminPage() {
   const solicitudesResueltas = solicitudes.filter(s => s.estado !== 'pendiente')
 
   const cfg = CONFIG_PAIS[paisCodigo] || CONFIG_PAIS.COL
-  const estadoColor = (e: string) => e === 'ok' ? '#2DD4A0' : e === 'error' ? '#F05C5C' : e === 'cargando' ? '#F5A623' : '#5A6478'
+  const estadoColor = (e: string) => e === 'ok' ? T.green : e === 'error' ? T.red : e === 'cargando' ? T.yellow : T.muted
   const estadoIcon = (e: string) => e === 'ok' ? '✅' : e === 'error' ? '❌' : e === 'cargando' ? '⏳' : '⬜'
 
   if (loading || autorizado === null) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', color: '#8B96A8' }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', color: T.muted }}>
       Cargando Superadmin...
     </div>
   )
   if (!autorizado) return (
-    <div style={{ padding: '40px', textAlign: 'center', color: '#8B96A8' }}>No tienes acceso a esta sección.</div>
+    <div style={{ padding: '40px', textAlign: 'center', color: T.muted }}>No tienes acceso a esta sección.</div>
   )
 
   return (
-    <div style={{ color: '#E8EDF5', fontFamily: 'system-ui,sans-serif' }}>
+    <div style={{ color: T.text, fontFamily: 'system-ui,sans-serif' }}>
       <div style={{ marginBottom: '20px' }}>
         <h1 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '4px' }}>⚙️ Superadmin — Centro de Control</h1>
-        <p style={{ fontSize: '13px', color: '#8B96A8' }}>Seed de datos por país · Simulación · Mantenimiento · Solo para administradores</p>
+        <p style={{ fontSize: '13px', color: T.muted }}>Seed de datos por país · Simulación · Mantenimiento · Solo para administradores</p>
       </div>
 
-      <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
+      <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#F5A623' }}>📋 SOLICITUDES DE REGISTRO PENDIENTES</div>
-          {solicitudesPendientes.length > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: '#0A0D14', background: '#F5A623', borderRadius: '10px', padding: '2px 10px' }}>{solicitudesPendientes.length}</span>}
+          <div style={{ fontSize: '12px', fontWeight: '700', color: T.yellow }}>📋 SOLICITUDES DE REGISTRO PENDIENTES</div>
+          {solicitudesPendientes.length > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: '#0A0D14', background: T.yellow, borderRadius: '10px', padding: '2px 10px' }}>{solicitudesPendientes.length}</span>}
         </div>
         {cargandoSolicitudes ? (
-          <div style={{ fontSize: '12px', color: '#5A6478', padding: '12px 0' }}>Cargando solicitudes...</div>
+          <div style={{ fontSize: '12px', color: T.muted, padding: '12px 0' }}>Cargando solicitudes...</div>
         ) : solicitudesPendientes.length === 0 ? (
-          <div style={{ fontSize: '12px', color: '#5A6478', padding: '12px 0' }}>No hay solicitudes pendientes.</div>
+          <div style={{ fontSize: '12px', color: T.muted, padding: '12px 0' }}>No hay solicitudes pendientes.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {solicitudesPendientes.map(s => {
@@ -273,31 +276,31 @@ export default function AdminPage() {
               const pagado = s.pago_estado === 'pagado'
               const bloqueado = esPago && !pagado
               return (
-                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px' }}>
+                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 14px', background: T.bg, border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#E8EDF5' }}>{s.nombre_tienda} <span style={{ color: '#5A6478', fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
-                      <div style={{ fontSize: '11px', color: '#8B96A8' }}>{s.email_personal} · {s.pais_matriz}</div>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: T.text }}>{s.nombre_tienda} <span style={{ color: T.muted, fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
+                      <div style={{ fontSize: '11px', color: T.muted }}>{s.email_personal} · {s.pais_matriz}</div>
                     </div>
                     <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: esPago ? 'rgba(232,160,32,0.15)' : 'rgba(74,158,245,0.15)', color: esPago ? '#E8A020' : '#4A9EF5', textTransform: 'uppercase' }}>
                       {s.plan_elegido || 'explorador'}
                     </span>
                     {esPago && (
-                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: pagado ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: pagado ? '#2DD4A0' : '#F05C5C' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: pagado ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: pagado ? T.green : T.red }}>
                         {pagado ? `✓ Pagado (${s.proveedor_pago})` : '✕ Sin pago'}
                       </span>
                     )}
                     <button onClick={() => solicitarAjustes(s.id)} disabled={procesando === s.id}
-                      style={{ padding: '7px 12px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: '7px', color: '#F5A623', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+                      style={{ padding: '7px 12px', background: 'rgba(245,166,35,0.1)', border: '1px solid rgba(245,166,35,0.3)', borderRadius: '7px', color: T.yellow, fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
                       ✏️ Solicitar ajustes
                     </button>
                     <button onClick={() => accionSolicitud(s.id, 'aprobar')} disabled={bloqueado || procesando === s.id}
                       title={bloqueado ? 'No se puede aprobar hasta confirmar el pago' : ''}
-                      style={{ padding: '7px 14px', background: bloqueado ? 'rgba(45,212,160,0.08)' : '#2DD4A0', border: 'none', borderRadius: '7px', color: bloqueado ? '#2DD4A0' : '#0A0D14', fontWeight: '700', fontSize: '11px', cursor: bloqueado ? 'not-allowed' : 'pointer', opacity: bloqueado ? 0.5 : 1 }}>
+                      style={{ padding: '7px 14px', background: bloqueado ? 'rgba(45,212,160,0.08)' : T.green, border: 'none', borderRadius: '7px', color: bloqueado ? T.green : '#0A0D14', fontWeight: '700', fontSize: '11px', cursor: bloqueado ? 'not-allowed' : 'pointer', opacity: bloqueado ? 0.5 : 1 }}>
                       {procesando === s.id ? '...' : '✓ Aprobar'}
                     </button>
                     <button onClick={() => accionSolicitud(s.id, 'rechazar')} disabled={procesando === s.id}
-                      style={{ padding: '7px 14px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '7px', color: '#F05C5C', fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
+                      style={{ padding: '7px 14px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '7px', color: T.red, fontWeight: '700', fontSize: '11px', cursor: 'pointer' }}>
                       ✕ Rechazar
                     </button>
                   </div>
@@ -307,7 +310,7 @@ export default function AdminPage() {
                   </div>
 
                   {s.notas_admin && (
-                    <div style={{ fontSize: '10.5px', color: '#F5A623', background: 'rgba(245,166,35,0.06)', borderRadius: '6px', padding: '6px 10px' }}>
+                    <div style={{ fontSize: '10.5px', color: T.yellow, background: 'rgba(245,166,35,0.06)', borderRadius: '6px', padding: '6px 10px' }}>
                       ✏️ Última nota enviada: {s.notas_admin}
                     </div>
                   )}
@@ -319,17 +322,17 @@ export default function AdminPage() {
       </div>
 
       {solicitudesResueltas.length > 0 && (
-        <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#8B96A8', marginBottom: '12px' }}>🗂️ HISTORIAL DE SOLICITUDES ({solicitudesResueltas.length})</div>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '12px', padding: '18px 20px', marginBottom: '16px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: T.muted, marginBottom: '12px' }}>🗂️ HISTORIAL DE SOLICITUDES ({solicitudesResueltas.length})</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {solicitudesResueltas.map(s => {
               const aprobada = s.estado === 'aprobado'
               return (
-                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 14px', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px', opacity: 0.9 }}>
+                <div key={s.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '10px 14px', background: T.bg, border: '1px solid rgba(255,255,255,0.06)', borderRadius: '9px', opacity: 0.9 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '200px' }}>
-                      <div style={{ fontSize: '12px', fontWeight: '700', color: '#E8EDF5' }}>{s.nombre_tienda} <span style={{ color: '#5A6478', fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
-                      <div style={{ fontSize: '11px', color: '#8B96A8' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: T.text }}>{s.nombre_tienda} <span style={{ color: T.muted, fontWeight: '400' }}>· {s.nombres} {s.apellidos}</span></div>
+                      <div style={{ fontSize: '11px', color: T.muted }}>
                         {s.email_personal} · {s.celular ? `${s.codigo_pais_tel || ''} ${s.celular}` : ''} · {s.pais_matriz}
                         {s.sitio_web ? ` · ${s.sitio_web}` : ''}
                       </div>
@@ -338,11 +341,11 @@ export default function AdminPage() {
                       {s.plan_elegido || 'explorador'}
                     </span>
                     {s.proveedor_pago && (
-                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: 'rgba(45,212,160,0.15)', color: '#2DD4A0' }}>
+                      <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: 'rgba(45,212,160,0.15)', color: T.green }}>
                         ✓ Pagado ({s.proveedor_pago})
                       </span>
                     )}
-                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: aprobada ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: aprobada ? '#2DD4A0' : '#F05C5C' }}>
+                    <span style={{ fontSize: '10px', fontWeight: '700', padding: '3px 9px', borderRadius: '20px', background: aprobada ? 'rgba(45,212,160,0.15)' : 'rgba(240,92,92,0.15)', color: aprobada ? T.green : T.red }}>
                       {aprobada ? '✓ Aprobado' : '✕ Rechazado'} · {s.fecha_aprobacion ? new Date(s.fecha_aprobacion).toLocaleDateString('es-CO') : ''}
                     </span>
                   </div>
@@ -356,34 +359,34 @@ export default function AdminPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: '8px', marginBottom: '16px' }}>
         {[
-          { l: 'Productos', v: conteos.productos || 0, c: '#3D8EF0' },
-          { l: 'Pedidos', v: conteos.pedidos || 0, c: '#2DD4A0' },
-          { l: 'Campañas pauta', v: conteos.pauta || 0, c: '#9B6BFF' },
-          { l: 'Metas', v: conteos.metas || 0, c: '#F5A623' },
+          { l: 'Productos', v: conteos.productos || 0, c: T.blue },
+          { l: 'Pedidos', v: conteos.pedidos || 0, c: T.green },
+          { l: 'Campañas pauta', v: conteos.pauta || 0, c: T.purple },
+          { l: 'Metas', v: conteos.metas || 0, c: T.yellow },
         ].map((k, i) => (
-          <div key={i} style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '14px', borderTop: `2px solid ${k.c}` }}>
-            <div style={{ fontSize: '10px', color: '#8B96A8', marginBottom: '4px' }}>{k.l}</div>
+          <div key={i} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '12px', padding: '14px', borderTop: `2px solid ${k.c}` }}>
+            <div style={{ fontSize: '10px', color: T.muted, marginBottom: '4px' }}>{k.l}</div>
             <div style={{ fontSize: '24px', fontWeight: '900', color: k.c }}>{k.v.toLocaleString()}</div>
           </div>
         ))}
       </div>
 
       <div className="dz-grid-side-l" style={{ ['--side-w' as any]:'380px', gap: '16px' }}>
-        <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', padding: '20px' }}>
-          <div style={{ fontSize: '12px', fontWeight: '700', color: '#F5A623', marginBottom: '16px' }}>🌱 SEED DE DATOS DEMO</div>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '12px', padding: '20px' }}>
+          <div style={{ fontSize: '12px', fontWeight: '700', color: T.yellow, marginBottom: '16px' }}>🌱 SEED DE DATOS DEMO</div>
 
           <div style={{ marginBottom: '14px' }}>
-            <label style={{ fontSize: '11px', color: '#5A6478', display: 'block', marginBottom: '6px' }}>País del tenant</label>
+            <label style={{ fontSize: '11px', color: T.muted, display: 'block', marginBottom: '6px' }}>País del tenant</label>
             <select value={paisCodigo} onChange={e => setPaisCodigo(e.target.value)}
-              style={{ width: '100%', background: '#0A0D14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#E8EDF5', padding: '9px 12px', fontSize: '13px', outline: 'none' }}>
+              style={{ width: '100%', background: T.bg, border: `1px solid ${T.border}`, borderRadius: '8px', color: T.text, padding: '9px 12px', fontSize: '13px', outline: 'none' }}>
               {Object.entries(CONFIG_PAIS).map(([code, c]) => (
                 <option key={code} value={code}>{c.nombre} ({c.moneda})</option>
               ))}
             </select>
           </div>
 
-          <div style={{ padding: '12px', background: 'rgba(45,212,160,0.06)', borderRadius: '10px', marginBottom: '14px', fontSize: '11px', color: '#8B96A8', lineHeight: '1.7' }}>
-            <div style={{ fontWeight: '700', color: '#2DD4A0', marginBottom: '4px' }}>📦 Se cargarán datos para {cfg.nombre}:</div>
+          <div style={{ padding: '12px', background: 'rgba(45,212,160,0.06)', borderRadius: '10px', marginBottom: '14px', fontSize: '11px', color: T.muted, lineHeight: '1.7' }}>
+            <div style={{ fontWeight: '700', color: T.green, marginBottom: '4px' }}>📦 Se cargarán datos para {cfg.nombre}:</div>
             <div>• 3 productos con precios en {cfg.moneda}</div>
             <div>• ~528 pedidos en: {cfg.ciudades.slice(0, 4).join(', ')}</div>
             <div>• Transportadoras: {cfg.transportadoras.slice(0, 2).join(', ')}</div>
@@ -391,60 +394,60 @@ export default function AdminPage() {
           </div>
 
           {yaHayDatos && (
-            <div style={{ padding: '10px 12px', background: 'rgba(245,166,35,0.08)', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', color: '#F5A623' }}>
+            <div style={{ padding: '10px 12px', background: 'rgba(245,166,35,0.08)', borderRadius: '8px', marginBottom: '12px', fontSize: '11px', color: T.yellow }}>
               ⚠️ Ya hay {conteos.pedidos?.toLocaleString()} pedidos cargados. Si ejecutas el seed se agregarán más datos. Usa &quot;Limpiar&quot; primero si quieres empezar de cero.
             </div>
           )}
 
           <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
             <button onClick={ejecutarSeed} disabled={seedActivo}
-              style={{ flex: 2, padding: '11px', background: seedActivo ? 'rgba(45,212,160,0.15)' : '#2DD4A0', border: 'none', borderRadius: '9px', color: seedActivo ? '#2DD4A0' : '#0A0D14', fontWeight: '800', cursor: seedActivo ? 'wait' : 'pointer', fontSize: '13px' }}>
+              style={{ flex: 2, padding: '11px', background: seedActivo ? 'rgba(45,212,160,0.15)' : T.green, border: 'none', borderRadius: '9px', color: seedActivo ? T.green : '#0A0D14', fontWeight: '800', cursor: seedActivo ? 'wait' : 'pointer', fontSize: '13px' }}>
               {seedActivo ? '⏳ Cargando datos...' : '🌱 Cargar datos demo'}
             </button>
             <button onClick={limpiarDatos} disabled={seedActivo}
-              style={{ flex: 1, padding: '11px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '9px', color: '#F05C5C', fontWeight: '700', cursor: seedActivo ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
+              style={{ flex: 1, padding: '11px', background: 'rgba(240,92,92,0.1)', border: '1px solid rgba(240,92,92,0.3)', borderRadius: '9px', color: T.red, fontWeight: '700', cursor: seedActivo ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
               🗑️ Limpiar
             </button>
           </div>
 
           {tenantPlan === 'cortesia' && (
             <div style={{ marginTop: '10px', padding: '14px', background: 'rgba(240,92,92,0.08)', border: '1.5px solid rgba(240,92,92,0.35)', borderRadius: '10px' }}>
-              <div style={{ fontSize: '11.5px', fontWeight: '700', color: '#F05C5C', marginBottom: '6px' }}>🎁 Este es un tenant de cortesía (modo prueba)</div>
-              <div style={{ fontSize: '10.5px', color: '#8B96A8', marginBottom: '10px', lineHeight: '1.6' }}>
+              <div style={{ fontSize: '11.5px', fontWeight: '700', color: T.red, marginBottom: '6px' }}>🎁 Este es un tenant de cortesía (modo prueba)</div>
+              <div style={{ fontSize: '10.5px', color: T.muted, marginBottom: '10px', lineHeight: '1.6' }}>
                 Cuando termines de explorar los módulos con datos de prueba, usa este botón para dejar tu tienda lista y operar con datos reales.
               </div>
               <button onClick={borrarDatosPrueba} disabled={borrandoPrueba}
-                style={{ width: '100%', padding: '11px', background: '#F05C5C', border: 'none', borderRadius: '9px', color: '#fff', fontWeight: '800', cursor: borrandoPrueba ? 'wait' : 'pointer', fontSize: '13px' }}>
+                style={{ width: '100%', padding: '11px', background: T.red, border: 'none', borderRadius: '9px', color: '#fff', fontWeight: '800', cursor: borrandoPrueba ? 'wait' : 'pointer', fontSize: '13px' }}>
                 {borrandoPrueba ? '⏳ Borrando datos de prueba...' : '🗑️ Borrar datos de prueba y empezar con datos reales'}
               </button>
             </div>
           )}
 
           <div style={{ marginTop: '14px' }}>
-            <div style={{ fontSize: '11px', color: '#5A6478', marginBottom: '8px' }}>PROGRESO POR MÓDULO:</div>
+            <div style={{ fontSize: '11px', color: T.muted, marginBottom: '8px' }}>PROGRESO POR MÓDULO:</div>
             {PASOS_SEED.map(paso => (
               <div key={paso.key} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 0', borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
                 <span style={{ fontSize: '13px' }}>{estadoIcon(progreso[paso.key] || 'pendiente')}</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '11px', fontWeight: '600', color: estadoColor(progreso[paso.key] || 'pendiente') }}>{paso.label}</div>
-                  <div style={{ fontSize: '10px', color: '#5A6478' }}>{paso.desc}</div>
+                  <div style={{ fontSize: '10px', color: T.muted }}>{paso.desc}</div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ background: '#111520', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '12px', overflow: 'hidden' }}>
+        <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: '12px', overflow: 'hidden' }}>
           <div style={{ padding: '14px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', fontWeight: '700', fontSize: '13px' }}>
             🖥️ Log de operaciones
           </div>
           <div style={{ padding: '12px 16px', height: '480px', overflowY: 'auto', fontFamily: 'monospace' }}>
             {log.length === 0 ? (
-              <div style={{ color: '#5A6478', fontSize: '12px', textAlign: 'center', padding: '40px' }}>
+              <div style={{ color: T.muted, fontSize: '12px', textAlign: 'center', padding: '40px' }}>
                 El log aparecerá aquí cuando ejecutes el seed...
               </div>
             ) : log.map((l, i) => (
-              <div key={i} style={{ fontSize: '11px', color: l.includes('✅') ? '#2DD4A0' : l.includes('❌') ? '#F05C5C' : l.includes('🎉') ? '#F5A623' : '#8B96A8', padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+              <div key={i} style={{ fontSize: '11px', color: l.includes('✅') ? T.green : l.includes('❌') ? T.red : l.includes('🎉') ? T.yellow : T.muted, padding: '3px 0', borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
                 {l}
               </div>
             ))}

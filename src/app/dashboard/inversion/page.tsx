@@ -89,7 +89,7 @@ const CAPITAL_DEFAULT: Omit<Capital,'id'>[] = [
 export default function InversionPage() {
   const { T } = useTema()
   const supabase = createClient()
-  const { puede } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
 
   const [tenantId, setTenantId] = useState('')
   const [pais,     setPais]     = useState('COL')
@@ -144,13 +144,8 @@ export default function InversionPage() {
   }
 
   // ── CARGA DE DATOS ────────────────────────────────────────
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: prof } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!prof?.tenant_id) { setLoading(false); return }
-    const tid = prof.tenant_id
     setTenantId(tid)
 
     const hoy    = new Date()
@@ -260,7 +255,11 @@ export default function InversionPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   // ── CÁLCULOS CENTRALES ────────────────────────────────────
   const totalActivos    = activos.filter(a => a.activo).reduce((s,a) => s + Number(a.valor), 0)
@@ -361,7 +360,7 @@ export default function InversionPage() {
       estado: ok === previewActivos.length ? 'completado' : 'error',
     })
     setPreviewActivos(null)
-    loadData()
+    loadData(tenantId)
   }
 
   async function guardarCapital() {
@@ -417,7 +416,7 @@ export default function InversionPage() {
       accion: dictamen === 'rojo' ? 'Ajusta TC, TE o margen antes de solicitar este crédito' : dictamen === 'amarillo' ? 'Optimiza los indicadores en amarillo antes de firmar' : 'Puedes proceder con la solicitud del crédito',
       modulo: 'Inversión', valor: `Cuota: ${fmt(cuotaResumen, pais)}`, icono: dictamen==='rojo'?'🔴':dictamen==='amarillo'?'🟡':'🟢',
     })
-    await loadData()
+    await loadData(tenantId)
     setGuardando(false)
   }
 
@@ -469,7 +468,7 @@ export default function InversionPage() {
       modulo:'Inversión', valor: fmt(credito.cuota_mensual, pais), icono:'🟢',
     })
 
-    await loadData()
+    await loadData(tenantId)
     setGuardando(false)
   }
 
@@ -997,7 +996,7 @@ export default function InversionPage() {
               <div style={{ overflowY:'auto', maxHeight:'280px' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
                   <thead style={{ position:'sticky', top:0 }}>
-                    <tr style={{ background:'#060E1C' }}>
+                    <tr style={{ background:T.card2 }}>
                       {['Mes','Cuota','Interés → P&G','Capital','Saldo'].map(h => (
                         <th key={h} style={{ padding:'8px 10px', textAlign:'right', fontSize:'10px', color:T.muted, fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>
                       ))}
@@ -1090,7 +1089,7 @@ export default function InversionPage() {
             <div style={{ overflowY:'auto', maxHeight:'460px' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'11px' }}>
                 <thead style={{ position:'sticky', top:0 }}>
-                  <tr style={{ background:'#060E1C' }}>
+                  <tr style={{ background:T.card2 }}>
                     {['Mes','Utilidad','Acumulado','Pendiente','ROI'].map(h => (
                       <th key={h} style={{ padding:'8px 10px', textAlign:'right', fontSize:'10px', color:T.muted, fontWeight:'700' }}>{h}</th>
                     ))}

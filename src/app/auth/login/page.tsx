@@ -103,8 +103,8 @@ export default function LoginPage() {
                     key={p.code}
                     onClick={() => { setPaisSel(p.code); setPaisPreseleccionado(false) }}
                     style={{
-                      background: paisSel===p.code ? `${T.accent}15` : '#0D1E35',
-                      border: `1.5px solid ${paisSel===p.code ? T.accent : '#1E3050'}`,
+                      background: paisSel===p.code ? `${T.accent}15` : T.card2,
+                      border: `1.5px solid ${paisSel===p.code ? T.accent : T.border}`,
                       borderRadius:'8px', padding:'7px 5px', cursor:'pointer',
                       display:'flex', alignItems:'center', gap:'5px'
                     }}
@@ -161,7 +161,7 @@ export default function LoginPage() {
 
               {/* reCAPTCHA placeholder */}
               <div style={{
-                display:'flex', alignItems:'center', gap:'8px', background:'#0D1E35',
+                display:'flex', alignItems:'center', gap:'8px', background:T.card2,
                 border:`1.5px solid ${T.border}`, borderRadius:'7px', padding:'8px 10px', marginBottom:'14px'
               }}>
                 <div style={{

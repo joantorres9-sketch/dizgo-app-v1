@@ -6,6 +6,7 @@ import { GuiaBienvenida } from '@/components/GuiaBienvenida'
 import { GuiaCosteo } from '@/components/GuiaCosteo'
 import { paisPorCodigo } from '@/lib/paises'
 import { useTema } from '@/lib/tema'
+import { usePermisos } from '@/lib/permisos'
 
 // ── TIPOS ────────────────────────────────────────────────────
 type MesData = {
@@ -34,6 +35,7 @@ const PERIODOS = [
 export default function DashboardPage() {
   const supabase = createClient()
   const { T, modo } = useTema()
+  const { perfil, cargando: cargandoPermisos } = usePermisos()
   // Adaptador -- esta página ya usaba nombres en español (fondo/borde/texto/sub) en vez de la
   // convención bg/border/text/muted del resto del app; se mantiene igual para no reescribir los
   // ~475 usos de C.xxx en este archivo, pero la fuente de verdad ya es la paleta compartida.
@@ -78,13 +80,8 @@ export default function DashboardPage() {
     return 1
   }, [periodo, fechaIni, fechaFin])
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
     const { data: tenant } = await supabase.from('tenants').select('nombre, plan, licencia, licencia_vence, pais').eq('id', tid).single()
     if (tenant?.nombre) setNombreTienda(tenant.nombre)
@@ -154,7 +151,11 @@ export default function DashboardPage() {
     setLoading(false)
   }, [supabase, getMesesRango])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   async function ejecutarSuperAgente() {
     if (!mesActual) return
@@ -301,7 +302,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
                 style={{ background:C.fondo, border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme: modo === 'oscuro' ? 'dark' : 'light' }} />
               <input type="date" value={fechaFin} onChange={e=>setFechaFin(e.target.value)}
                 style={{ background:C.fondo, border:`1px solid ${C.borde}`, borderRadius:'8px', color:C.texto, padding:'6px 10px', fontSize:'12px', colorScheme: modo === 'oscuro' ? 'dark' : 'light' }} />
-              <button onClick={loadData} style={{ padding:'7px 12px', background:C.azul, border:'none', borderRadius:'8px', color:'#fff', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Aplicar</button>
+              <button onClick={()=>loadData(tenantId)} style={{ padding:'7px 12px', background:C.azul, border:'none', borderRadius:'8px', color:'#fff', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>Aplicar</button>
             </>
           )}
           <button onClick={ejecutarSuperAgente} disabled={analizando}

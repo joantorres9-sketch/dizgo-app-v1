@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
+import { useTema } from '@/lib/tema'
 
 type PQRSF = {
   id: string; numero_radicado: string; tipo: 'P'|'Q'|'R'|'S'|'F'
@@ -38,12 +39,12 @@ function fmtFecha(f: string | null): string {
   return new Date(f).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' })
 }
 
-const s = { background:'#111520', border:'1px solid rgba(255,255,255,0.07)', borderRadius:'12px' }
-const inp = { background:'#0A0D14', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'7px', color:'#E8EDF5', padding:'7px 10px', fontSize:'13px', outline:'none', width:'100%', boxSizing:'border-box' as const }
-
 export default function PQRSFPage() {
+  const { T } = useTema()
+  const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
+  const inp: React.CSSProperties = { background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'13px', outline:'none', width:'100%', boxSizing:'border-box' }
   const supabase = createClient()
-  const { puede, cargando: cargandoPermisos } = usePermisos()
+  const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [tenantSlug, setTenantSlug] = useState('')
   const [loading, setLoading] = useState(true)
@@ -60,13 +61,8 @@ export default function PQRSFPage() {
     orden_id:'', asunto:'', descripcion:''
   })
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (tid: string) => {
     setLoading(true)
-    const { data:{ user } } = await supabase.auth.getUser()
-    if (!user) { setLoading(false); return }
-    const { data: profile } = await supabase.from('profiles').select('tenant_id').eq('id', user.id).single()
-    if (!profile?.tenant_id) { setLoading(false); return }
-    const tid = profile.tenant_id
     setTenantId(tid)
 
     const [{ data: pqrsfData }, { data: tenantData }] = await Promise.all([
@@ -78,7 +74,11 @@ export default function PQRSFPage() {
     setLoading(false)
   }, [supabase])
 
-  useEffect(() => { loadData() }, [loadData])
+  useEffect(() => {
+    if (cargandoPermisos) return
+    if (!perfil?.tenantId) { setLoading(false); return }
+    loadData(perfil.tenantId)
+  }, [cargandoPermisos, perfil, loadData])
 
   const filtradas = pqrsf.filter(p => {
     if (filtroEstado !== 'TODOS' && p.estado !== filtroEstado) return false
@@ -191,32 +191,32 @@ export default function PQRSFPage() {
   }, [cargandoPermisos, tab, TABS_VISIBLES.map(t => t.key).join(',')])
 
   if (loading) return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:'#8B96A8', fontSize:'14px' }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'300px', color:T.muted, fontSize:'14px' }}>
       Cargando PQRSF...
     </div>
   )
 
   return (
     <RequierePermiso modulo="pqrsf">
-    <div style={{ color:'#E8EDF5', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ color:T.text, fontFamily:'system-ui,sans-serif' }}>
 
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'20px', flexWrap:'wrap', gap:'10px' }}>
         <div>
           <h1 style={{ fontSize:'22px', fontWeight:'700', marginBottom:'4px' }}>📬 PQRSF</h1>
-          <p style={{ fontSize:'13px', color:'#8B96A8' }}>
+          <p style={{ fontSize:'13px', color:T.muted }}>
             Peticiones · Quejas · Reclamos · Sugerencias · Felicitaciones · HACER
           </p>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
           {linkPublico && (
             <button onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(()=>setCopiado(false),2000) }}
-              style={{ padding:'9px 16px', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'10px', color:'#8B96A8', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
+              style={{ padding:'9px 16px', background:'rgba(255,255,255,0.05)', border:`1px solid ${T.border}`, borderRadius:'10px', color:T.muted, fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
               {copiado ? '✅ Copiado' : '🔗 Copiar link público'}
             </button>
           )}
           {puede(clavePermiso('pqrsf','nueva'),'agregar') && (
             <button onClick={() => setTab('nueva')}
-              style={{ padding:'9px 18px', background:'#F5A623', color:'#0A0D14', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
+              style={{ padding:'9px 18px', background:T.yellow, color:T.card, border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'13px', cursor:'pointer' }}>
               + Nueva PQRSF
             </button>
           )}
@@ -225,16 +225,16 @@ export default function PQRSFPage() {
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {[
-          { label:'Total', value:stats.total, color:'#E8EDF5', icon:'📬' },
-          { label:'Recibidas', value:stats.recibidas, color:'#3D8EF0', icon:'📥' },
-          { label:'En gestión', value:stats.en_gestion, color:'#F5A623', icon:'⏳' },
-          { label:'Respondidas', value:stats.respondidas, color:'#9B6BFF', icon:'✉️' },
-          { label:'Cerradas', value:stats.cerradas, color:'#2DD4A0', icon:'✅' },
-          { label:'Vencidas', value:stats.vencidas, color: stats.vencidas > 0 ? '#F05C5C' : '#2DD4A0', icon:'🚨' },
+          { label:'Total', value:stats.total, color:T.text, icon:'📬' },
+          { label:'Recibidas', value:stats.recibidas, color:T.blue, icon:'📥' },
+          { label:'En gestión', value:stats.en_gestion, color:T.yellow, icon:'⏳' },
+          { label:'Respondidas', value:stats.respondidas, color:T.purple, icon:'✉️' },
+          { label:'Cerradas', value:stats.cerradas, color:T.green, icon:'✅' },
+          { label:'Vencidas', value:stats.vencidas, color: stats.vencidas > 0 ? T.red : T.green, icon:'🚨' },
         ].map((k,i) => (
           <div key={i} style={{ ...s, padding:'12px', borderTop:`2px solid ${k.color}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
-              <span style={{ fontSize:'10px', color:'#8B96A8' }}>{k.label}</span><span>{k.icon}</span>
+              <span style={{ fontSize:'10px', color:T.muted }}>{k.label}</span><span>{k.icon}</span>
             </div>
             <div style={{ fontSize:'22px', fontWeight:'800', color:k.color }}>{k.value}</div>
           </div>
@@ -245,7 +245,7 @@ export default function PQRSFPage() {
         {TABS_VISIBLES.map(t => (
           <button key={t.key} onClick={() => setTab(t.key as typeof tab)}
             style={{ padding:'8px 16px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'600',
-              background: tab === t.key ? '#F5A623' : 'rgba(255,255,255,0.05)', color: tab === t.key ? '#0A0D14' : '#8B96A8' }}>
+              background: tab === t.key ? T.yellow : 'rgba(255,255,255,0.05)', color: tab === t.key ? T.card : T.muted }}>
             {t.label}
           </button>
         ))}
@@ -258,16 +258,16 @@ export default function PQRSFPage() {
               {['TODOS','RECIBIDO','EN_GESTION','RESPONDIDO','CERRADO'].map(f => (
                 <button key={f} onClick={() => setFiltroEstado(f)}
                   style={{ padding:'5px 12px', borderRadius:'7px', border:'none', cursor:'pointer', fontSize:'11px', fontWeight:'600',
-                    background: filtroEstado === f ? '#F5A623' : 'rgba(255,255,255,0.05)', color: filtroEstado === f ? '#0A0D14' : '#8B96A8' }}>
+                    background: filtroEstado === f ? T.yellow : 'rgba(255,255,255,0.05)', color: filtroEstado === f ? T.card : T.muted }}>
                   {f.replace('_',' ')}
                 </button>
               ))}
-              <div style={{ width:'1px', background:'rgba(255,255,255,0.08)', margin:'0 4px' }} />
+              <div style={{ width:'1px', background:T.border, margin:'0 4px' }} />
               {['TODOS','P','Q','R','S','F'].map(t => (
                 <button key={t} onClick={() => setFiltroTipo(t)}
                   style={{ padding:'5px 10px', borderRadius:'7px', cursor:'pointer', fontSize:'11px', fontWeight:'600',
-                    background: filtroTipo === t ? (t === 'TODOS' ? '#F5A623' : `${TIPO_INFO[t]?.color || '#F5A623'}22`) : 'rgba(255,255,255,0.05)',
-                    color: filtroTipo === t ? (t === 'TODOS' ? '#0A0D14' : TIPO_INFO[t]?.color || '#F5A623') : '#8B96A8',
+                    background: filtroTipo === t ? (t === 'TODOS' ? T.yellow : `${TIPO_INFO[t]?.color || T.yellow}22`) : 'rgba(255,255,255,0.05)',
+                    color: filtroTipo === t ? (t === 'TODOS' ? T.card : TIPO_INFO[t]?.color || T.yellow) : T.muted,
                     border: filtroTipo === t && t !== 'TODOS' ? `1px solid ${TIPO_INFO[t]?.color}44` : '1px solid transparent' }}>
                   {t === 'TODOS' ? 'Todos' : `${TIPO_INFO[t]?.emoji} ${t}`}
                 </button>
@@ -276,15 +276,15 @@ export default function PQRSFPage() {
 
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {filtradas.map(p => {
-                const tipo = TIPO_INFO[p.tipo] || { label:p.tipo, color:'#8B96A8', emoji:'❓', dias:15 }
-                const estado = ESTADO_INFO[p.estado] || { color:'#8B96A8', bg:'rgba(139,150,168,0.1)' }
+                const tipo = TIPO_INFO[p.tipo] || { label:p.tipo, color:T.muted, emoji:'❓', dias:15 }
+                const estado = ESTADO_INFO[p.estado] || { color:T.muted, bg:'rgba(139,150,168,0.1)' }
                 const dias = diasRestantes(p.fecha_limite)
                 const activa = seleccionada?.id === p.id
                 return (
                   <div key={p.id} onClick={() => setSeleccionada(activa ? null : p)}
                     style={{ ...s, padding:'14px 16px', cursor:'pointer', transition:'all .12s',
-                      border:`1px solid ${activa ? tipo.color + '44' : 'rgba(255,255,255,0.07)'}`,
-                      background: activa ? tipo.color + '06' : '#111520' }}>
+                      border:`1px solid ${activa ? tipo.color + '44' : T.border}`,
+                      background: activa ? tipo.color + '06' : T.card }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                       <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:`${tipo.color}15`,
                         display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>
@@ -296,26 +296,26 @@ export default function PQRSFPage() {
                           <span style={{ fontSize:'10px', padding:'1px 7px', borderRadius:'5px', fontWeight:'700', background:`${tipo.color}15`, color:tipo.color }}>{tipo.label}</span>
                           <span style={{ fontSize:'10px', padding:'1px 7px', borderRadius:'5px', fontWeight:'700', background:estado.bg, color:estado.color }}>{p.estado.replace('_',' ')}</span>
                           {['R','Q'].includes(p.tipo) && (
-                            <span style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'4px', background:'rgba(240,92,92,0.12)', color:'#F05C5C', fontWeight:'700' }}>ALTA PRIORIDAD</span>
+                            <span style={{ fontSize:'9px', padding:'1px 6px', borderRadius:'4px', background:'rgba(240,92,92,0.12)', color:T.red, fontWeight:'700' }}>ALTA PRIORIDAD</span>
                           )}
                         </div>
-                        <div style={{ fontSize:'12px', color:'#E8EDF5', marginBottom:'2px' }}>{p.asunto}</div>
-                        <div style={{ fontSize:'11px', color:'#5A6478' }}>
+                        <div style={{ fontSize:'12px', color:T.text, marginBottom:'2px' }}>{p.asunto}</div>
+                        <div style={{ fontSize:'11px', color:T.muted }}>
                           {p.numero_radicado} · {fmtFecha(p.created_at)}{p.orden_id && ` · Orden #${p.orden_id}`}
                         </div>
                       </div>
                       <div style={{ textAlign:'right', flexShrink:0 }}>
-                        <div style={{ fontSize:'11px', fontWeight:'700', color: dias < 0 ? '#F05C5C' : dias <= 3 ? '#F5A623' : '#5A6478' }}>
+                        <div style={{ fontSize:'11px', fontWeight:'700', color: dias < 0 ? T.red : dias <= 3 ? T.yellow : T.muted }}>
                           {dias < 0 ? `Vencida (${Math.abs(dias)}d)` : dias === 0 ? '¡Vence hoy!' : `${dias}d restantes`}
                         </div>
-                        <div style={{ fontSize:'10px', color:'#5A6478', marginTop:'2px' }}>Límite: {fmtFecha(p.fecha_limite)}</div>
+                        <div style={{ fontSize:'10px', color:T.muted, marginTop:'2px' }}>Límite: {fmtFecha(p.fecha_limite)}</div>
                       </div>
                     </div>
                   </div>
                 )
               })}
               {filtradas.length === 0 && (
-                <div style={{ ...s, padding:'32px', textAlign:'center', color:'#5A6478', fontSize:'13px' }}>Sin PQRSF con los filtros seleccionados</div>
+                <div style={{ ...s, padding:'32px', textAlign:'center', color:T.muted, fontSize:'13px' }}>Sin PQRSF con los filtros seleccionados</div>
               )}
             </div>
           </div>
@@ -324,16 +324,16 @@ export default function PQRSFPage() {
             <div style={{ ...s, padding:'20px', position:'sticky', top:'20px', maxHeight:'80vh', overflowY:'auto' }}>
               <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
                 <div>
-                  <div style={{ fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>RADICADO</div>
-                  <div style={{ fontSize:'14px', fontWeight:'800', color: TIPO_INFO[seleccionada.tipo]?.color || '#8B96A8' }}>
+                  <div style={{ fontSize:'11px', color:T.muted, marginBottom:'4px' }}>RADICADO</div>
+                  <div style={{ fontSize:'14px', fontWeight:'800', color: TIPO_INFO[seleccionada.tipo]?.color || T.muted }}>
                     {TIPO_INFO[seleccionada.tipo]?.emoji || '❓'} {seleccionada.numero_radicado}
                   </div>
                 </div>
-                <button onClick={() => setSeleccionada(null)} style={{ background:'none', border:'none', color:'#8B96A8', cursor:'pointer', fontSize:'20px' }}>×</button>
+                <button onClick={() => setSeleccionada(null)} style={{ background:'none', border:'none', color:T.muted, cursor:'pointer', fontSize:'20px' }}>×</button>
               </div>
 
               <div style={{ background:'rgba(255,255,255,0.02)', borderRadius:'10px', padding:'12px 14px', marginBottom:'12px' }}>
-                <div style={{ fontSize:'11px', color:'#5A6478', fontWeight:'700', marginBottom:'8px' }}>CLIENTE</div>
+                <div style={{ fontSize:'11px', color:T.muted, fontWeight:'700', marginBottom:'8px' }}>CLIENTE</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'8px', fontSize:'12px' }}>
                   {[
                     { l:'Nombre', v:seleccionada.nombre_cliente },
@@ -342,8 +342,8 @@ export default function PQRSFPage() {
                     { l:'Orden', v:seleccionada.orden_id || 'N/A' },
                   ].map((f,i) => (
                     <div key={i}>
-                      <div style={{ color:'#5A6478', fontSize:'10px' }}>{f.l}</div>
-                      <div style={{ color:'#E8EDF5', fontWeight:'600' }}>{f.v}</div>
+                      <div style={{ color:T.muted, fontSize:'10px' }}>{f.l}</div>
+                      <div style={{ color:T.text, fontWeight:'600' }}>{f.v}</div>
                     </div>
                   ))}
                 </div>
@@ -351,19 +351,19 @@ export default function PQRSFPage() {
 
               <div style={{ marginBottom:'12px' }}>
                 <div style={{ fontSize:'13px', fontWeight:'700', marginBottom:'6px' }}>{seleccionada.asunto}</div>
-                <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.6', background:'rgba(255,255,255,0.02)', padding:'10px 12px', borderRadius:'8px' }}>{seleccionada.descripcion}</div>
+                <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.6', background:'rgba(255,255,255,0.02)', padding:'10px 12px', borderRadius:'8px' }}>{seleccionada.descripcion}</div>
               </div>
 
               {seleccionada.respuesta && (
                 <div style={{ marginBottom:'12px', padding:'12px', background:'rgba(45,212,160,0.06)', borderRadius:'10px', border:'1px solid rgba(45,212,160,0.15)' }}>
-                  <div style={{ fontSize:'11px', color:'#2DD4A0', fontWeight:'700', marginBottom:'6px' }}>✅ RESPUESTA ENVIADA — {fmtFecha(seleccionada.fecha_respuesta)}</div>
-                  <div style={{ fontSize:'12px', color:'#8B96A8', lineHeight:'1.6' }}>{seleccionada.respuesta}</div>
+                  <div style={{ fontSize:'11px', color:T.green, fontWeight:'700', marginBottom:'6px' }}>✅ RESPUESTA ENVIADA — {fmtFecha(seleccionada.fecha_respuesta)}</div>
+                  <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.6' }}>{seleccionada.respuesta}</div>
                 </div>
               )}
 
               {seleccionada.estado !== 'CERRADO' && (
                 <div>
-                  <div style={{ fontSize:'11px', color:'#5A6478', fontWeight:'700', marginBottom:'6px' }}>
+                  <div style={{ fontSize:'11px', color:T.muted, fontWeight:'700', marginBottom:'6px' }}>
                     {seleccionada.respuesta ? 'ACTUALIZAR RESPUESTA' : 'RESPONDER'}
                   </div>
                   <textarea value={respuesta} onChange={e => setRespuesta(e.target.value)}
@@ -372,15 +372,15 @@ export default function PQRSFPage() {
                   <div style={{ display:'flex', gap:'8px' }}>
                     {puede(clavePermiso('pqrsf','lista'),'modificar') && (
                       <button onClick={responder} disabled={!respuesta || guardando}
-                        style={{ flex:1, padding:'9px', background: respuesta ? '#F5A623' : 'rgba(255,255,255,0.05)',
-                          border:'none', borderRadius:'8px', color: respuesta ? '#0A0D14' : '#5A6478',
+                        style={{ flex:1, padding:'9px', background: respuesta ? T.yellow : 'rgba(255,255,255,0.05)',
+                          border:'none', borderRadius:'8px', color: respuesta ? T.card : T.muted,
                           cursor: respuesta ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'700' }}>
                         {guardando ? 'Enviando...' : '✉️ Enviar respuesta'}
                       </button>
                     )}
                     {seleccionada.estado === 'RESPONDIDO' && puede(clavePermiso('pqrsf','lista'),'modificar') && (
                       <button onClick={() => cerrar(seleccionada.id)}
-                        style={{ padding:'9px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:'#2DD4A0', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+                        style={{ padding:'9px 14px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'8px', color:T.green, cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
                         ✅ Cerrar
                       </button>
                     )}
@@ -390,14 +390,14 @@ export default function PQRSFPage() {
 
               <div style={{ marginTop:'12px', padding:'10px 12px', borderRadius:'8px', display:'flex', justifyContent:'space-between',
                 background: diasRestantes(seleccionada.fecha_limite) < 0 ? 'rgba(240,92,92,0.06)' : diasRestantes(seleccionada.fecha_limite) <= 3 ? 'rgba(245,166,35,0.06)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${diasRestantes(seleccionada.fecha_limite) < 0 ? 'rgba(240,92,92,0.2)' : 'rgba(255,255,255,0.06)'}` }}>
-                <span style={{ fontSize:'11px', color:'#5A6478' }}>Fecha límite respuesta</span>
-                <span style={{ fontSize:'12px', fontWeight:'700', color: diasRestantes(seleccionada.fecha_limite) < 0 ? '#F05C5C' : diasRestantes(seleccionada.fecha_limite) <= 3 ? '#F5A623' : '#2DD4A0' }}>
+                border: `1px solid ${diasRestantes(seleccionada.fecha_limite) < 0 ? 'rgba(240,92,92,0.2)' : T.border}` }}>
+                <span style={{ fontSize:'11px', color:T.muted }}>Fecha límite respuesta</span>
+                <span style={{ fontSize:'12px', fontWeight:'700', color: diasRestantes(seleccionada.fecha_limite) < 0 ? T.red : diasRestantes(seleccionada.fecha_limite) <= 3 ? T.yellow : T.green }}>
                   {fmtFecha(seleccionada.fecha_limite)} ({diasRestantes(seleccionada.fecha_limite)}d)
                 </span>
               </div>
 
-              <div style={{ marginTop:'10px', padding:'10px 12px', borderRadius:'8px', background:'rgba(61,142,240,0.05)', border:'1px solid rgba(61,142,240,0.15)', fontSize:'11px', color:'#5A6478', lineHeight:'1.5' }}>
+              <div style={{ marginTop:'10px', padding:'10px 12px', borderRadius:'8px', background:'rgba(61,142,240,0.05)', border:'1px solid rgba(61,142,240,0.15)', fontSize:'11px', color:T.muted, lineHeight:'1.5' }}>
                 ⚖️ Según Ley 1480 (Estatuto del Consumidor), tienes hasta {TIPO_INFO[seleccionada.tipo]?.dias} días hábiles para responder esta {TIPO_INFO[seleccionada.tipo]?.label.toLowerCase()}.
               </div>
             </div>
@@ -408,15 +408,15 @@ export default function PQRSFPage() {
       {tab === 'nueva' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'16px' }}>✏️ REGISTRAR NUEVA PQRSF</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'16px' }}>✏️ REGISTRAR NUEVA PQRSF</div>
             <div style={{ marginBottom:'14px' }}>
-              <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'8px' }}>Tipo de solicitud</label>
+              <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'8px' }}>Tipo de solicitud</label>
               <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
                 {Object.entries(TIPO_INFO).map(([key, info]) => (
                   <button key={key} onClick={() => setNuevaPQRSF(p => ({...p, tipo:key}))}
-                    style={{ padding:'7px 14px', borderRadius:'8px', border:`1px solid ${nuevaPQRSF.tipo === key ? info.color : 'rgba(255,255,255,0.08)'}`,
+                    style={{ padding:'7px 14px', borderRadius:'8px', border:`1px solid ${nuevaPQRSF.tipo === key ? info.color : T.border}`,
                       background: nuevaPQRSF.tipo === key ? `${info.color}15` : 'transparent',
-                      color: nuevaPQRSF.tipo === key ? info.color : '#8B96A8', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                      color: nuevaPQRSF.tipo === key ? info.color : T.muted, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                     {info.emoji} {info.label}
                   </button>
                 ))}
@@ -425,42 +425,42 @@ export default function PQRSFPage() {
 
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'10px', marginBottom:'10px' }}>
               <div style={{ gridColumn:'1/-1' }}>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Nombre del cliente</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Nombre del cliente</label>
                 <input value={nuevaPQRSF.nombre_cliente} placeholder="Ej: María García"
                   onChange={e => setNuevaPQRSF(p => ({...p, nombre_cliente:e.target.value}))} style={inp} />
               </div>
               <div>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Email</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Email</label>
                 <input value={nuevaPQRSF.email_cliente} placeholder="cliente@email.com"
                   onChange={e => setNuevaPQRSF(p => ({...p, email_cliente:e.target.value}))} style={inp} />
               </div>
               <div>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Teléfono</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Teléfono</label>
                 <input value={nuevaPQRSF.telefono} placeholder="3001234567"
                   onChange={e => setNuevaPQRSF(p => ({...p, telefono:e.target.value}))} style={inp} />
               </div>
               <div>
-                <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Número de orden (opcional)</label>
+                <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Número de orden (opcional)</label>
                 <input value={nuevaPQRSF.orden_id} placeholder="9012345"
                   onChange={e => setNuevaPQRSF(p => ({...p, orden_id:e.target.value}))} style={inp} />
               </div>
             </div>
 
             <div style={{ marginBottom:'10px' }}>
-              <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Asunto</label>
+              <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Asunto</label>
               <input value={nuevaPQRSF.asunto} placeholder="Resumen breve de la solicitud"
                 onChange={e => setNuevaPQRSF(p => ({...p, asunto:e.target.value}))} style={inp} />
             </div>
 
             <div style={{ marginBottom:'14px' }}>
-              <label style={{ display:'block', fontSize:'11px', color:'#5A6478', marginBottom:'4px' }}>Descripción detallada</label>
+              <label style={{ display:'block', fontSize:'11px', color:T.muted, marginBottom:'4px' }}>Descripción detallada</label>
               <textarea value={nuevaPQRSF.descripcion} placeholder="Describe en detalle la solicitud del cliente..."
                 rows={4} onChange={e => setNuevaPQRSF(p => ({...p, descripcion:e.target.value}))} style={{ ...inp, resize:'vertical' }} />
             </div>
 
             <button onClick={crearNueva} disabled={!nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !nuevaPQRSF.descripcion || guardando || !puede(clavePermiso('pqrsf','nueva'),'agregar')}
-              style={{ width:'100%', padding:'11px', background:'#F5A623', border:'none', borderRadius:'10px',
-                color:'#0A0D14', cursor:'pointer', fontWeight:'700', fontSize:'13px',
+              style={{ width:'100%', padding:'11px', background:T.yellow, border:'none', borderRadius:'10px',
+                color:T.card, cursor:'pointer', fontWeight:'700', fontSize:'13px',
                 opacity: !nuevaPQRSF.nombre_cliente || !nuevaPQRSF.asunto || !puede(clavePermiso('pqrsf','nueva'),'agregar') ? 0.5 : 1 }}>
               {guardando ? 'Radicando...' : '📬 Radicar PQRSF'}
             </button>
@@ -468,33 +468,33 @@ export default function PQRSFPage() {
 
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'12px' }}>⚖️ TIEMPOS LEGALES — LEY 1480</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>⚖️ TIEMPOS LEGALES — LEY 1480</div>
               {Object.entries(TIPO_INFO).map(([key, info]) => (
                 <div key={key} style={{ display:'flex', justifyContent:'space-between', padding:'8px 10px', borderRadius:'8px', marginBottom:'5px', background:`${info.color}06` }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                    <span style={{ fontSize:'16px' }}>{info.emoji}</span><span style={{ fontSize:'12px', color:'#8B96A8' }}>{info.label}</span>
+                    <span style={{ fontSize:'16px' }}>{info.emoji}</span><span style={{ fontSize:'12px', color:T.muted }}>{info.label}</span>
                   </div>
                   <span style={{ fontSize:'12px', fontWeight:'700', color:info.color }}>{info.dias} días hábiles</span>
                 </div>
               ))}
-              <div style={{ marginTop:'10px', padding:'10px 12px', background:'rgba(61,142,240,0.05)', borderRadius:'8px', fontSize:'11px', color:'#8B96A8', lineHeight:'1.6' }}>
+              <div style={{ marginTop:'10px', padding:'10px 12px', background:'rgba(61,142,240,0.05)', borderRadius:'8px', fontSize:'11px', color:T.muted, lineHeight:'1.6' }}>
                 El incumplimiento de estos plazos puede generar sanciones ante la Superintendencia de Industria y Comercio (SIC).
               </div>
             </div>
 
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#2DD4A0', marginBottom:'12px' }}>🔗 FORMULARIO PÚBLICO DE TU TIENDA</div>
-              <div style={{ fontSize:'12px', color:'#8B96A8', marginBottom:'12px', lineHeight:'1.6' }}>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.green, marginBottom:'12px' }}>🔗 FORMULARIO PÚBLICO DE TU TIENDA</div>
+              <div style={{ fontSize:'12px', color:T.muted, marginBottom:'12px', lineHeight:'1.6' }}>
                 Comparte este link con tus clientes para que radiquen sus solicitudes directamente sin revelar la identidad de tu tienda.
               </div>
               {linkPublico ? (
                 <>
-                  <div style={{ padding:'10px 12px', background:'rgba(255,255,255,0.03)', borderRadius:'8px', fontFamily:'monospace', fontSize:'12px', color:'#2DD4A0', marginBottom:'10px', wordBreak:'break-all' }}>
+                  <div style={{ padding:'10px 12px', background:'rgba(255,255,255,0.03)', borderRadius:'8px', fontFamily:'monospace', fontSize:'12px', color:T.green, marginBottom:'10px', wordBreak:'break-all' }}>
                     {linkPublico}
                   </div>
                   <div style={{ display:'flex', gap:'8px' }}>
                     <button onClick={() => { navigator.clipboard?.writeText(linkPublico); setCopiado(true); setTimeout(()=>setCopiado(false),2000) }}
-                      style={{ flex:1, padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'7px', color:'#2DD4A0', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                      style={{ flex:1, padding:'8px', background:'rgba(45,212,160,0.1)', border:'none', borderRadius:'7px', color:T.green, cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
                       {copiado ? '✅ Copiado' : '📋 Copiar link'}
                     </button>
                     <button onClick={() => {
@@ -507,7 +507,7 @@ export default function PQRSFPage() {
                   </div>
                 </>
               ) : (
-                <div style={{ fontSize:'12px', color:'#5A6478', textAlign:'center', padding:'10px' }}>Configura el slug de tu tienda para generar el link público</div>
+                <div style={{ fontSize:'12px', color:T.muted, textAlign:'center', padding:'10px' }}>Configura el slug de tu tienda para generar el link público</div>
               )}
             </div>
           </div>
@@ -517,14 +517,14 @@ export default function PQRSFPage() {
       {tab === 'stats' && (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#F5A623', marginBottom:'14px' }}>📊 POR TIPO DE SOLICITUD</div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'14px' }}>📊 POR TIPO DE SOLICITUD</div>
             {Object.entries(TIPO_INFO).map(([key, info]) => {
               const count = pqrsf.filter(p => p.tipo === key).length
               const pct = pqrsf.length > 0 ? Math.round(count/pqrsf.length*100) : 0
               return (
                 <div key={key} style={{ marginBottom:'12px' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                    <span style={{ fontSize:'12px', color:'#8B96A8' }}>{info.emoji} {info.label}</span>
+                    <span style={{ fontSize:'12px', color:T.muted }}>{info.emoji} {info.label}</span>
                     <span style={{ fontSize:'13px', fontWeight:'700', color:info.color }}>{count} ({pct}%)</span>
                   </div>
                   <div style={{ height:'8px', background:'rgba(255,255,255,0.05)', borderRadius:'4px' }}>
@@ -537,29 +537,29 @@ export default function PQRSFPage() {
 
           <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#3D8EF0', marginBottom:'12px' }}>⏱️ TIEMPOS DE RESPUESTA</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'12px' }}>⏱️ TIEMPOS DE RESPUESTA</div>
               {[
-                { label:'Respondidas a tiempo', value:pqrsf.filter(p=>p.estado==='RESPONDIDO'||p.estado==='CERRADO').length, color:'#2DD4A0', icon:'✅' },
-                { label:'En gestión (a tiempo)', value:pqrsf.filter(p=>p.estado==='EN_GESTION' && diasRestantes(p.fecha_limite)>=0).length, color:'#F5A623', icon:'⏳' },
-                { label:'Vencidas sin responder', value:pqrsf.filter(p=>p.estado!=='CERRADO'&&diasRestantes(p.fecha_limite)<0).length, color:'#F05C5C', icon:'🚨' },
+                { label:'Respondidas a tiempo', value:pqrsf.filter(p=>p.estado==='RESPONDIDO'||p.estado==='CERRADO').length, color:T.green, icon:'✅' },
+                { label:'En gestión (a tiempo)', value:pqrsf.filter(p=>p.estado==='EN_GESTION' && diasRestantes(p.fecha_limite)>=0).length, color:T.yellow, icon:'⏳' },
+                { label:'Vencidas sin responder', value:pqrsf.filter(p=>p.estado!=='CERRADO'&&diasRestantes(p.fecha_limite)<0).length, color:T.red, icon:'🚨' },
               ].map((k, i) => (
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 12px', borderRadius:'8px', marginBottom:'6px', background:`${k.color}08` }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8', display:'flex', gap:'6px', alignItems:'center' }}><span>{k.icon}</span>{k.label}</span>
+                  <span style={{ fontSize:'12px', color:T.muted, display:'flex', gap:'6px', alignItems:'center' }}><span>{k.icon}</span>{k.label}</span>
                   <span style={{ fontSize:'16px', fontWeight:'800', color:k.color }}>{k.value}</span>
                 </div>
               ))}
             </div>
 
             <div style={{ ...s, padding:'18px' }}>
-              <div style={{ fontSize:'12px', fontWeight:'700', color:'#9B6BFF', marginBottom:'12px' }}>💡 RECOMENDACIONES</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:T.purple, marginBottom:'12px' }}>💡 RECOMENDACIONES</div>
               {[
-                stats.en_gestion > 0 && { color:'#F5A623', texto:`${stats.en_gestion} solicitudes en gestión — responder antes del vencimiento` },
-                stats.vencidas > 0 && { color:'#F05C5C', texto:`${stats.vencidas} solicitudes vencidas — riesgo legal ante la SIC (ya se generó alerta)` },
-                { color:'#3D8EF0', texto:'Comparte el link público con cada cliente en el mensaje de confirmación' },
-                { color:'#2DD4A0', texto:'Responder en menos de 24h genera mayor confianza y reduce reclamos formales' },
+                stats.en_gestion > 0 && { color:T.yellow, texto:`${stats.en_gestion} solicitudes en gestión — responder antes del vencimiento` },
+                stats.vencidas > 0 && { color:T.red, texto:`${stats.vencidas} solicitudes vencidas — riesgo legal ante la SIC (ya se generó alerta)` },
+                { color:T.blue, texto:'Comparte el link público con cada cliente en el mensaje de confirmación' },
+                { color:T.green, texto:'Responder en menos de 24h genera mayor confianza y reduce reclamos formales' },
               ].filter(Boolean).map((a, i) => a && (
                 <div key={i} style={{ display:'flex', gap:'8px', padding:'8px 10px', borderRadius:'7px', marginBottom:'5px', background:`${a.color}08`, borderLeft:`3px solid ${a.color}` }}>
-                  <span style={{ fontSize:'12px', color:'#8B96A8' }}>{a.texto}</span>
+                  <span style={{ fontSize:'12px', color:T.muted }}>{a.texto}</span>
                 </div>
               ))}
             </div>
