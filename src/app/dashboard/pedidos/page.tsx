@@ -114,6 +114,7 @@ type Pedido = {
   upsell_valor: number; descuento_pct: number; descuento_aprobado: boolean
   novedad_tipo: string; fecha_pedido: string; created_at: string
   agente_nombre?: string
+  ganancia?: number; costo_flete?: number; costo_producto?: number
   // ── Campos completos del export de Dropi (opcionales -- solo vienen en pedidos cargados
   // por carga masiva Dropi, no en los creados manualmente) ──────────────────────────────
   cliente_email?: string; cliente_tipo_doc?: string; cliente_num_doc?: string
@@ -583,7 +584,7 @@ function PanelPedido({pedido,onClose,onUpdate}:{pedido:Pedido;onClose:()=>void;o
               style={{padding:'6px 12px',background:`${T.blue}15`,border:`1px solid ${T.blue}30`,borderRadius:'6px',color:T.blue,fontSize:'11px',fontWeight:'600',textDecoration:'none'}}>
               📞 Llamar
             </a>
-            <Link href="/dashboard/pqrsf"
+            <Link href={`/dashboard/pqrsf?pedido_id=${pedido.id}&tab=nueva`}
               style={{padding:'6px 12px',background:`${T.purple}15`,border:`1px solid ${T.purple}30`,borderRadius:'6px',color:T.purple,fontSize:'11px',fontWeight:'600',textDecoration:'none'}}>
               📬 PQRSF
             </Link>
@@ -992,6 +993,13 @@ export default function PedidosPage() {
   const tc = kpis.total>0?Math.round(kpis.confirmados/kpis.total*100):0
   const te = kpis.despachados>0?Math.round(kpis.entregados/kpis.despachados*100):0
 
+  // ── Valores económicos — para ver costos que hoy quedan ocultos detrás de los conteos.
+  // Vienen del export de Dropi (ganancia, costo_flete, costo_devolucion_flete) y ya se
+  // guardaban en la base de datos, pero nunca se mostraban en ningún lado de Pedidos.
+  const gananciaTotal = pedidos.filter(p=>p.estado==='entregado').reduce((a,p)=>a+Number(p.ganancia||0),0)
+  const fleteTotal = pedidos.reduce((a,p)=>a+Number(p.costo_flete||0),0)
+  const costoDevoluciones = pedidos.filter(p=>p.estado==='devolucion').reduce((a,p)=>a+Number(p.costo_devolucion_flete||p.costo_flete||0),0)
+
   const slaColor = (n:string) => n==='verde'?T.green:n==='amarillo'?T.yellow:T.red
   const estadoColor = (e:string) => ESTADOS.find(x=>x.v===e)?.c||T.muted
   const riesgoColor = (r:string) => RIESGOS.find(x=>x.v===r)?.c||T.muted
@@ -1103,6 +1111,19 @@ export default function PedidosPage() {
             <div style={{fontSize:'10px',color:T.muted}}>{k.sub}</div>
           </div>
         ))}
+        {[
+          {l:'Ganancia neta',v:gananciaTotal,c:T.green, icon:'💰', sub:'Pedidos entregados'},
+          {l:'Flete pagado',  v:fleteTotal,    c:T.blue,  icon:'🚚', sub:'Todos los pedidos'},
+          {l:'Costo devoluciones',v:costoDevoluciones,c:T.red,icon:'📉', sub:'Flete perdido en dev.'},
+        ].map(k=>(
+          <div key={k.l} title="Valores calculados con los datos financieros que trae el export de Dropi (ganancia, flete, flete de devolución) — solo se llenan en pedidos cargados por carga masiva."
+            style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'10px 12px',borderTop:`3px solid ${k.c}`,textAlign:'center'}}>
+            <div style={{fontSize:'18px',marginBottom:'2px'}}>{k.icon}</div>
+            <div style={{fontSize:'17px',fontWeight:'700',color:k.c}}>{fmt(k.v)}</div>
+            <div style={{fontSize:'11px',color:T.text,fontWeight:'600'}}>{k.l}</div>
+            <div style={{fontSize:'10px',color:T.muted}}>{k.sub}</div>
+          </div>
+        ))}
       </div>
 
       {/* Alertas rápidas */}
@@ -1143,21 +1164,24 @@ export default function PedidosPage() {
 
       {/* Tabla de pedidos */}
       <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'12px',overflow:'hidden'}}>
-        <div style={{overflowX:'auto'}}>
+        {/* maxHeight+overflowY:'auto' es lo que de verdad activa el sticky del encabezado --
+            sin una altura acotada este div nunca scrollea (scrollea la página completa) y el
+            thead con position:sticky no tiene contra qué "pegarse". */}
+        <div style={{overflowX:'auto',overflowY:'auto',maxHeight:'70vh'}}>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead>
               <tr style={{background:T.card2, position:'sticky', top:0, zIndex:5}}>
-                {['ID Dropi','Cliente','Ciudad','Producto','Valor','Estado','Origen','Riesgo','SLA','Modo','Acciones'].map(h=>(
+                {['ID Dropi','Cliente','Ciudad','Producto','Valor','Ganancia','Flete','Estado','Origen','Riesgo','SLA','Modo','Acciones'].map(h=>(
                   <th key={h} style={{padding:'10px 14px',textAlign:'left',fontSize:'11px',color:T.muted,fontWeight:'600',whiteSpace:'nowrap',borderBottom:`1px solid ${T.border}`}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading?(
-                <tr><td colSpan={11} style={{textAlign:'center',padding:'40px',color:T.muted,fontSize:'13px'}}>Cargando pedidos...</td></tr>
+                <tr><td colSpan={13} style={{textAlign:'center',padding:'40px',color:T.muted,fontSize:'13px'}}>Cargando pedidos...</td></tr>
               ):filtrados.length===0?(
                 <tr>
-                  <td colSpan={11} style={{textAlign:'center',padding:'48px'}}>
+                  <td colSpan={13} style={{textAlign:'center',padding:'48px'}}>
                     <div style={{fontSize:'36px',marginBottom:'12px'}}>📦</div>
                     <div style={{fontSize:'14px',fontWeight:'600',color:T.text,marginBottom:'6px'}}>No hay pedidos</div>
                     <div style={{fontSize:'12px',color:T.muted,marginBottom:'16px'}}>Crea un pedido manual o conecta Shopify/Dropi</div>
@@ -1180,6 +1204,8 @@ export default function PedidosPage() {
                     <div style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.producto_nombre}</div>
                   </td>
                   <td style={{padding:'10px 14px',fontSize:'12px',fontWeight:'600',color:T.green,whiteSpace:'nowrap'}}>{fmt(p.pvp||0)}</td>
+                  <td style={{padding:'10px 14px',fontSize:'12px',color:p.ganancia?T.green:T.muted,whiteSpace:'nowrap'}}>{p.ganancia?fmt(p.ganancia):'—'}</td>
+                  <td style={{padding:'10px 14px',fontSize:'12px',color:T.muted,whiteSpace:'nowrap'}}>{p.costo_flete?fmt(p.costo_flete):'—'}</td>
                   <td style={{padding:'10px 14px',whiteSpace:'nowrap'}}>
                     <span style={{fontSize:'10px',fontWeight:'600',padding:'2px 8px',borderRadius:'4px',background:`${estadoColor(p.estado)}20`,color:estadoColor(p.estado)}}>
                       {ESTADOS.find(e=>e.v===p.estado)?.icon} {ESTADOS.find(e=>e.v===p.estado)?.l||p.estado}

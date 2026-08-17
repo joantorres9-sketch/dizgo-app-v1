@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
@@ -39,11 +40,19 @@ function fmtFecha(f: string | null): string {
   return new Date(f).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' })
 }
 
-export default function PQRSFPage() {
+type TimelinePedido = { id:string; action_type:string; description:string; trigger_by:string; created_at:string }
+type ContextoPedido = {
+  id:string; identificador:string; producto_nombre:string; pvp:number; cliente_ciudad:string
+  estado:string; origen:string; novedad_tipo:string|null; novedad_solucionada:boolean|null
+  novedad_solucion:string|null; timeline:TimelinePedido[]
+}
+
+function PQRSFPageInner() {
   const { T } = useTema()
   const s: React.CSSProperties = { background:T.card, border:`1px solid ${T.border}`, borderRadius:'12px' }
   const inp: React.CSSProperties = { background:T.bg, border:`1px solid ${T.border}`, borderRadius:'7px', color:T.text, padding:'7px 10px', fontSize:'13px', outline:'none', width:'100%', boxSizing:'border-box' }
   const supabase = createClient()
+  const searchParams = useSearchParams()
   const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [tenantId, setTenantId] = useState('')
   const [tenantSlug, setTenantSlug] = useState('')
@@ -60,6 +69,7 @@ export default function PQRSFPage() {
     tipo:'R', nombre_cliente:'', email_cliente:'', telefono:'',
     orden_id:'', asunto:'', descripcion:''
   })
+  const [contextoPedido, setContextoPedido] = useState<ContextoPedido | null>(null)
 
   const loadData = useCallback(async (tid: string) => {
     setLoading(true)
@@ -79,6 +89,40 @@ export default function PQRSFPage() {
     if (!perfil?.tenantId) { setLoading(false); return }
     loadData(perfil.tenantId)
   }, [cargandoPermisos, perfil, loadData])
+
+  // Llegando desde el detalle de un pedido (botón "📬 PQRSF") con ?pedido_id=...&tab=nueva --
+  // trae al cliente, la novedad y el historial del pedido precargados en vez de obligar a
+  // buscarlo de nuevo. Pedido reportado: "debe llevar la información del cliente precargada,
+  // con el # de ID y demás detalles, novedades, historial".
+  useEffect(() => {
+    const pedidoId = searchParams.get('pedido_id')
+    if (!pedidoId || !tenantId) return
+    if (searchParams.get('tab') === 'nueva') setTab('nueva')
+    ;(async () => {
+      const [{ data: pedido }, { data: timeline }] = await Promise.all([
+        supabase.from('pedidos').select('*').eq('id', pedidoId).eq('tenant_id', tenantId).single(),
+        supabase.from('order_timeline_logs').select('*').eq('pedido_id', pedidoId).order('created_at', { ascending:false }),
+      ])
+      if (!pedido) return
+      setContextoPedido({
+        id: pedido.id,
+        identificador: pedido.dropi_orden_id ? `#${pedido.dropi_orden_id}` : (pedido.numero_pedido || pedido.id.slice(0,8)),
+        producto_nombre: pedido.producto_nombre, pvp: pedido.pvp, cliente_ciudad: pedido.cliente_ciudad,
+        estado: pedido.estado, origen: pedido.origen,
+        novedad_tipo: pedido.novedad_tipo || null, novedad_solucionada: pedido.novedad_solucionada ?? null,
+        novedad_solucion: pedido.novedad_solucion || null,
+        timeline: (timeline || []) as TimelinePedido[],
+      })
+      setNuevaPQRSF(p => ({
+        ...p,
+        nombre_cliente: pedido.cliente_nombre || p.nombre_cliente,
+        email_cliente: pedido.cliente_email || p.email_cliente,
+        telefono: pedido.cliente_telefono || p.telefono,
+        orden_id: pedido.dropi_orden_id ? String(pedido.dropi_orden_id) : (pedido.numero_pedido || p.orden_id),
+      }))
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId])
 
   const filtradas = pqrsf.filter(p => {
     if (filtroEstado !== 'TODOS' && p.estado !== filtroEstado) return false
@@ -406,6 +450,45 @@ export default function PQRSFPage() {
       )}
 
       {tab === 'nueva' && (
+        <>
+        {contextoPedido && (
+          <div style={{ ...s, padding:'16px 20px', marginBottom:'16px', borderLeft:`3px solid ${T.purple}` }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:T.purple, marginBottom:'10px' }}>📦 CONTEXTO DEL PEDIDO {contextoPedido.identificador}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:'8px', fontSize:'12px', marginBottom: contextoPedido.novedad_tipo || contextoPedido.timeline.length ? '12px' : 0 }}>
+              {[
+                ['Producto', contextoPedido.producto_nombre],
+                ['Valor', new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(contextoPedido.pvp||0)],
+                ['Ciudad', contextoPedido.cliente_ciudad || '—'],
+                ['Estado', contextoPedido.estado],
+                ['Origen', contextoPedido.origen || '—'],
+              ].map(([k,v]) => (
+                <div key={k}>
+                  <div style={{ fontSize:'10px', color:T.muted }}>{k}</div>
+                  <div style={{ color:T.text, fontWeight:'600' }}>{v}</div>
+                </div>
+              ))}
+            </div>
+            {contextoPedido.novedad_tipo && (
+              <div style={{ background:`${T.yellow}10`, border:`1px solid ${T.yellow}30`, borderRadius:'8px', padding:'8px 10px', marginBottom:'10px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:T.yellow, marginBottom:'2px' }}>⚠️ Novedad: {contextoPedido.novedad_tipo} {contextoPedido.novedad_solucionada ? '(solucionada)' : '(sin solucionar)'}</div>
+                {contextoPedido.novedad_solucion && <div style={{ fontSize:'11px', color:T.muted }}>{contextoPedido.novedad_solucion}</div>}
+              </div>
+            )}
+            {contextoPedido.timeline.length > 0 && (
+              <div>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:T.muted, marginBottom:'6px' }}>HISTORIAL</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'4px', maxHeight:'140px', overflowY:'auto' }}>
+                  {contextoPedido.timeline.map(t => (
+                    <div key={t.id} style={{ fontSize:'11px', color:T.muted, display:'flex', gap:'8px' }}>
+                      <span style={{ flexShrink:0, color:T.text, fontWeight:600 }}>{new Date(t.created_at).toLocaleString('es-CO',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>
+                      <span>{t.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'16px' }}>
           <div style={{ ...s, padding:'20px' }}>
             <div style={{ fontSize:'12px', fontWeight:'700', color:T.yellow, marginBottom:'16px' }}>✏️ REGISTRAR NUEVA PQRSF</div>
@@ -512,6 +595,7 @@ export default function PQRSFPage() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       {tab === 'stats' && (
@@ -568,5 +652,14 @@ export default function PQRSFPage() {
       )}
     </div>
     </RequierePermiso>
+  )
+}
+
+export default function PQRSFPage() {
+  const { T } = useTema()
+  return (
+    <Suspense fallback={<div style={{ minHeight:'60vh', background:T.bg }} />}>
+      <PQRSFPageInner />
+    </Suspense>
   )
 }
