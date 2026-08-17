@@ -8,6 +8,7 @@ import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos, logAccion } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
 import { useTema } from '@/lib/tema'
+import { parsearCSVMeta } from '@/lib/reconciliacion'
 
 type Registro = {
   id: string; fecha: string; plataforma: string; campana: string
@@ -18,45 +19,6 @@ type Producto = { id: string; nombre: string; cpa_maximo: number }
 
 function fmt(n: number) { return `$${Math.round(n).toLocaleString('es-CO')}` }
 const MESES_ES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-
-function parsearCSVMeta(texto: string): Partial<Registro>[] {
-  const lineas = texto.split('\n').filter(l => l.trim())
-  if (lineas.length < 2) return []
-  const headers = lineas[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g,''))
-
-  const idx = (...nombres: string[]) => {
-    for (const n of nombres) {
-      const i = headers.findIndex(h => h.includes(n))
-      if (i >= 0) return i
-    }
-    return -1
-  }
-  // Alias de Meta (español/inglés) y TikTok Ads Manager -- Meta/TikTok pueden renombrar
-  // columnas en sus exports, por eso cada campo prueba varios nombres posibles en vez de
-  // depender de una cabecera fija.
-  const iCampana = idx('nombre de la campaña','campaign name','campaña','campaign')
-  const iInversion = idx('importe gastado','amount spent','gasto','cost')
-  const iAlcance = idx('alcance','reach','impresiones','impressions')
-  const iClics = idx('clics en el enlace','link clicks','clics','clicks')
-  const iCtr = idx('ctr')
-  const iCpm = idx('cpm')
-  const iCpc = idx('cpc')
-  const iResultados = idx('resultados','results','conversions','conversiones')
-  const iCosteResultado = idx('costo por resultado','cost per result','cost per conversion','costo por conversión')
-  const iFecha = idx('día','day','fecha','date')
-
-  return lineas.slice(1).map(linea => {
-    const cols = linea.split(',').map(c => c.trim().replace(/"/g,''))
-    const num = (i: number) => i >= 0 ? parseFloat(cols[i]?.replace(/[^0-9.-]/g,'')) || 0 : 0
-    return {
-      campana: iCampana >= 0 ? cols[iCampana] : 'Sin nombre',
-      inversion: num(iInversion), impresiones: num(iAlcance), clics: num(iClics),
-      ctr: num(iCtr), cpm: num(iCpm), cpc: num(iCpc),
-      resultados: num(iResultados), cpa: iCosteResultado >= 0 ? num(iCosteResultado) : 0,
-      fecha: iFecha >= 0 && cols[iFecha] ? cols[iFecha] : new Date().toISOString().slice(0,10),
-    }
-  }).filter(r => r.campana && r.campana !== 'Sin nombre')
-}
 
 export default function PautaPage() {
   const { T } = useTema()

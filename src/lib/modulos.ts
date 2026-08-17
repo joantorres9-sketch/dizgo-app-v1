@@ -105,6 +105,7 @@ export const SUBTABS: Record<string, SubTab[]> = {
   embudo: [
     { key: 'embudo', label: '🔬 Embudo visual' },
     { key: 'diagnostico', label: '🚨 Diagnóstico' },
+    { key: 'reconciliacion', label: '🕵️ Reconciliación' },
     { key: 'simulador', label: '⚡ Simulador' },
     { key: 'mezcla', label: '🔀 Mezcla de productos' },
   ],

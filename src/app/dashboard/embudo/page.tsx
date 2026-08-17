@@ -2,9 +2,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { RequierePermiso } from '@/components/RequierePermiso'
-import { usePermisos } from '@/lib/permisos'
+import { usePermisos, logAccion } from '@/lib/permisos'
 import { clavePermiso } from '@/lib/modulos'
 import { useTema } from '@/lib/tema'
+import { parsearArchivo, type FilaImportada } from '@/lib/plantillasExcel'
+import { configPedidosDropi, type FilaPedidoDropi, configPedidosShopify, type FilaPedidoShopify } from '@/lib/plantillasConfig'
+import { agruparPedidosShopify, agruparPedidosDropi, cruzarShopifyDropi, compararConMeta, parsearCSVMeta, type PedidoNormalizado } from '@/lib/reconciliacion'
 
 type Registro = { fecha:string; campana:string; inversion:number; impresiones:number; clics:number; resultados:number }
 type Pedido = { estado:string; producto_id:string; pvp:number; ganancia:number }
@@ -37,7 +40,65 @@ export default function EmbudoPage() {
   const supabase = createClient()
   const { puede, perfil, cargando: cargandoPermisos } = usePermisos()
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'embudo'|'diagnostico'|'simulador'|'mezcla'>('embudo')
+  const [tab, setTab] = useState<'embudo'|'diagnostico'|'reconciliacion'|'simulador'|'mezcla'>('embudo')
+
+  // ── Reconciliación Meta→Shopify→Dropi — todo corre client-side sobre los 3 archivos que se
+  // suben en el momento, sin persistencia (análisis bajo demanda, igual que Precio & Costeo). ──
+  const [rcMetaResultados, setRcMetaResultados] = useState<number | null>(null)
+  const [rcShopify, setRcShopify] = useState<PedidoNormalizado[] | null>(null)
+  const [rcDropi, setRcDropi] = useState<PedidoNormalizado[] | null>(null)
+  const [rcMsg, setRcMsg] = useState<{ meta?: string; shopify?: string; dropi?: string }>({})
+  const [rcProcesando, setRcProcesando] = useState<{ meta?: boolean; shopify?: boolean; dropi?: boolean }>({})
+
+  async function rcSubirMeta(file: File) {
+    setRcProcesando(p => ({ ...p, meta: true })); setRcMsg(m => ({ ...m, meta: undefined }))
+    try {
+      const texto = await file.text()
+      const filas = parsearCSVMeta(texto)
+      const total = filas.reduce((a, r) => a + Number(r.resultados || 0), 0)
+      setRcMetaResultados(total)
+      setRcMsg(m => ({ ...m, meta: `✅ ${filas.length} filas · ${total.toLocaleString('es-CO')} resultados reportados` }))
+    } catch (e) { setRcMsg(m => ({ ...m, meta: `❌ ${e instanceof Error ? e.message : 'No se pudo leer el archivo'}` })) }
+    finally { setRcProcesando(p => ({ ...p, meta: false })) }
+  }
+  async function rcSubirShopify(file: File) {
+    setRcProcesando(p => ({ ...p, shopify: true })); setRcMsg(m => ({ ...m, shopify: undefined }))
+    try {
+      const filas = await parsearArchivo<FilaPedidoShopify>(file, configPedidosShopify)
+      const pedidos = agruparPedidosShopify(filas)
+      setRcShopify(pedidos)
+      setRcMsg(m => ({ ...m, shopify: `✅ ${pedidos.length} pedidos detectados` }))
+    } catch (e) { setRcMsg(m => ({ ...m, shopify: `❌ ${e instanceof Error ? e.message : 'No se pudo leer el archivo'}` })) }
+    finally { setRcProcesando(p => ({ ...p, shopify: false })) }
+  }
+  async function rcSubirDropi(file: File) {
+    setRcProcesando(p => ({ ...p, dropi: true })); setRcMsg(m => ({ ...m, dropi: undefined }))
+    try {
+      const filas = await parsearArchivo<FilaPedidoDropi>(file, configPedidosDropi)
+      const pedidos = agruparPedidosDropi(filas)
+      setRcDropi(pedidos)
+      setRcMsg(m => ({ ...m, dropi: `✅ ${pedidos.length} pedidos detectados` }))
+    } catch (e) { setRcMsg(m => ({ ...m, dropi: `❌ ${e instanceof Error ? e.message : 'No se pudo leer el archivo'}` })) }
+    finally { setRcProcesando(p => ({ ...p, dropi: false })) }
+  }
+
+  const rcCruce = rcShopify && rcDropi ? cruzarShopifyDropi(rcShopify, rcDropi) : null
+  const rcGapMeta = rcMetaResultados !== null && rcShopify ? compararConMeta(rcMetaResultados, rcShopify.length) : null
+
+  async function rcExportarPerdidos() {
+    if (!rcCruce || rcCruce.sinMatch.length === 0) return
+    logAccion(clavePermiso('embudo', 'reconciliacion'), 'descargar')
+    const XLSX = await import('xlsx')
+    const filas = rcCruce.sinMatch.map(p => ({
+      'Orden Shopify': p.ordenId, Cliente: p.nombre, Teléfono: p.telefono,
+      Fecha: p.fecha, Producto: p.producto, Valor: p.valor,
+    }))
+    const ws = XLSX.utils.json_to_sheet(filas)
+    ws['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 32 }, { wch: 12 }]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Pedidos perdidos')
+    XLSX.writeFile(wb, `pedidos_perdidos_${new Date().toISOString().slice(0, 10)}.xlsx`)
+  }
 
   const [pautaRows, setPautaRows] = useState<Registro[]>([])
   const [pedidos, setPedidos] = useState<Pedido[]>([])
@@ -147,6 +208,7 @@ export default function EmbudoPage() {
   const TABS = [
     { key:'embudo', label:'🔬 Embudo visual' },
     { key:'diagnostico', label:'🚨 Diagnóstico' },
+    { key:'reconciliacion', label:'🕵️ Reconciliación' },
     { key:'simulador', label:'⚡ Simulador' },
     { key:'mezcla', label:'🔀 Mezcla de productos' },
   ]
@@ -387,6 +449,110 @@ export default function EmbudoPage() {
               )
             })()}
           </div>
+        </div>
+      )}
+
+      {tab === 'reconciliacion' && (
+        <div>
+          <div style={{ ...s, padding:'16px 20px', marginBottom:'16px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:T.accent, marginBottom:'6px' }}>🕵️ RECONCILIACIÓN META → SHOPIFY → DROPI</div>
+            <div style={{ fontSize:'12px', color:T.muted, lineHeight:'1.6' }}>
+              Sube los 3 exports del mismo período para ver exactamente dónde se pierden pedidos —
+              Meta reporta compras, pero no todas llegan a ser una orden real en Shopify, y no todas
+              las órdenes de Shopify llegan a procesarse en Dropi. El cruce Shopify↔Dropi es por
+              teléfono del cliente (con nombre y fecha como respaldo) — Meta solo se compara en
+              total, porque sus reportes de anuncios no traen el nombre del comprador.
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'12px', marginBottom:'16px' }}>
+            {[
+              { key:'meta' as const, label:'📊 CSV Meta/TikTok Ads', ayuda:'Ads Manager → Reportes → Exportar → CSV', accept:'.csv', onFile:rcSubirMeta, done:rcMetaResultados!==null },
+              { key:'shopify' as const, label:'🛍️ Export de pedidos Shopify', ayuda:'Shopify Admin → Pedidos → Exportar', accept:'.csv,.xlsx,.xls', onFile:rcSubirShopify, done:!!rcShopify },
+              { key:'dropi' as const, label:'📦 Export de pedidos Dropi', ayuda:'Dropi → Órdenes → Exportar', accept:'.xlsx,.xls,.csv', onFile:rcSubirDropi, done:!!rcDropi },
+            ].map(box => (
+              <div key={box.key} style={{ ...s, padding:'16px' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:T.text, marginBottom:'4px' }}>{box.label}</div>
+                <div style={{ fontSize:'10.5px', color:T.muted, marginBottom:'10px' }}>{box.ayuda}</div>
+                <label style={{ display:'block', padding:'18px', background: box.done ? `${T.green}08` : 'rgba(255,255,255,0.02)', border:`2px dashed ${box.done ? T.green : T.border}`, borderRadius:'10px', cursor: rcProcesando[box.key] ? 'wait' : 'pointer', textAlign:'center', fontSize:'12px', color: box.done ? T.green : T.muted }}>
+                  {rcProcesando[box.key] ? '⏳ Procesando...' : box.done ? '✅ Archivo cargado — click para reemplazar' : '📁 Click para seleccionar archivo'}
+                  <input type="file" accept={box.accept} style={{ display:'none' }} disabled={rcProcesando[box.key]}
+                    onChange={e => { const f = e.target.files?.[0]; if (f) box.onFile(f) }} />
+                </label>
+                {rcMsg[box.key] && (
+                  <div style={{ marginTop:'8px', fontSize:'11px', color: rcMsg[box.key]?.startsWith('❌') ? T.red : T.muted }}>{rcMsg[box.key]}</div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {rcCruce && (
+            <>
+              <div style={{ ...s, padding:'20px', marginBottom:'16px' }}>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:T.blue, marginBottom:'14px' }}>🔻 EMBUDO DE RECONCILIACIÓN</div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:'10px' }}>
+                  {[
+                    ...(rcGapMeta ? [{ label:'Meta reportó', n:rcGapMeta.resultadosMeta, c:T.purple, sub:'resultados/compras' }] : []),
+                    { label:'Shopify recibió', n:rcShopify!.length, c:T.blue, sub: rcGapMeta ? `-${rcGapMeta.gap} (${rcGapMeta.pctFuga}%) vs. Meta` : 'órdenes creadas' },
+                    { label:'Dropi procesó', n:rcCruce.matched.length, c:T.green, sub:`-${rcCruce.sinMatch.length} (${rcShopify!.length>0?Math.round(rcCruce.sinMatch.length/rcShopify!.length*100):0}%) vs. Shopify` },
+                  ].map((k,i) => (
+                    <div key={i} style={{ textAlign:'center', padding:'14px', background:`${k.c}08`, borderRadius:'10px', border:`1px solid ${k.c}30` }}>
+                      <div style={{ fontSize:'26px', fontWeight:'900', color:k.c }}>{k.n.toLocaleString('es-CO')}</div>
+                      <div style={{ fontSize:'11px', color:T.text, fontWeight:'600' }}>{k.label}</div>
+                      <div style={{ fontSize:'10px', color:T.muted }}>{k.sub}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ ...s, overflow:'hidden' }}>
+                <div style={{ padding:'14px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px' }}>
+                  <div style={{ fontWeight:'700', fontSize:'13px', color:T.red }}>📉 Pedidos en Shopify que nunca llegaron a Dropi ({rcCruce.sinMatch.length})</div>
+                  {rcCruce.sinMatch.length > 0 && (
+                    <button onClick={rcExportarPerdidos} disabled={!puede(clavePermiso('embudo','reconciliacion'),'descargar')}
+                      style={{ padding:'6px 12px', background:`${T.accent}15`, border:`1px solid ${T.accent}30`, borderRadius:'7px', color:T.accent, fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>
+                      ⬇️ Descargar Excel
+                    </button>
+                  )}
+                </div>
+                {rcCruce.sinMatch.length === 0 ? (
+                  <div style={{ padding:'30px', textAlign:'center', color:T.green, fontSize:'13px' }}>✅ Todos los pedidos de Shopify llegaron a Dropi en este período.</div>
+                ) : (
+                  <div style={{ overflowX:'auto', maxHeight:'420px', overflowY:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                      <thead>
+                        <tr style={{ background:T.card2, position:'sticky', top:0 }}>
+                          {['Orden','Cliente','Teléfono','Fecha','Producto','Valor','Acción'].map(h => (
+                            <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {rcCruce.sinMatch.map((p,i) => (
+                          <tr key={i} style={{ borderBottom:`1px solid ${T.border}` }}>
+                            <td style={{ padding:'9px 12px', color:T.muted, whiteSpace:'nowrap' }}>{p.ordenId}</td>
+                            <td style={{ padding:'9px 12px', fontWeight:'600' }}>{p.nombre || '—'}</td>
+                            <td style={{ padding:'9px 12px', color:T.muted, whiteSpace:'nowrap' }}>{p.telefono || '—'}</td>
+                            <td style={{ padding:'9px 12px', color:T.muted, whiteSpace:'nowrap' }}>{p.fecha}</td>
+                            <td style={{ padding:'9px 12px', maxWidth:'220px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.producto}</td>
+                            <td style={{ padding:'9px 12px', color:T.green, fontWeight:'600', whiteSpace:'nowrap' }}>${p.valor.toLocaleString('es-CO')}</td>
+                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>
+                              {p.telefono ? (
+                                <a href={`https://wa.me/${p.telefono.replace(/\D/g,'')}`} target="_blank" rel="noopener noreferrer"
+                                  style={{ padding:'4px 10px', background:`${T.green}15`, border:`1px solid ${T.green}30`, borderRadius:'6px', color:T.green, fontSize:'11px', fontWeight:'600', textDecoration:'none' }}>
+                                  💬 WhatsApp
+                                </a>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 

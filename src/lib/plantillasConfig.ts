@@ -287,6 +287,42 @@ export const configPedidosDropi: ConfigPlantilla<FilaPedidoDropi> = {
   ],
 }
 
+export interface FilaPedidoShopify {
+  Name: string
+  'Created at': string
+  'Financial Status'?: string
+  'Fulfillment Status'?: string
+  'Billing Name'?: string
+  'Shipping Phone'?: string
+  Phone?: string
+  Total: number
+  'Lineitem name'?: string
+}
+
+// Cabeceras EXACTAS del export estándar de pedidos de Shopify ("Exportar" en Órdenes,
+// formato CSV que Shopify genera igual para cualquier tienda -- Name/Created at/Billing
+// Name/Shipping Phone/Total son nombres de columna fijos de la plataforma, no configurables
+// por la tienda). Solo se piden las columnas que hacen falta para la Reconciliación
+// Meta→Shopify→Dropi -- no todo el export (que trae ~80 columnas). Shopify exporta una fila
+// por línea de producto (mismo "Name" repetido si el pedido tiene varios productos) --
+// agruparPedidosShopify() en src/lib/reconciliacion.ts arma el pedido completo antes de cruzar.
+export const configPedidosShopify: ConfigPlantilla<FilaPedidoShopify> = {
+  moduloKey: 'pedidos_shopify',
+  nombreHoja: 'Sheet1',
+  nombreArchivo: 'plantilla_pedidos_shopify.xlsx',
+  columnas: [
+    { key: 'Name', header: 'Name', tipo: 'texto', requerido: true, ejemplo: '#1001', ayuda: 'Número de orden de Shopify -- identifica el pedido (varias filas pueden compartirlo si tiene varios productos).' },
+    { key: 'Created at', header: 'Created at', tipo: 'fecha', requerido: true, ejemplo: '2026-08-04 19:33:00 -0500', ayuda: 'Fecha de creación del pedido en Shopify.' },
+    { key: 'Financial Status', header: 'Financial Status', tipo: 'texto', requerido: false, ejemplo: 'paid', ayuda: 'Opcional.' },
+    { key: 'Fulfillment Status', header: 'Fulfillment Status', tipo: 'texto', requerido: false, ejemplo: 'unfulfilled', ayuda: 'Opcional.' },
+    { key: 'Billing Name', header: 'Billing Name', tipo: 'texto', requerido: false, ejemplo: 'Wellington Basurto', ayuda: 'Nombre del cliente en la facturación.' },
+    { key: 'Shipping Phone', header: 'Shipping Phone', tipo: 'texto', requerido: false, ejemplo: '0980508656', ayuda: 'Teléfono de envío -- si no viene, se usa la columna Phone.' },
+    { key: 'Phone', header: 'Phone', tipo: 'texto', requerido: false, ejemplo: '0980508656', ayuda: 'Respaldo si Shipping Phone viene vacío.' },
+    { key: 'Total', header: 'Total', tipo: 'moneda', requerido: true, ejemplo: 89900, ayuda: 'Valor total del pedido.' },
+    { key: 'Lineitem name', header: 'Lineitem name', tipo: 'texto', requerido: false, ejemplo: 'Pulsera Grano de Café Mujer', ayuda: 'Opcional.' },
+  ],
+}
+
 export interface FilaPedido {
   cliente_nombre: string
   cliente_telefono?: string
