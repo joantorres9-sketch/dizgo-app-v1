@@ -337,7 +337,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
       {/* ── KPIs ── */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'8px', marginBottom:'16px' }}>
         {kpis.map((k,i) => (
-          <a key={i} href={k.href} style={{ ...s(), padding:'14px', borderTop:`2px solid ${k.color}`, textDecoration:'none', display:'block', cursor:'pointer' }}>
+          <Link key={i} href={k.href} style={{ ...s(), padding:'14px', borderTop:`2px solid ${k.color}`, textDecoration:'none', display:'block', cursor:'pointer' }}>
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'6px' }}>
               <span style={{ fontSize:'10px', color:C.sub, lineHeight:'1.3' }}>{k.label}</span>
               <span style={{ fontSize:'14px' }}>{k.icon}</span>
@@ -347,7 +347,7 @@ Sé directo, usa números reales, sin rodeos. Formato con emojis y saltos de lí
               <span style={{ fontSize:'10px', color:C.muted }}>{k.sub}</span>
               {k.delta && <span style={{ fontSize:'10px', fontWeight:'700', color:k.deltaPos?C.verde:C.rojo }}>{k.delta}</span>}
             </div>
-          </a>
+          </Link>
         ))}
       </div>
 
