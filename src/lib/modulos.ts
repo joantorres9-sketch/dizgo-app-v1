@@ -27,8 +27,7 @@ export const MODULOS: ModuloNav[] = [
   { key: 'equilibrio', href: '/dashboard/equilibrio', icon: '⚖️', label: 'Punto Equilibrio', grupo: 'PLANEAR' },
   { key: 'metas', href: '/dashboard/metas', icon: '🎯', label: 'Metas', grupo: 'PLANEAR' },
   { key: 'pedidos', href: '/dashboard/pedidos', icon: '📦', label: 'Pedidos', grupo: 'HACER' },
-  { key: 'whatsapp', href: '/dashboard/whatsapp', icon: '💬', label: 'Centro Contacto', grupo: 'HACER' },
-  { key: 'logistica', href: '/dashboard/logistica', icon: '🚚', label: 'Logística', grupo: 'HACER' },
+  { key: 'logistica', href: '/dashboard/logistica', icon: '🚚', label: 'Ciclo de Caja', grupo: 'HACER' },
   { key: 'pauta', href: '/dashboard/pauta', icon: '📡', label: 'Pauta Meta/TikTok', grupo: 'HACER' },
   { key: 'wallet', href: '/dashboard/wallet', icon: '💳', label: 'Wallet Dropi', grupo: 'HACER' },
   { key: 'pqrsf', href: '/dashboard/pqrsf', icon: '📬', label: 'PQRSF', grupo: 'HACER' },
@@ -38,7 +37,6 @@ export const MODULOS: ModuloNav[] = [
   { key: 'alertas', href: '/dashboard/alertas', icon: '🚨', label: 'Alertas', grupo: 'VERIFICAR' },
   { key: 'agentes', href: '/dashboard/agentes', icon: '🤖', label: 'Agentes IA', grupo: 'ACTUAR' },
   { key: 'cazador', href: '/dashboard/cazador', icon: '🔍', label: 'Cazador Productos', grupo: 'ACTUAR' },
-  { key: 'formacion', href: '/dashboard/formacion', icon: '🎓', label: 'Formación', grupo: 'ACTUAR' },
 ]
 
 // Sub-pestañas reales de navegación dentro de un módulo (distintas de simples filtros/escenarios
