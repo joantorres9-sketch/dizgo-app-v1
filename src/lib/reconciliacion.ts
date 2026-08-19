@@ -23,11 +23,17 @@ export interface PedidoNormalizado {
   producto: string
 }
 
-// Deja solo dígitos y compara por los últimos 10 -- absorbe diferencias de formato entre
-// plataformas (+57, espacios, guiones, indicativo 0 al inicio en Ecuador, etc.).
+// Deja solo dígitos y compara por los últimos 9 -- verificado contra datos reales (export de
+// Dropi + export de Shopify de la misma tienda): Dropi guarda el celular ecuatoriano como 9
+// dígitos sin el 0 inicial ("980508656"), pero el export de Shopify es inconsistente fila a
+// fila -- unas veces incluye ese 0 inicial ("+5930980508656") y otras no ("+593980508656") para
+// el MISMO número. slice(-10) no absorbía esto (longitudes distintas → strings distintos);
+// slice(-9) sí, porque el 0 inicial es siempre el único dígito de más. Para Colombia (10 dígitos,
+// siempre empiezan en 3) no pierde información real: el 3 es constante entre operadores, así que
+// recortarlo no genera colisiones entre números distintos.
 export function normalizarTelefono(raw: string | null | undefined): string {
   const digitos = String(raw || '').replace(/\D/g, '')
-  return digitos.slice(-10)
+  return digitos.slice(-9)
 }
 
 export function normalizarNombre(raw: string | null | undefined): string {
@@ -138,6 +144,30 @@ export function cruzarShopifyDropi(shopify: PedidoNormalizado[], dropi: PedidoNo
   }
 
   return { matched, sinMatch }
+}
+
+export interface RangoFechas { desde: string; hasta: string }
+
+// Rango de fechas que AMBAS fuentes cubren realmente. Verificado con datos reales: un export de
+// Dropi que solo llega hasta el 4-ago comparado contra Shopify hasta el 18-ago da un "79% de
+// fuga" que es puro artefacto -- los pedidos del 5 al 18 simplemente todavía no le tocaba
+// aparecer en un archivo de Dropi tomado el día 4. Fuera de este rango solapado, "sin match" no
+// significa que se perdió el pedido, significa que una de las 2 fuentes no llega tan atrás/
+// adelante en el tiempo. Con el mismo par de archivos, la fuga real dentro del rango solapado
+// bajó de 79% a 17% -- la diferencia entre un número que asusta sin motivo y uno accionable.
+export function rangoSolapado(a: PedidoNormalizado[], b: PedidoNormalizado[]): RangoFechas | null {
+  const fechasA = a.map(p => p.fecha).filter(Boolean).sort()
+  const fechasB = b.map(p => p.fecha).filter(Boolean).sort()
+  if (!fechasA.length || !fechasB.length) return null
+  const desde = fechasA[0] > fechasB[0] ? fechasA[0] : fechasB[0]
+  const hasta = fechasA[fechasA.length - 1] < fechasB[fechasB.length - 1] ? fechasA[fechasA.length - 1] : fechasB[fechasB.length - 1]
+  if (desde > hasta) return null
+  return { desde, hasta }
+}
+
+export function dentroDeRango(fecha: string, rango: RangoFechas | null): boolean {
+  if (!rango) return true
+  return fecha >= rango.desde && fecha <= rango.hasta
 }
 
 export interface GapMeta { resultadosMeta: number; totalShopify: number; gap: number; pctFuga: number }

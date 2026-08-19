@@ -7,7 +7,7 @@ import { clavePermiso } from '@/lib/modulos'
 import { useTema } from '@/lib/tema'
 import { parsearArchivo, type FilaImportada } from '@/lib/plantillasExcel'
 import { configPedidosDropi, type FilaPedidoDropi, configPedidosShopify, type FilaPedidoShopify } from '@/lib/plantillasConfig'
-import { agruparPedidosShopify, agruparPedidosDropi, cruzarShopifyDropi, compararConMeta, parsearCSVMeta, type PedidoNormalizado } from '@/lib/reconciliacion'
+import { agruparPedidosShopify, agruparPedidosDropi, cruzarShopifyDropi, compararConMeta, parsearCSVMeta, rangoSolapado, dentroDeRango, type PedidoNormalizado } from '@/lib/reconciliacion'
 
 type Registro = { fecha:string; campana:string; inversion:number; impresiones:number; clics:number; resultados:number }
 type Pedido = { estado:string; producto_id:string; pvp:number; ganancia:number }
@@ -84,6 +84,15 @@ export default function EmbudoPage() {
 
   const rcCruce = rcShopify && rcDropi ? cruzarShopifyDropi(rcShopify, rcDropi) : null
   const rcGapMeta = rcMetaResultados !== null && rcShopify ? compararConMeta(rcMetaResultados, rcShopify.length) : null
+  // Fuga real solo dentro del rango de fechas que AMBOS archivos cubren -- si Dropi solo llega
+  // hasta cierta fecha y Shopify tiene historial más largo, comparar contra el total de Shopify
+  // infla la fuga con pedidos que simplemente todavía no le tocaba aparecer en Dropi (verificado
+  // con datos reales: bajó de 79% a 17% al acotar al rango real).
+  const rcRango = rcShopify && rcDropi ? rangoSolapado(rcShopify, rcDropi) : null
+  const rcShopifyEnRango = rcShopify ? rcShopify.filter(p => dentroDeRango(p.fecha, rcRango)) : []
+  const rcSinMatchEnRango = rcCruce ? rcCruce.sinMatch.filter(p => dentroDeRango(p.fecha, rcRango)) : []
+  const rcSinMatchFueraDeRango = rcCruce ? rcCruce.sinMatch.length - rcSinMatchEnRango.length : 0
+  const rcPctFugaReal = rcShopifyEnRango.length > 0 ? Math.round(rcSinMatchEnRango.length / rcShopifyEnRango.length * 100) : 0
 
   async function rcExportarPerdidos() {
     if (!rcCruce || rcCruce.sinMatch.length === 0) return
@@ -494,7 +503,7 @@ export default function EmbudoPage() {
                   {[
                     ...(rcGapMeta ? [{ label:'Meta reportó', n:rcGapMeta.resultadosMeta, c:T.purple, sub:'resultados/compras' }] : []),
                     { label:'Shopify recibió', n:rcShopify!.length, c:T.blue, sub: rcGapMeta ? `-${rcGapMeta.gap} (${rcGapMeta.pctFuga}%) vs. Meta` : 'órdenes creadas' },
-                    { label:'Dropi procesó', n:rcCruce.matched.length, c:T.green, sub:`-${rcCruce.sinMatch.length} (${rcShopify!.length>0?Math.round(rcCruce.sinMatch.length/rcShopify!.length*100):0}%) vs. Shopify` },
+                    { label:'Dropi procesó', n:rcCruce.matched.length, c:T.green, sub:`-${rcSinMatchEnRango.length} (${rcPctFugaReal}%) vs. Shopify en el mismo rango` },
                   ].map((k,i) => (
                     <div key={i} style={{ textAlign:'center', padding:'14px', background:`${k.c}08`, borderRadius:'10px', border:`1px solid ${k.c}30` }}>
                       <div style={{ fontSize:'26px', fontWeight:'900', color:k.c }}>{k.n.toLocaleString('es-CO')}</div>
@@ -503,6 +512,12 @@ export default function EmbudoPage() {
                     </div>
                   ))}
                 </div>
+                {rcRango && (
+                  <div style={{ marginTop:'12px', padding:'10px 12px', background:`${T.blue}08`, border:`1px solid ${T.blue}20`, borderRadius:'8px', fontSize:'11px', color:T.muted, lineHeight:1.6 }}>
+                    ℹ️ El % de fuga de arriba solo cuenta pedidos entre <strong style={{color:T.text}}>{rcRango.desde}</strong> y <strong style={{color:T.text}}>{rcRango.hasta}</strong> — el rango que ambos archivos cubren en común.
+                    {rcSinMatchFueraDeRango > 0 && <> Hay <strong style={{color:T.text}}>{rcSinMatchFueraDeRango}</strong> pedidos de Shopify fuera de ese rango (más recientes o más antiguos que el archivo de Dropi) que no se cuentan como fuga — probablemente aún no les tocaba aparecer en Dropi, o son de un período que ese archivo no cubre.</>}
+                  </div>
+                )}
               </div>
 
               <div style={{ ...s, overflow:'hidden' }}>
@@ -522,14 +537,23 @@ export default function EmbudoPage() {
                     <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                       <thead>
                         <tr style={{ background:T.card2, position:'sticky', top:0 }}>
-                          {['Orden','Cliente','Teléfono','Fecha','Producto','Valor','Acción'].map(h => (
+                          {['Estado','Orden','Cliente','Teléfono','Fecha','Producto','Valor','Acción'].map(h => (
                             <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:'10px', color:T.muted, fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
-                        {rcCruce.sinMatch.map((p,i) => (
+                        {rcCruce.sinMatch.map((p,i) => {
+                          const enRango = dentroDeRango(p.fecha, rcRango)
+                          return (
                           <tr key={i} style={{ borderBottom:`1px solid ${T.border}` }}>
+                            <td style={{ padding:'9px 12px', whiteSpace:'nowrap' }}>
+                              {enRango ? (
+                                <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', background:`${T.red}20`, color:T.red }} title="Dentro del rango que Dropi cubre y no aparece -- posible fuga real, vale la pena investigar.">🔴 Fuga real</span>
+                              ) : (
+                                <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', background:`${T.yellow}20`, color:T.yellow }} title="Fuera del rango de fechas que cubre el archivo de Dropi -- probablemente aún no le tocaba aparecer, no necesariamente se perdió.">🕒 Fuera de rango</span>
+                              )}
+                            </td>
                             <td style={{ padding:'9px 12px', color:T.muted, whiteSpace:'nowrap' }}>{p.ordenId}</td>
                             <td style={{ padding:'9px 12px', fontWeight:'600' }}>{p.nombre || '—'}</td>
                             <td style={{ padding:'9px 12px', color:T.muted, whiteSpace:'nowrap' }}>{p.telefono || '—'}</td>
@@ -545,7 +569,8 @@ export default function EmbudoPage() {
                               ) : '—'}
                             </td>
                           </tr>
-                        ))}
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
