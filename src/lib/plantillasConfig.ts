@@ -288,38 +288,56 @@ export const configPedidosDropi: ConfigPlantilla<FilaPedidoDropi> = {
 }
 
 export interface FilaPedidoShopify {
+  Id: string
   Name: string
   'Created at': string
+  Email?: string
   'Financial Status'?: string
   'Fulfillment Status'?: string
+  'Cancelled at'?: string
   'Billing Name'?: string
   'Shipping Phone'?: string
   Phone?: string
-  Total: number
+  'Shipping City'?: string
+  Total?: number
   'Lineitem name'?: string
+  'Lineitem sku'?: string
+  'Lineitem quantity'?: number
+  'Lineitem price'?: number
 }
 
 // Cabeceras EXACTAS del export estándar de pedidos de Shopify ("Exportar" en Órdenes,
-// formato CSV que Shopify genera igual para cualquier tienda -- Name/Created at/Billing
-// Name/Shipping Phone/Total son nombres de columna fijos de la plataforma, no configurables
-// por la tienda). Solo se piden las columnas que hacen falta para la Reconciliación
-// Meta→Shopify→Dropi -- no todo el export (que trae ~80 columnas). Shopify exporta una fila
-// por línea de producto (mismo "Name" repetido si el pedido tiene varios productos) --
-// agruparPedidosShopify() en src/lib/reconciliacion.ts arma el pedido completo antes de cruzar.
+// formato CSV que Shopify genera igual para cualquier tienda -- Id/Name/Created at/Billing
+// Name/Shipping Phone son nombres de columna fijos de la plataforma, no configurables
+// por la tienda). Solo se piden las columnas que hacen falta para Reconciliación
+// (Embudo) y la Carga masiva de Pedidos -- no todo el export (que trae ~80 columnas).
+// Shopify exporta una fila por línea de producto (mismo "Name"/"Id" repetido si el pedido
+// tiene varios productos). "Id" es el identificador numérico REAL del pedido en Shopify --
+// verificado contra un export real de Dropi que coincide byte a byte con su columna
+// "ID DE ORDEN DE TIENDA" (ej. 6638237843515 en ambos) -- por eso es la clave que usa la
+// carga masiva de Pedidos para no duplicar un pedido que ya llegó por Dropi. "Name" es solo
+// el número de orden visible (ej. #4628), no sirve para cruzar entre plataformas por sí solo.
 export const configPedidosShopify: ConfigPlantilla<FilaPedidoShopify> = {
   moduloKey: 'pedidos_shopify',
   nombreHoja: 'Sheet1',
   nombreArchivo: 'plantilla_pedidos_shopify.xlsx',
   columnas: [
-    { key: 'Name', header: 'Name', tipo: 'texto', requerido: true, ejemplo: '#1001', ayuda: 'Número de orden de Shopify -- identifica el pedido (varias filas pueden compartirlo si tiene varios productos).' },
+    { key: 'Id', header: 'Id', tipo: 'texto', requerido: true, ejemplo: 6638237843515, ayuda: 'ID interno del pedido en Shopify -- coincide con "ID DE ORDEN DE TIENDA" del export de Dropi, evita duplicar un pedido que ya llegó por ahí.' },
+    { key: 'Name', header: 'Name', tipo: 'texto', requerido: true, ejemplo: '#4628', ayuda: 'Número de orden visible de Shopify.' },
     { key: 'Created at', header: 'Created at', tipo: 'fecha', requerido: true, ejemplo: '2026-08-04 19:33:00 -0500', ayuda: 'Fecha de creación del pedido en Shopify.' },
+    { key: 'Email', header: 'Email', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
     { key: 'Financial Status', header: 'Financial Status', tipo: 'texto', requerido: false, ejemplo: 'paid', ayuda: 'Opcional.' },
     { key: 'Fulfillment Status', header: 'Fulfillment Status', tipo: 'texto', requerido: false, ejemplo: 'unfulfilled', ayuda: 'Opcional.' },
+    { key: 'Cancelled at', header: 'Cancelled at', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional -- si tiene fecha, el pedido se importa como cancelado.' },
     { key: 'Billing Name', header: 'Billing Name', tipo: 'texto', requerido: false, ejemplo: 'Wellington Basurto', ayuda: 'Nombre del cliente en la facturación.' },
     { key: 'Shipping Phone', header: 'Shipping Phone', tipo: 'texto', requerido: false, ejemplo: '0980508656', ayuda: 'Teléfono de envío -- si no viene, se usa la columna Phone.' },
     { key: 'Phone', header: 'Phone', tipo: 'texto', requerido: false, ejemplo: '0980508656', ayuda: 'Respaldo si Shipping Phone viene vacío.' },
-    { key: 'Total', header: 'Total', tipo: 'moneda', requerido: true, ejemplo: 89900, ayuda: 'Valor total del pedido.' },
+    { key: 'Shipping City', header: 'Shipping City', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },
+    { key: 'Total', header: 'Total', tipo: 'moneda', requerido: false, default: 0, ejemplo: 89900, ayuda: 'Opcional -- valor total del pedido (referencia, el valor por línea usa Lineitem price x Lineitem quantity).' },
     { key: 'Lineitem name', header: 'Lineitem name', tipo: 'texto', requerido: false, ejemplo: 'Pulsera Grano de Café Mujer', ayuda: 'Opcional.' },
+    { key: 'Lineitem sku', header: 'Lineitem sku', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Preferido para identificar el producto -- si no hay match por SKU se intenta por nombre.' },
+    { key: 'Lineitem quantity', header: 'Lineitem quantity', tipo: 'numero', requerido: false, default: 1, ejemplo: 1, ayuda: '' },
+    { key: 'Lineitem price', header: 'Lineitem price', tipo: 'moneda', requerido: false, default: 0, ejemplo: 89900, ayuda: 'Valor unitario de esta línea de producto.' },
   ],
 }
 

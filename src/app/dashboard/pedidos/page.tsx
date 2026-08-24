@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { inicializarPaisTenant } from '@/lib/paises'
 import { CargaMasivaModal, BotonesPlantilla } from '@/components/CargaMasivaModal'
-import { configPedidosDropi, configPedidos, type FilaPedidoDropi, type FilaPedido } from '@/lib/plantillasConfig'
+import { configPedidosDropi, configPedidos, configPedidosShopify, type FilaPedidoDropi, type FilaPedido, type FilaPedidoShopify } from '@/lib/plantillasConfig'
 import type { FilaImportada } from '@/lib/plantillasExcel'
 import { RequierePermiso } from '@/components/RequierePermiso'
 import { usePermisos } from '@/lib/permisos'
@@ -687,8 +687,10 @@ export default function PedidosPage() {
   const [showNuevo, setShowNuevo] = useState(false)
   const [previewDropi, setPreviewDropi] = useState<FilaImportada<FilaPedidoDropi>[] | null>(null)
   const [previewGenerico, setPreviewGenerico] = useState<FilaImportada<FilaPedido>[] | null>(null)
+  const [previewShopify, setPreviewShopify] = useState<FilaImportada<FilaPedidoShopify>[] | null>(null)
   const [progresoImport, setProgresoImport] = useState<{ total: number; hechos: number } | null>(null)
   const [resultadoImportDropi, setResultadoImportDropi] = useState<{ nuevos: number; actualizados: number; conservados: number; productosCreados: string[]; sinProducto: number; guardados: number; intentados: number } | null>(null)
+  const [resultadoImportShopify, setResultadoImportShopify] = useState<{ nuevos: number; yaExistian: number; productosCreados: string[]; sinProducto: number; guardados: number; intentados: number } | null>(null)
 
   async function loadData(tid: string = tenantId) {
     if (!tid) { setLoading(false); return }
@@ -772,6 +774,30 @@ export default function PedidosPage() {
         if (!lote.length) continue
         promesas.push((async () => {
           const r = await supabase.from('pedidos').upsert(lote, { onConflict: 'tenant_id,dropi_orden_id,dropi_producto_id,dropi_variacion_id' })
+          return { ok: !r.error, n: lote.length }
+        })())
+      }
+      const resultados = await Promise.all(promesas)
+      resultados.forEach(r => { if (r.ok) ok += r.n })
+      setProgresoImport(p => p ? { ...p, hechos: Math.min(p.total, p.hechos + resultados.reduce((a, r) => a + r.n, 0)) } : p)
+    }
+    setProgresoImport(null)
+    return ok
+  }
+
+  // Mismo patrón que upsertPedidosDropiEnLotes -- pedidos_shopify_linea_unica (tenant_id,
+  // shopify_id, shopify_lineitem_key) permite recargar el mismo archivo sin duplicar.
+  async function upsertPedidosShopifyEnLotes(filas: Record<string, unknown>[]) {
+    setProgresoImport({ total: filas.length, hechos: 0 })
+    const CHUNK = 500, CONCURRENCIA = 3
+    let ok = 0
+    for (let i = 0; i < filas.length; i += CHUNK * CONCURRENCIA) {
+      const promesas: Promise<{ ok: boolean; n: number }>[] = []
+      for (let j = 0; j < CONCURRENCIA; j++) {
+        const lote = filas.slice(i + j * CHUNK, i + (j + 1) * CHUNK)
+        if (!lote.length) continue
+        promesas.push((async () => {
+          const r = await supabase.from('pedidos').upsert(lote, { onConflict: 'tenant_id,shopify_id,shopify_lineitem_key' })
           return { ok: !r.error, n: lote.length }
         })())
       }
@@ -970,6 +996,106 @@ export default function PedidosPage() {
     loadData()
   }
 
+  // Carga masiva del export nativo de Shopify -- pensada para traer SOLO los pedidos que nunca
+  // llegaron a Dropi (los que Reconciliación en Embudo marca como "perdidos"). shopify_id (el
+  // "Id" de Shopify) coincide exacto con "ID DE ORDEN DE TIENDA" del export de Dropi -- antes de
+  // crear cualquier línea se revisa si ese pedido ya existe en DIZGO por CUALQUIER fuente (Dropi
+  // o una carga de Shopify anterior) y, si ya existe, se salta entero. Sin este chequeo, un
+  // tenant que sube ambos archivos del mismo período terminaría con ventas contadas dos veces
+  // en Centro de Mando, P&G y Embudo.
+  async function confirmarImportPedidosShopify() {
+    if (!previewShopify || !tenantId) return
+    const { data: existentes } = await supabase.from('pedidos').select('shopify_id').eq('tenant_id', tenantId).not('shopify_id', 'is', null)
+    const idsExistentes = new Set((existentes || []).map(p => String(p.shopify_id)))
+
+    const { data: prods } = await supabase.from('productos').select('id,nombre,sku').eq('tenant_id', tenantId)
+    const mapaSku = new Map((prods || []).filter(p => p.sku).map(p => [String(p.sku).toLowerCase().trim(), p.id]))
+    const mapaNombre = new Map((prods || []).map(p => [String(p.nombre).toLowerCase().trim(), p.id]))
+
+    const porOrden = new Map<string, FilaPedidoShopify[]>()
+    for (const f of previewShopify) {
+      if (!f.valido) continue
+      const d = f.datos as FilaPedidoShopify
+      const shopifyId = String(d.Id || '').trim()
+      if (!shopifyId) continue
+      if (!porOrden.has(shopifyId)) porOrden.set(shopifyId, [])
+      porOrden.get(shopifyId)!.push(d)
+    }
+    const todasLasOrdenes = Array.from(porOrden.entries())
+    const ordenesNuevas = todasLasOrdenes.filter(([id]) => !idsExistentes.has(id))
+    const yaExistian = todasLasOrdenes.length - ordenesNuevas.length
+
+    // Riesgo real por teléfono -- mismo criterio que la carga de Dropi (más pedidos del mismo
+    // cliente en este archivo = más cautela, ya que ninguno de estos tiene historial en Dropi).
+    const statsPorTelefono = new Map<string, number>()
+    for (const [, lineas] of ordenesNuevas) {
+      const tel = String(lineas[0]['Shipping Phone'] || lineas[0].Phone || '').trim()
+      if (!tel) continue
+      statsPorTelefono.set(tel, (statsPorTelefono.get(tel) || 0) + 1)
+    }
+
+    const porCrear = new Map<string, string>()
+    for (const [, lineas] of ordenesNuevas) {
+      for (const d of lineas) {
+        const sku = String(d['Lineitem sku'] || '').toLowerCase().trim()
+        const nombreProd = String(d['Lineitem name'] || '').trim()
+        if (!nombreProd) continue
+        const yaExiste = (sku && mapaSku.has(sku)) || mapaNombre.has(nombreProd.toLowerCase())
+        const clave = sku || nombreProd.toLowerCase()
+        if (!yaExiste && !porCrear.has(clave)) porCrear.set(clave, nombreProd)
+      }
+    }
+    const nuevosProductos = Array.from(porCrear.values()).map(nombre => ({ tenant_id: tenantId, nombre }))
+    if (nuevosProductos.length) {
+      const CHUNK = 500
+      for (let i = 0; i < nuevosProductos.length; i += CHUNK) {
+        const { data: creados } = await supabase.from('productos').insert(nuevosProductos.slice(i, i + CHUNK)).select('id,nombre')
+        ;(creados || []).forEach(p => mapaNombre.set(String(p.nombre).toLowerCase().trim(), p.id))
+      }
+    }
+
+    const filas: Record<string, unknown>[] = []
+    const sinProducto: string[] = []
+    for (const [shopifyId, lineas] of ordenesNuevas) {
+      for (const d of lineas) {
+        const sku = String(d['Lineitem sku'] || '').toLowerCase().trim()
+        const nombreProd = String(d['Lineitem name'] || '').trim()
+        const productoId = (sku && mapaSku.get(sku)) || mapaNombre.get(nombreProd.toLowerCase())
+        if (!productoId) { sinProducto.push(`orden ${d.Name}: "${nombreProd || '—'}"`); continue }
+        const tel = String(d['Shipping Phone'] || d.Phone || '').trim()
+        const cantidad = Number(d['Lineitem quantity'] || 1)
+        filas.push({
+          tenant_id: tenantId, shopify_id: shopifyId, shopify_lineitem_key: sku || nombreProd.toLowerCase(),
+          cliente_nombre: d['Billing Name'] || null, cliente_telefono: tel || null, cliente_email: d.Email || null,
+          cliente_ciudad: d['Shipping City'] || null,
+          producto_id: productoId, producto_nombre: nombreProd, cantidad,
+          pvp: Number(d['Lineitem price'] || 0) * cantidad,
+          estado: d['Cancelled at'] ? 'cancelado' : 'ingresado',
+          origen: 'Shopify', numero_pedido: d.Name,
+          fecha_pedido: d['Created at'],
+          risk_score: (statsPorTelefono.get(tel) || 0) >= 2 ? 'medium' : 'low',
+          cliente_tipo: clasificarCliente(statsPorTelefono.get(tel) || 1),
+          sla_nivel: 'verde', horas_sin_gest: 0,
+        })
+      }
+    }
+
+    const ok = await upsertPedidosShopifyEnLotes(filas)
+    await supabase.from('uploads').insert({
+      tenant_id: tenantId, tipo: 'plantilla_pedidos_shopify', nombre_archivo: configPedidosShopify.nombreArchivo,
+      registros_total: previewShopify.length, registros_ok: ok, registros_error: filas.length - ok,
+      estado: ok === filas.length ? 'completado' : 'error',
+      notas: sinProducto.length ? sinProducto.slice(0, 20).join(' | ') : null,
+    })
+    setPreviewShopify(null)
+    setResultadoImportShopify({
+      nuevos: ok, yaExistian,
+      productosCreados: nuevosProductos.map(p => p.nombre),
+      sinProducto: sinProducto.length, guardados: ok, intentados: filas.length,
+    })
+    loadData()
+  }
+
   const filtrados = pedidos.filter(p=>{
     const me = filtroEstado==='todos'||p.estado===filtroEstado
     const mb = !buscar || p.cliente_nombre?.toLowerCase().includes(buscar.toLowerCase()) ||
@@ -1041,6 +1167,13 @@ export default function PedidosPage() {
           </div>
           <div style={{fontSize:'10px',color:T.muted,marginTop:'6px'}}>Si no usas Dropi, llena esta plantilla con tus pedidos históricos.</div>
         </div>
+        <div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:'10px',padding:'12px 14px'}}>
+          <div style={{fontSize:'11px',fontWeight:'700',color:'#95BF47',marginBottom:'8px'}}>🛍️ Carga masiva — Export de Shopify</div>
+          <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+            <BotonesPlantilla config={configPedidosShopify} onArchivoValidado={setPreviewShopify} theme={T} />
+          </div>
+          <div style={{fontSize:'10px',color:T.muted,marginTop:'6px'}}>Solo trae los pedidos que aún no estén en DIZGO (no duplica los que ya llegaron por Dropi) — pensado para recuperar los que se quedaron solo en Shopify.</div>
+        </div>
       </div>
       )}
       {progresoImport && (
@@ -1091,8 +1224,45 @@ export default function PedidosPage() {
         </div>
         )
       })()}
+      {resultadoImportShopify && (() => {
+        const { guardados, intentados, yaExistian } = resultadoImportShopify
+        const falloTotal = intentados > 0 && guardados === 0 && yaExistian === 0
+        const falloParcial = guardados > 0 && guardados < intentados
+        const color = falloTotal ? T.red : falloParcial ? T.yellow : T.green
+        return (
+        <div style={{background:T.card,border:`1px solid ${color}40`,borderLeft:`3px solid ${color}`,borderRadius:'10px',padding:'14px 16px',marginBottom:'14px'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'10px'}}>
+            <div style={{fontSize:'13px',fontWeight:700,color:T.text}}>
+              {falloTotal ? '❌ La carga falló' : falloParcial ? '⚠️ Carga parcial' : '✅ Carga completada'}
+            </div>
+            <button onClick={()=>setResultadoImportShopify(null)} style={{background:'none',border:'none',color:T.muted,cursor:'pointer',fontSize:'13px'}}>✕</button>
+          </div>
+          {falloTotal ? (
+            <div style={{fontSize:'12px',color:T.red,marginTop:'6px'}}>
+              Ninguna de las {intentados} filas se pudo guardar — revisa que el archivo no tenga datos con un formato inesperado y vuelve a intentar.
+            </div>
+          ) : (
+            <div style={{fontSize:'12px',color:T.muted,marginTop:'6px'}}>
+              <b style={{color:T.text}}>{guardados}</b> pedidos nuevos importados (no estaban en Dropi) · <b style={{color:T.text}}>{yaExistian}</b> ya existían y se conservaron sin duplicar{falloParcial ? ` · ${intentados-guardados} fallaron` : ''}.
+            </div>
+          )}
+          {resultadoImportShopify.productosCreados.length > 0 && (
+            <div style={{fontSize:'12px',color:T.text,marginTop:'10px',background:T.card2,borderRadius:'8px',padding:'10px 12px'}}>
+              🆕 Se crearon <b>{resultadoImportShopify.productosCreados.length}</b> productos nuevos en tu Catálogo ({resultadoImportShopify.productosCreados.slice(0,4).join(', ')}{resultadoImportShopify.productosCreados.length > 4 ? '...' : ''}), sin costos ni PVP todavía.
+              <div style={{marginTop:'8px'}}>
+                <Link href="/dashboard/productos" style={{textDecoration:'none',fontSize:'11.5px',fontWeight:700,color:T.accent}}>→ Ir a Catálogo a completarlos</Link>
+              </div>
+            </div>
+          )}
+          {resultadoImportShopify.sinProducto > 0 && (
+            <div style={{fontSize:'11.5px',color:T.yellow,marginTop:'8px'}}>⚠️ {resultadoImportShopify.sinProducto} filas no se importaron (revisa el archivo).</div>
+          )}
+        </div>
+        )
+      })()}
       {previewDropi && <CargaMasivaModal filas={previewDropi} columnas={configPedidosDropi.columnas} onConfirm={confirmarImportPedidosDropi} onClose={()=>setPreviewDropi(null)} theme={T} />}
       {previewGenerico && <CargaMasivaModal filas={previewGenerico} columnas={configPedidos.columnas} onConfirm={confirmarImportPedidosGenerico} onClose={()=>setPreviewGenerico(null)} theme={T} />}
+      {previewShopify && <CargaMasivaModal filas={previewShopify} columnas={configPedidosShopify.columnas} onConfirm={confirmarImportPedidosShopify} onClose={()=>setPreviewShopify(null)} theme={T} />}
 
       {/* KPIs — Embudo de etapas */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(150px,220px))',justifyContent:'start',gap:'10px',marginBottom:'14px'}}>
