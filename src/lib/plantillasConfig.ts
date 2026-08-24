@@ -322,7 +322,7 @@ export const configPedidosShopify: ConfigPlantilla<FilaPedidoShopify> = {
   nombreHoja: 'Sheet1',
   nombreArchivo: 'plantilla_pedidos_shopify.xlsx',
   columnas: [
-    { key: 'Id', header: 'Id', tipo: 'texto', requerido: true, ejemplo: 6638237843515, ayuda: 'ID interno del pedido en Shopify -- coincide con "ID DE ORDEN DE TIENDA" del export de Dropi, evita duplicar un pedido que ya llegó por ahí.' },
+    { key: 'Id', header: 'Id', tipo: 'texto', requerido: false, ejemplo: 6638237843515, ayuda: 'ID interno del pedido en Shopify -- Shopify solo lo llena en la primera línea de cada pedido, DIZGO lo completa hacia las demás líneas del mismo pedido automáticamente.' },
     { key: 'Name', header: 'Name', tipo: 'texto', requerido: true, ejemplo: '#4628', ayuda: 'Número de orden visible de Shopify.' },
     { key: 'Created at', header: 'Created at', tipo: 'fecha', requerido: true, ejemplo: '2026-08-04 19:33:00 -0500', ayuda: 'Fecha de creación del pedido en Shopify.' },
     { key: 'Email', header: 'Email', tipo: 'texto', requerido: false, ejemplo: '', ayuda: 'Opcional.' },

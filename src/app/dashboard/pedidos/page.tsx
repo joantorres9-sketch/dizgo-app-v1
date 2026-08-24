@@ -1012,16 +1012,23 @@ export default function PedidosPage() {
     const mapaSku = new Map((prods || []).filter(p => p.sku).map(p => [String(p.sku).toLowerCase().trim(), p.id]))
     const mapaNombre = new Map((prods || []).map(p => [String(p.nombre).toLowerCase().trim(), p.id]))
 
+    // Shopify solo llena "Id" (y Email/Financial Status/teléfonos/etc.) en la PRIMERA línea de
+    // cada pedido -- si el pedido tiene varios productos, las líneas siguientes lo traen en
+    // blanco. Agrupar por "Id" directo perdía esas líneas de producto enteras; agrupar por
+    // "Name" (siempre presente en todas las líneas) y tomar el Id de CUALQUIER línea del grupo
+    // que sí lo traiga evita perder productos de pedidos con más de un ítem.
     const porOrden = new Map<string, FilaPedidoShopify[]>()
     for (const f of previewShopify) {
       if (!f.valido) continue
       const d = f.datos as FilaPedidoShopify
-      const shopifyId = String(d.Id || '').trim()
-      if (!shopifyId) continue
-      if (!porOrden.has(shopifyId)) porOrden.set(shopifyId, [])
-      porOrden.get(shopifyId)!.push(d)
+      const name = String(d.Name || '').trim()
+      if (!name) continue
+      if (!porOrden.has(name)) porOrden.set(name, [])
+      porOrden.get(name)!.push(d)
     }
     const todasLasOrdenes = Array.from(porOrden.entries())
+      .map(([name, lineas]) => [String(lineas.find(l => l.Id)?.Id || '').trim(), lineas] as [string, FilaPedidoShopify[]])
+      .filter(([shopifyId]) => shopifyId) // sin Id en NINGUNA línea del pedido -- no se puede deduplicar contra Dropi, se descarta
     const ordenesNuevas = todasLasOrdenes.filter(([id]) => !idsExistentes.has(id))
     const yaExistian = todasLasOrdenes.length - ordenesNuevas.length
 
@@ -1057,22 +1064,32 @@ export default function PedidosPage() {
     const filas: Record<string, unknown>[] = []
     const sinProducto: string[] = []
     for (const [shopifyId, lineas] of ordenesNuevas) {
+      // Datos del cliente/orden -- SIEMPRE de la línea ancla (la primera del grupo), nunca de
+      // cada línea de producto por separado. Shopify no garantiza repetir teléfono/nombre/
+      // cancelación en las líneas 2+ del mismo pedido (sí repite Email en este export, pero no
+      // hay que confiar en eso por columna); usar la línea ancla es correcto pase lo que pase.
+      const ancla = lineas[0]
+      const tel = String(ancla['Shipping Phone'] || ancla.Phone || '').trim()
+      const clienteNombre = ancla['Billing Name'] || null
+      const clienteEmail = ancla.Email || null
+      const clienteCiudad = ancla['Shipping City'] || null
+      const cancelado = !!ancla['Cancelled at']
+      const fechaPedido = ancla['Created at']
       for (const d of lineas) {
         const sku = String(d['Lineitem sku'] || '').toLowerCase().trim()
         const nombreProd = String(d['Lineitem name'] || '').trim()
         const productoId = (sku && mapaSku.get(sku)) || mapaNombre.get(nombreProd.toLowerCase())
         if (!productoId) { sinProducto.push(`orden ${d.Name}: "${nombreProd || '—'}"`); continue }
-        const tel = String(d['Shipping Phone'] || d.Phone || '').trim()
         const cantidad = Number(d['Lineitem quantity'] || 1)
         filas.push({
           tenant_id: tenantId, shopify_id: shopifyId, shopify_lineitem_key: sku || nombreProd.toLowerCase(),
-          cliente_nombre: d['Billing Name'] || null, cliente_telefono: tel || null, cliente_email: d.Email || null,
-          cliente_ciudad: d['Shipping City'] || null,
+          cliente_nombre: clienteNombre, cliente_telefono: tel || null, cliente_email: clienteEmail,
+          cliente_ciudad: clienteCiudad,
           producto_id: productoId, producto_nombre: nombreProd, cantidad,
           pvp: Number(d['Lineitem price'] || 0) * cantidad,
-          estado: d['Cancelled at'] ? 'cancelado' : 'ingresado',
+          estado: cancelado ? 'cancelado' : 'ingresado',
           origen: 'Shopify', numero_pedido: d.Name,
-          fecha_pedido: d['Created at'],
+          fecha_pedido: fechaPedido,
           risk_score: (statsPorTelefono.get(tel) || 0) >= 2 ? 'medium' : 'low',
           cliente_tipo: clasificarCliente(statsPorTelefono.get(tel) || 1),
           sla_nivel: 'verde', horas_sin_gest: 0,

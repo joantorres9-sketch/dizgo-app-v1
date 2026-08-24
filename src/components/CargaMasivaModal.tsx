@@ -46,8 +46,8 @@ export function CargaMasivaModal<T>({
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.muted, cursor: 'pointer', fontSize: '18px' }}>✕</button>
         </div>
-        <div style={{ overflowY: 'auto', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <div style={{ overflowY: 'auto', overflowX: 'auto', flex: 1 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 'max-content' }}>
             <thead>
               <tr style={{ background: '#060E1C', position: 'sticky', top: 0 }}>
                 <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', color: T.muted, borderBottom: `1px solid ${T.border}` }}>Fila</th>
