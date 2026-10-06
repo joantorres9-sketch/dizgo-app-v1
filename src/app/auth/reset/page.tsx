@@ -18,8 +18,16 @@ export default function ResetPage() {
   // este código de un solo uso; hay que canjearlo por una sesión real antes de poder cambiar la
   // contraseña. Se hace acá (no en un route handler /auth/callback) porque esta es la única
   // pantalla que necesita ese canje -- el resto del flujo de auth no lo usa.
+  //
+  // OJO: NO se valida con getSession() como respaldo -- si el navegador ya tenía una sesión
+  // activa (usuario logueado en el dashboard), getSession() la devuelve igual aunque el enlace
+  // de recuperación esté vencido/inválido, y el formulario se muestra por error (bug real
+  // encontrado en producción: un enlace ya expirado por Supabase, con
+  // error_code=otp_expired en la URL, dejaba pasar igual porque había sesión previa). La única
+  // prueba válida de que el enlace es correcto es un exchangeCodeForSession exitoso.
   const [verificando, setVerificando] = useState(true)
   const [enlaceValido, setEnlaceValido] = useState(false)
+  const [motivoInvalido, setMotivoInvalido] = useState('')
 
   const [pass, setPass] = useState('')
   const [pass2, setPass2] = useState('')
@@ -30,10 +38,23 @@ export default function ResetPage() {
 
   useEffect(() => {
     (async () => {
-      const code = new URLSearchParams(window.location.search).get('code')
-      if (code) await supabase.auth.exchangeCodeForSession(code).catch(() => {})
-      const { data: { session } } = await supabase.auth.getSession()
-      setEnlaceValido(!!session)
+      const query = new URLSearchParams(window.location.search)
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+      const errorDesc = query.get('error_description') || hash.get('error_description')
+      if (errorDesc) {
+        setMotivoInvalido(decodeURIComponent(errorDesc.replace(/\+/g, ' ')))
+        setEnlaceValido(false)
+        setVerificando(false)
+        return
+      }
+      const code = query.get('code')
+      if (!code) {
+        setEnlaceValido(false)
+        setVerificando(false)
+        return
+      }
+      const { error: err } = await supabase.auth.exchangeCodeForSession(code)
+      setEnlaceValido(!err)
       setVerificando(false)
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -78,6 +99,7 @@ export default function ResetPage() {
               <div style={{ fontSize:'14px', fontWeight:'600', color: T.red, marginBottom:'8px' }}>Enlace inválido o vencido</div>
               <div style={{ fontSize:'12px', color: T.muted, lineHeight:1.6, marginBottom:'16px' }}>
                 Los enlaces de recuperación vencen en 1 hora y solo se pueden usar una vez. Pide uno nuevo.
+                {motivoInvalido && <><br /><span style={{ fontSize:'11px', opacity:0.7 }}>({motivoInvalido})</span></>}
               </div>
               <Link href="/auth/recuperar" style={{ display:'block', width:'100%', boxSizing:'border-box', background: T.accent, border:'none', borderRadius:'9px', padding:'11px', fontSize:'13px', fontWeight:'700', color: T.card, textDecoration:'none' }}>
                 Pedir enlace nuevo
