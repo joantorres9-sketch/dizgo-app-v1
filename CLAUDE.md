@@ -15,14 +15,22 @@ Raíces campesinas y enfoque en impacto social y rural.
    y social) y producción agroecológica con Palmitas con AMOR (sin agroquímicos,
    economía circular, huevos, pollos, frutas y verduras).
 
-## Fase actual: FASE 0 — Base y orden
+## Fase actual: FASE 1 — Validar y medir
 Lo que toca en esta fase:
-- Dejar documentado el contexto (este archivo) y las reglas de trabajo con Claude.
-- Ordenar la información de cada frente antes de construir cosas nuevas.
-- En DIZGO.APP: estabilizar lo que ya existe (auth, carga de pedidos Shopify/Dropi,
-  conciliación y wallet) antes de abrir módulos nuevos.
+- DIZGO.APP en uso real: poner la plataforma en manos de tiendas reales y recoger
+  su retroalimentación.
+- Medir con indicadores: definir y seguir los KPI clave de cada módulo (fuga de
+  dinero detectada, pedidos conciliados, efectividad de entrega).
+- Automatizar lo repetitivo: confirmación de pedidos y alertas por WhatsApp.
+- En los frentes 2 y 3: pasar de la información ordenada a planes con metas y
+  responsables.
 
-Hasta que se declare la Fase 1, se prioriza corregir y ordenar por encima de añadir.
+Se construye solo lo que valide el uso real o lo que pidan los indicadores.
+
+## Historial de fases
+- **Fase 0 — Base y orden (cerrada):** contexto documentado, reglas de trabajo con
+  Claude, información de cada frente ordenada y DIZGO.APP estabilizado (auth, carga
+  de pedidos Shopify/Dropi, conciliación y wallet).
 
 ## Stack de DIZGO.APP
 Next.js 14 + TypeScript, Supabase (PostgreSQL + Auth + RLS), Vercel, Tailwind,
