@@ -6,3 +6,6 @@ node_modules/
 out/
 dist/
 *.log
+
+# Carpeta de salud: nunca al repo
+/90_SALU[D]/
