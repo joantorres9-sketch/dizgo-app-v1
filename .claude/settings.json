@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./90_SALUD/**)",
+      "Edit(./90_SALUD/**)",
+      "Write(./90_SALUD/**)",
+      "Read(**/90_SALUD/**)",
+      "Edit(**/90_SALUD/**)",
+      "Write(**/90_SALUD/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/bloquear-salud.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}
